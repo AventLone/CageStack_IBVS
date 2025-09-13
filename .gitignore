@@ -1,0 +1,10 @@
+.vscode/
+data/
+install/
+build/
+log/
+
+meshs/
+
+*.obj
+*.mtl

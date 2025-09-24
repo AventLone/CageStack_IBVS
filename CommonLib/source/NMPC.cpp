@@ -1,26 +1,26 @@
-#include "NMPC.h"
+#include "colib/NMPC.h"
 
 namespace Eigen
 {
-casadi::DM matrix2DM(const Eigen::MatrixXd& input)
-{
-    const long rows = input.rows();
-    const long cols = input.cols();
-    casadi::DM result(rows, cols);
-    for (long row = 0; row < rows; ++row)
-    {
-        for (long col = 0; col < cols; ++col)
-        {
-            result(row, col) = input(row, col);
-        }
-    }
-    return result;
-}
-
-inline casadi::DM vector2DM(const Eigen::VectorXd& input)
-{
-    return casadi::DM(std::vector<double>(input.data(), input.data() + input.size()));
-}
+// casadi::DM matrix2DM(const Eigen::MatrixXd& input)
+// {
+//     const long rows = input.rows();
+//     const long cols = input.cols();
+//     casadi::DM result(rows, cols);
+//     for (long row = 0; row < rows; ++row)
+//     {
+//         for (long col = 0; col < cols; ++col)
+//         {
+//             result(row, col) = input(row, col);
+//         }
+//     }
+//     return result;
+// }
+//
+// inline casadi::DM vector2DM(const Eigen::VectorXd& input)
+// {
+//     return casadi::DM(std::vector<double>(input.data(), input.data() + input.size()));
+// }
 } // namespace Eigen
 
 NMPC::NMPC()

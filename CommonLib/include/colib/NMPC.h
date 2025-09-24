@@ -1,6 +1,6 @@
 #pragma once
 #include <casadi/casadi.hpp>
-#include <Eigen/Core>
+#include <cassert>
 
 class NMPC final
 {

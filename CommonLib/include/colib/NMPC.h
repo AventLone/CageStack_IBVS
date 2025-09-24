@@ -15,6 +15,8 @@ class NMPC final
         return Eigen::Map<Eigen::MatrixXd>(input.ptr(), input.rows(), input.columns());
     }
 
+    using Solution = std::vector<std::vector<double>>;
+
 public:
     NMPC();
 
@@ -27,7 +29,7 @@ public:
         mNLP.set_value(mX0, {0.0, 0.0, 0.0, state[0], state[1]});
     }
 
-    void solve();
+    std::pair<Solution, Solution> solve();
 
 private:
     casadi::Opti mNLP; // Construct NLP using CasADi

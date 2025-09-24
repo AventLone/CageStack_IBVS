@@ -5,7 +5,7 @@ from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
-    package_name = "forklift_description"
+    package_name = "robot_description"
     urdf_name = "ForkliftE.urdf"
 
     pkg_path = get_package_share_directory(package_name=package_name)
@@ -40,13 +40,14 @@ def generate_launch_description():
         package="joint_state_publisher",
         executable="joint_state_publisher",
         emulate_tty=True,
-        parameters=[{"robot_description": robot_desc}],
+        parameters=[{"source_list": ["/forklift/joint_states"], "robot_description": robot_desc}],
         arguments=['--ros-args', '--log-level', 'warn'],
     )
 
     # "screen", "log"
     rviz2_node = Node(
         package="rviz2", executable="rviz2", output="screen", emulate_tty=True,
+        # parameters=[{'use_sim_time': True}],
         arguments=["-d", rviz_config_path, '--ros-args', '--log-level', 'warn']
     )
 

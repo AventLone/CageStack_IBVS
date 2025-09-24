@@ -8,6 +8,7 @@ Panels:
         - /Status1
         - /Grid1
         - /RobotModel1
+        - /Axes1
       Splitter Ratio: 0.5
     Tree Height: 2224
   - Class: rviz_common/Selection
@@ -66,17 +67,21 @@ Visualization Manager:
         Expand Joint Details: false
         Expand Link Details: false
         Expand Tree: false
-        Link Tree Style: Links in Alphabetic Order
-        SM_Forklift_C01_01:
+        ForkliftE:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
+        Link Tree Style: Links in Alphabetic Order
         left_back_wheel:
           Alpha: 1
           Show Axes: false
           Show Trail: false
           Value: true
+        left_camera_SG3S_ISX031C_GMSL2F_H190XA_01:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
         left_front_wheel:
           Alpha: 1
           Show Axes: false
@@ -97,6 +102,10 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
+        right_camera_SG3S_ISX031C_GMSL2F_H190XA_01:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
         right_front_wheel:
           Alpha: 1
           Show Axes: false
@@ -120,12 +129,12 @@ Visualization Manager:
       Length: 0.5
       Name: Axes
       Radius: 0.05000000074505806
-      Reference Frame: SM_Forklift_C01_01
+      Reference Frame: ForkliftE
       Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
-    Fixed Frame: SM_Forklift_C01_01
+    Fixed Frame: ForkliftE
     Frame Rate: 30
   Name: root
   Tools:

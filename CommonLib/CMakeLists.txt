@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Perception3D VERSION 0.0.1 LANGUAGES CXX)
+project(CommonLib VERSION 0.0.1 LANGUAGES CXX)
 
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
@@ -36,6 +36,11 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 find_package(casadi QUIET CONFIG)
+find_package(Eigen3 REQUIRED)
+
+include_directories(${CMAKE_SOURCE_DIR}/include
+    ${EIGEN3_INCLUDE_DIRS}
+)
 
 file(GLOB_RECURSE CPP_SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/source/*.cpp)
 add_library(${PROJECT_NAME} ${CPP_SOURCE_FILES})
@@ -44,10 +49,11 @@ target_compile_features(${PROJECT_NAME} PUBLIC c_std_99 cxx_std_17)  # Require C
 target_include_directories(${PROJECT_NAME} PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
+    ${EIGEN3_INCLUDE_DIRS}
 )
 target_link_libraries(${PROJECT_NAME}
     casadi::casadi
 )
 
-enable_testing()
+#enable_testing()
 add_subdirectory(tests)

@@ -1,28 +1,5 @@
 #include "colib/NMPC.h"
 
-namespace Eigen
-{
-// casadi::DM matrix2DM(const Eigen::MatrixXd& input)
-// {
-//     const long rows = input.rows();
-//     const long cols = input.cols();
-//     casadi::DM result(rows, cols);
-//     for (long row = 0; row < rows; ++row)
-//     {
-//         for (long col = 0; col < cols; ++col)
-//         {
-//             result(row, col) = input(row, col);
-//         }
-//     }
-//     return result;
-// }
-//
-// inline casadi::DM vector2DM(const Eigen::VectorXd& input)
-// {
-//     return casadi::DM(std::vector<double>(input.data(), input.data() + input.size()));
-// }
-} // namespace Eigen
-
 NMPC::NMPC()
 {
     const casadi::Dict opts = {
@@ -36,158 +13,138 @@ NMPC::NMPC()
     mNLP.solver("ipopt", opts); // Choose IPOPT as solver
 
     mGoal = mNLP.parameter(3);
-    mX0 = mNLP.parameter(5);
+    mX0 = mNLP.parameter(3);
 
-    mUs = mNLP.variable(N, 2);
+    mUs = mNLP.variable(2, N);
+    mXs = mNLP.variable(3, N + 1);
 
-    F = casadi::MX::eye(5) * std::vector<double>{1.2, 1.6, 1.6, 2.0, 1.1};
-    Q = casadi::MX::eye(4) * std::vector<double>{1.2, 1.6, 1.6, 2.0};
-    R = casadi::MX::eye(2) * std::vector<double>({0.2, 0.15});
+    mF = casadi::MX::eye(3) * std::vector<double>{2.2, 2.6, 2.6};
+    mQ = casadi::MX::eye(3) * std::vector<double>{1.2, 1.6, 1.6};
+    mR = casadi::MX::eye(2) * std::vector<double>{0.2, 0.15};
+
+    buildModel();
 }
 
-// void NMPC::buildProblem(const Eigen::VectorXd& current_state, const Eigen::MatrixXd& goal_state,
-//                         const std::vector<Eigen::Vector2d>& obstacle)
-// {
-//     casadi::DM goal = Eigen::matrix2DM(goal_state(Eigen::all, Eigen::seq(0, 3)));
-//
-//     mX0 = mNLP.parameter(3); // Initial condition of state vector
-//     mUs = mNLP.variable(N, 2); // Control Policy: a sequence of control vectors
-//     mVelocity = mUs(casadi::Slice(), 0); // Control variable: v [m/s]
-//     mAngularVelocity = mUs(casadi::Slice(), 1); // Control variable: omega [rad/s]
-//
-//     /* State variables */
-//     mXs = mNLP.variable(N + 1, 3); // A sequence of state vectors
-//     mPosition_x = mXs(casadi::Slice(), 0); // State variable: position.x [m]
-//     mPosition_y = mXs(casadi::Slice(), 1); // State variable: position.y [m]
-//     mAngle = mXs(casadi::Slice(), 2); // State variable: theta [rad]
-//
-//     mNLP.subject_to(mXs(0, casadi::Slice()) == mX0.T()); // Initial condition
-//
-//     /* Hard constraints */
-//     mNLP.subject_to(-mMaxVelosity <= mVelocity <= mMaxVelosity);
-//     mNLP.subject_to(-mMaxAngularVelocity <= mAngularVelocity <= mMaxAngularVelocity);
-//
-//     /* Create funciont for F(x) */
-//     double theta_x = current_state(4) * std::cos(current_state(2)) - current_state(3) * std::sin(current_state(2));
-//     double theta_y = current_state(4) * std::cos(current_state(2)) + current_state(3) * std::sin(current_state(2));
-//
-//     /* Get the derivative of state vector */
-//     auto f = [&](const casadi::MX& x, const casadi::MX& u) -> casadi::MX
-//     {
-//         return casadi::MX::vertcat(
-//             {u(0) * casadi::MX::cos(x(2)) * std::cos(theta_x), u(0) * casadi::MX::sin(x(2)) * std::cos(theta_y), u(1)});
-//     };
-//
-//     /* Control system model constraints */
-//     for (int i = 0; i < N; i++)
-//     {
-//         /* x_{k+1} = x_k + T * (v * cos(theta), v * sin(theta), omega) */
-//         casadi::MX x_next = mXs(i, casadi::Slice()) + T * f(mXs(i, casadi::Slice()), mUs(i, casadi::Slice())).T();
-//         mNLP.subject_to(mXs(i + 1, casadi::Slice()) == x_next);
-//     }
-//
-//     /* Avoidance of local obstacles: by remove the position which the obstacle is at from the state set */
-//     for (const auto& point: obstacle)
-//     {
-//         for (int i = 0; i < N + 1; ++i)
-//         {
-//             mNLP.subject_to(mXs(i, 0) != point(0));
-//             mNLP.subject_to(mXs(i, 1) != point(1));
-//         }
-//     }
-//
-//     /* Cost function, note: casadi::MX::mtimes represents matrix multiplication */
-//     casadi::MX J = 0;
-//     for (int i = 0; i < N; ++i)
-//     {
-//         J = J +
-//             0.1 * casadi::MX::mtimes(casadi::MX::mtimes(mXs(i, casadi::Slice()) - goal(i), Q),
-//                                      (mXs(i, casadi::Slice()) - goal(i)).T()) +
-//             casadi::MX::mtimes(casadi::MX::mtimes(mUs(i, casadi::Slice()), R), mUs(i, casadi::Slice()).T());
-//     }
-//     J = J + 2 * casadi::MX::mtimes(casadi::MX::mtimes(mXs(N - 1, casadi::Slice()) - goal(N - 1), Q),
-//                                    (mXs(N - 1, casadi::Slice()) - goal(N - 1)).T());
-//
-//     mNLP.minimize(J);
-//     mNLP.set_value(mX0, Eigen::vector2DM(current_state(Eigen::seq(0, 2))));
-// }
-
-void NMPC::solve()
+std::pair<Eigen::MatrixXd, Eigen::MatrixXd> NMPC::solve()
 {
     try
     {
         mNLP.solve();
-        casadi::DM uu = mNLP.value(mUs);
-        casadi::DM xx = mNLP.value(mXs);
-        // mSolution_u = toEigen(uu);
-        // mSolution_x = toEigen(xx);
+        casadi::DM result_u = mNLP.value(mUs);
+        casadi::DM result_x = mNLP.value(mXs);
+        return std::pair<Eigen::MatrixXd, Eigen::MatrixXd>{toEigen(result_u), toEigen(result_x)};
     }
     catch (const std::exception& e)
     {
-        std::cerr << e.what() << '\n';
-        // mSolution_u = Eigen::MatrixXd::Zero(N, 2);
-        // mSolution_x = Eigen::MatrixXd::Zero(N + 1, 5);
+        std::cerr << e.what() << std::endl;
+        return std::pair<Eigen::MatrixXd, Eigen::MatrixXd>{};
     }
 }
 
 void NMPC::buildModel()
 {
-    casadi::MX velocity = mUs(casadi::Slice(), 0); // Control variable: v [m/s]
-    casadi::MX angular_velocity = mUs(casadi::Slice(), 1); // Control variable: omega [rad/s]
-
-    /* State variables */
-    // mXs = mNLP.variable(N + 1, 3); // A sequence of state vectors
-    // mPosition_x = mXs(casadi::Slice(), 0); // State variable: position.x [m]
-    // mPosition_y = mXs(casadi::Slice(), 1); // State variable: position.y [m]
-    // mAngle = mXs(casadi::Slice(), 2); // State variable: theta [rad]
-
-    mNLP.subject_to(mXs(0, casadi::Slice()) == mX0.T()); // Initial condition
-
-    /* Hard constraints */
-    mNLP.subject_to(-mMaxVelosity <= velocity <= mMaxVelosity);
-    mNLP.subject_to(-mMaxAngularVelocity <= angular_velocity <= mMaxAngularVelocity);
-
-    /* Create funciont for F(x) */
-    // double theta_x = current_state(4) * std::cos(current_state(2)) - current_state(3) * std::sin(current_state(2));
-    // double theta_y = current_state(4) * std::cos(current_state(2)) + current_state(3) * std::sin(current_state(2));
-
-    /* Get the derivative of state vector */
-    static auto f = [&](const casadi::MX& x, const casadi::MX& u) -> casadi::MX
+    /* Formula of the control system */
+    static auto f = [](const casadi::MX& vec_x, const casadi::MX& vec_u) -> casadi::MX
     {
-        return casadi::MX::vertcat(
-            {u(0) * casadi::MX::cos(x(2)) * std::cos(theta_x), u(0) * casadi::MX::sin(x(2)) * std::cos(theta_y), u(1)});
+        const auto x = vec_x(0);
+        const auto y = vec_x(1);
+        const auto th = vec_x(2);
+
+        const auto v = vec_u(0);
+        const auto del = vec_u(1);
+
+        return casadi::MX::vertcat({
+            v * casadi::MX::cos(th),
+            v * casadi::MX::sin(th),
+            v * WHEEL_BASE_INV * casadi::MX::tan(del)
+        });
     };
 
-    /* Control system model constraints */
-    for (int i = 0; i < N; i++)
+    static auto rk4 = [](const casadi::MX& x_k, const casadi::MX& u_k, const double dt) -> casadi::MX
     {
-        /* x_{k+1} = x_k + T * (v * cos(theta), v * sin(theta), omega) */
-        casadi::MX x_next = mXs(i, casadi::Slice()) + T * f(mXs(i, casadi::Slice()), mUs(i, casadi::Slice())).T();
-        mNLP.subject_to(mXs(i + 1, casadi::Slice()) == x_next);
+        const casadi::MX k1 = f(x_k, u_k);
+        const casadi::MX k2 = f(x_k + 0.5 * dt * k1, u_k);
+        const casadi::MX k3 = f(x_k + 0.5 * dt * k2, u_k);
+        const casadi::MX k4 = f(x_k + dt * k3, u_k);
+        return x_k + dt * (k1 + 2 * k2 + 2 * k3 + k4) / 6.0;
+    };
+
+    /* Control variables */
+    const auto velocity = mUs(0, casadi::Slice()); // Control variable: v [m/s]
+    const auto delta = mUs(1, casadi::Slice()); // Control variable: delta [rad]
+
+    /* State variables */
+    auto p_x = mXs(0, casadi::Slice()); // State variable: position.x [m]
+    auto p_y = mXs(1, casadi::Slice()); // State variable: position.y [m]
+    auto theta = mXs(2, casadi::Slice()); // State variable: theta [rad]
+
+    /* Constraints */
+    mNLP.subject_to(mXs(casadi::Slice(), 0) == mX0); // Initial condition
+    mNLP.subject_to(-MAX_VELOSITY <= velocity <= MAX_VELOSITY);
+    mNLP.subject_to(-MAX_DELTA <= delta <= MAX_DELTA);
+
+    // /* Control system model constraints */
+    // for (int i = 0; i < N; i++)
+    // {
+    //     /* x_{k+1} = x_k + T * (v * cos(theta), v * sin(theta), omega) */
+    //     casadi::MX x_next = mXs(i, casadi::Slice()) + T * f(mXs(i, casadi::Slice()), mUs(i, casadi::Slice())).T();
+    //     mNLP.subject_to(mXs(i + 1, casadi::Slice()) == x_next);
+    // }
+    //
+    // /* Avoidance of local obstacles: by remove the position which the obstacle is at from the state set */
+    // for (const auto& point : obstacle)
+    // {
+    //     for (int i = 0; i < N + 1; ++i)
+    //     {
+    //         mNLP.subject_to(mXs(i, 0) != point(0));
+    //         mNLP.subject_to(mXs(i, 1) != point(1));
+    //     }
+    // }
+
+    /* Objective function 目标函数, note: casadi::MX::mtimes represents matrix multiplication */
+    casadi::MX J = casadi::MX::zeros(1, 1);
+
+    // 累计阶段代价 + 动力学约束
+    for (int k = 0; k < N; ++k)
+    {
+        auto x_k = mXs(casadi::Slice(), k);
+        auto u_k = mUs(casadi::Slice(), k);
+
+        // 车体系误差（相对同一终点）
+        auto dx = mGoal(0) - x_k(0);
+        auto dy = mGoal(1) - x_k(1);
+        auto th = x_k(2);
+        auto e_x = casadi::MX::cos(th) * dx + casadi::MX::sin(th) * dy;
+        auto e_y = -casadi::MX::sin(th) * dx + casadi::MX::cos(th) * dy;
+        auto e_th = casadi::MX::atan2(casadi::MX::sin(mGoal(2) - th), casadi::MX::cos(mGoal(2) - th));
+
+        casadi::MX e_k = casadi::MX::vertcat({e_x, e_y, e_th}); // Error vector
+
+        // 阶段代价
+        J += casadi::MX::mtimes(casadi::MX::mtimes(e_k.T(), mQ), e_k) + casadi::MX::mtimes(
+            casadi::MX::mtimes(u_k.T(), mR), u_k);
+
+        // 动力学（RK4）
+        casadi::MX x_next = rk4(x_k, u_k, T);
+        mNLP.subject_to(mXs(casadi::Slice(), k + 1) == x_next);
     }
 
-    /* Avoidance of local obstacles: by remove the position which the obstacle is at from the state set */
-    for (const auto& point : obstacle)
+    // 终端代价（到点 + 停车倾向）
     {
-        for (int i = 0; i < N + 1; ++i)
-        {
-            mNLP.subject_to(mXs(i, 0) != point(0));
-            mNLP.subject_to(mXs(i, 1) != point(1));
-        }
+        auto x_n = mXs(casadi::Slice(), N);
+        casadi::MX dx = mGoal(0) - x_n(0);
+        casadi::MX dy = mGoal(1) - x_n(1);
+        auto th = x_n(2);
+        casadi::MX e_x = casadi::MX::cos(th) * dx + casadi::MX::sin(th) * dy;
+        casadi::MX e_y = -casadi::MX::sin(th) * dx + casadi::MX::cos(th) * dy;
+        casadi::MX e_th = casadi::MX::atan2(casadi::MX::sin(mGoal(2) - th), casadi::MX::cos(mGoal(2) - th));
+
+        casadi::MX e_n = casadi::MX::vertcat({e_x, e_y, e_th}); // Error vector
+
+        J += casadi::MX::mtimes(casadi::MX::mtimes(e_n.T(), mF), e_n);
     }
 
-    /* Cost function, note: casadi::MX::mtimes represents matrix multiplication */
-    casadi::MX J = 0;
-    for (int i = 0; i < N; ++i)
-    {
-        J = J +
-            0.1 * casadi::MX::mtimes(casadi::MX::mtimes(mXs(i, casadi::Slice()) - goal(i), Q),
-                                     (mXs(i, casadi::Slice()) - goal(i)).T()) +
-            casadi::MX::mtimes(casadi::MX::mtimes(mUs(i, casadi::Slice()), R), mUs(i, casadi::Slice()).T());
-    }
-    J = J + 2 * casadi::MX::mtimes(casadi::MX::mtimes(mXs(N - 1, casadi::Slice()) - goal(N - 1), Q),
-                                   (mXs(N - 1, casadi::Slice()) - goal(N - 1)).T());
-
+    mNLP.set_initial(mXs, casadi::DM::zeros(3, N + 1));
+    mNLP.set_initial(mUs, casadi::DM::zeros(2, N));
     mNLP.minimize(J);
-    mNLP.set_value(mX0, Eigen::vector2DM(current_state(Eigen::seq(0, 2))));
 }

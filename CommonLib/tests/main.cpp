@@ -263,7 +263,7 @@ MX f_cont(const MX& x, const MX& u)
 {
     MX X = x(0), Y = x(1), th = x(2), v = x(3), del = x(4);
     MX a = u(0), w = u(1);
-    return vertcat({
+    return MX::vertcat({
         v * cos(th),
         v * sin(th),
         v / L * tan(del),

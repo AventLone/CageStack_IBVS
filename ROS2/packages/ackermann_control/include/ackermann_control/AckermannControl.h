@@ -1,0 +1,58 @@
+#pragma once
+#include <rclcpp/rclcpp.hpp>
+#include <tf2_msgs/msg/tf_message.hpp>
+#include <ackermann_msgs/msg/ackermann_drive_stamped.hpp>
+#include <nav_msgs/msg/path.hpp>
+// #include <nav_msgs/msg/goals.hpp>
+#include <visualization_msgs/msg/marker.hpp>
+
+#include "ackermann_control/NMPC.h"
+
+class AckermannControl final : public rclcpp::Node
+{
+public:
+    explicit AckermannControl(const std::string& name = "ackermann_constrol");
+
+    ~AckermannControl() override
+    {
+        RCLCPP_INFO(get_logger(), "The node has been shutdown.");
+    }
+
+private:
+    NMPC mNMPC;
+    std::queue<std::vector<double>> mGoalQueue;
+    std::queue<ackermann_msgs::msg::AckermannDriveStamped> mAckerDriveMsgs;
+
+
+    rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr mGoalSubscriber;
+    rclcpp::Publisher<ackermann_msgs::msg::AckermannDriveStamped>::SharedPtr mAckerDrivePub;
+
+    rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr mGoalDisplayPub;
+    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr mPathPub;
+
+    void goalMsgHandler(const tf2_msgs::msg::TFMessage::ConstSharedPtr& msg);
+
+    void addGoal(std::vector<double>&& goal)
+    {
+        mGoalQueue.push(std::move(goal));
+        if (mGoalQueue.size() >= 2)
+        {
+            mGoalQueue.pop();
+        }
+    }
+
+    void mpc_loop()
+    {
+        while (rclcpp::ok())
+        {
+            if (mGoalQueue.empty())
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                continue;
+            }
+
+            mNMPC.setGoalAndState(mGoalQueue.front());
+            mGoalQueue.pop();
+        }
+    }
+};

@@ -1,4 +1,4 @@
-#include "colib/NMPC.h"
+#include "ackermann_control//NMPC.h"
 
 NMPC::NMPC()
 {
@@ -6,7 +6,7 @@ NMPC::NMPC()
         {"ipopt.sb", "yes"},
         {"ipopt.print_level", 0},
         {"print_time", 0},
-        {"ipopt.max_iter", 200},
+        {"ipopt.max_iter", 80},
         {"ipopt.acceptable_tol", 1e-3},
         {"ipopt.acceptable_obj_change_tol", 1e-3}
     };
@@ -18,9 +18,9 @@ NMPC::NMPC()
     mUs = mNLP.variable(2, N);
     mXs = mNLP.variable(3, N + 1);
 
-    mF = casadi::MX::eye(3) * std::vector<double>{3.2, 400.7, 3.6};
-    mQ = casadi::MX::eye(3) * std::vector<double>{3.2, 300.7, 3.6};
-    mR = casadi::MX::eye(2) * std::vector<double>{0.01, 0.005};
+    mF = casadi::MX::eye(3) * std::vector<double>{2.2, 2.6, 2.6};
+    mQ = casadi::MX::eye(3) * std::vector<double>{1.2, 1.6, 1.6};
+    mR = casadi::MX::eye(2) * std::vector<double>{0.2, 0.15};
 
     buildModel();
 }

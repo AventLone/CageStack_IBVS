@@ -4,17 +4,20 @@ int main()
 {
     NMPC nmpc;
 
-    nmpc.setGoalAndState({3.0, 4.0, M_PI / 3.4});
+    nmpc.setGoal({10.0, 2.0, 0.6});
 
-    auto begin = std::chrono::system_clock::now();
-    const auto [fst, snd] = nmpc.solve();
-    auto end = std::chrono::system_clock::now();
+    const auto begin = std::chrono::system_clock::now();
+    const auto [u, x] = nmpc.solve();
+    const auto end = std::chrono::system_clock::now();
 
-    auto elapse = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
-    std::cout << "Elapse: " << elapse << std::endl;
+    const auto elapse = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+    std::cout << "Elapse: " << elapse << " ms." << std::endl;
 
-    std::cout << fst.transpose() << std::endl;
-    std::cout << snd.transpose() << std::endl;
+    std::cout << "Control policy: " << std::endl;
+    std::cout << u.transpose() << std::endl;
+    std::cout << "--------------------------------" << std::endl;
+    std::cout << "State sequences: " << std::endl;
+    std::cout << x.transpose() << std::endl;
     return 0;
 }
 

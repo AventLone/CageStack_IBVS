@@ -53,7 +53,7 @@ class KeyTeleopAckermann(Node):
         self.timer = self.create_timer(period, self._timerCallback)
 
         self.msg = Ack()
-        self.msg.drive.acceleration = math.pi * 10.0
+        self.msg.drive.acceleration = math.pi * 2.0
 
         self.speed = 0.0
         self.steer = 0.0

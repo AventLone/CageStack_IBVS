@@ -18,7 +18,7 @@ public:
 
     ~NMPC() = default;
 
-    void setGoalAndState(const std::vector<double>& goal)
+    void setGoal(const std::vector<double>& goal)
     {
         assert(goal.size() == 3);
         mNLP.set_value(mGoal, goal);
@@ -36,28 +36,6 @@ private:
     casadi::MX mXs; // A sequence of state vectors 状态轨迹
 
     void buildModel();
-
-    template<typename T>
-    static T wrapAngle(T rad)
-    {
-        constexpr double two_pi = 2.0 * M_PI;
-        double r = std::fmod(rad + M_PI, two_pi);
-        if (r < 0.0)
-        {
-            r += two_pi;
-        }
-        return r - M_PI; // ∈ [-π, π)
-    }
-
-    // casadi::MX rk4(const casadi::MX& x_k, const casadi::MX& u_k, const double dt)
-    // {
-    //     const casadi::MX k1 = f(x_k, u_k);
-    //     const casadi::MX k2 = f(x_k + 0.5 * dt * k1, u_k);
-    //     const casadi::MX k3 = f(x_k + 0.5 * dt * k2, u_k);
-    //     const casadi::MX k4 = f(x_k + dt * k3, u_k);
-    //     return x_k + dt * (k1 + 2 * k2 + 2 * k3 + k4) / 6.0;
-    // }
-
 
     static Eigen::MatrixXd toEigen(casadi::DM& input)
     {

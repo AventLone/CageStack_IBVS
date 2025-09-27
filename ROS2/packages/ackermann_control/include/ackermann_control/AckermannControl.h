@@ -16,13 +16,18 @@ public:
     ~AckermannControl() override
     {
         RCLCPP_INFO(get_logger(), "The node has been shutdown.");
+
+        if (mMpcThread.joinable())
+        {
+            mMpcThread.join();
+        }
     }
 
 private:
     NMPC mNMPC;
     std::queue<std::vector<double>> mGoalQueue;
     std::queue<ackermann_msgs::msg::AckermannDriveStamped> mAckerDriveMsgs;
-
+    nav_msgs::msg::Path mPlanningPath;
 
     rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr mGoalSubscriber;
     rclcpp::Publisher<ackermann_msgs::msg::AckermannDriveStamped>::SharedPtr mAckerDrivePub;
@@ -30,10 +35,16 @@ private:
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr mGoalDisplayPub;
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr mPathPub;
 
+    rclcpp::TimerBase::SharedPtr mDriveMsgTimer;
+
+    std::thread mMpcThread;
+    std::mutex mGoalQueueMutex, mDriveMsgsMutex, mStateSequenceMutex;
+
     void goalMsgHandler(const tf2_msgs::msg::TFMessage::ConstSharedPtr& msg);
 
     void addGoal(std::vector<double>&& goal)
     {
+        std::lock_guard<std::mutex> lock(mGoalQueueMutex);
         mGoalQueue.push(std::move(goal));
         if (mGoalQueue.size() >= 2)
         {
@@ -41,18 +52,5 @@ private:
         }
     }
 
-    void mpc_loop()
-    {
-        while (rclcpp::ok())
-        {
-            if (mGoalQueue.empty())
-            {
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                continue;
-            }
-
-            mNMPC.setGoalAndState(mGoalQueue.front());
-            mGoalQueue.pop();
-        }
-    }
+    void mpc_loop();
 };

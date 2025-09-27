@@ -12,15 +12,37 @@ AckermannControl::AckermannControl(const std::string& name) : rclcpp::Node(name)
     mAckerDrivePub = this->create_publisher<ackermann_msgs::msg::AckermannDriveStamped>
             ("ackermann_cmd", gControlMsgQoS);
 
+    mDriveMsgTimer = this->create_wall_timer(std::chrono::milliseconds(50), [this]()
+    {
+        std::lock_guard<std::mutex> lock(mDriveMsgsMutex);
+        if (!mAckerDriveMsgs.empty())
+        {
+            mAckerDrivePub->publish(mAckerDriveMsgs.front());
+            mAckerDriveMsgs.pop();
+        }
+        else
+        {
+            ackermann_msgs::msg::AckermannDriveStamped drive_msg;
+            drive_msg.drive.speed = 0.0f;
+            drive_msg.drive.steering_angle = 0.0f;
+            mAckerDrivePub->publish(drive_msg);
+        }
+    });
+
+    mMpcThread = std::thread(&AckermannControl::mpc_loop, this);
+
     RCLCPP_INFO(get_logger(), "The node has activated.");
 }
+
+// void onTimer()
+// {}
 
 void AckermannControl::goalMsgHandler(const tf2_msgs::msg::TFMessage::ConstSharedPtr& msg)
 {
     std::vector<double> goal(3, 0.0);
     for (const auto& tf : msg->transforms)
     {
-        if (tf.header.frame_id == "body" && tf.child_frame_id == "pallet")
+        if (tf.header.frame_id == "body" && tf.child_frame_id == "o3dyn_pallet")
         {
             const auto& T = tf.transform;
 
@@ -34,7 +56,7 @@ void AckermannControl::goalMsgHandler(const tf2_msgs::msg::TFMessage::ConstShare
             goal[1] = yaw;
 
             visualization_msgs::msg::Marker goal_marker_msg;
-            goal_marker_msg.header.frame_id = "SM_Forklift_C01_01"; // 或者 base_link/odom
+            goal_marker_msg.header.frame_id = "ForkliftE"; // 或者 base_link/odom
             goal_marker_msg.header.stamp = this->now();
             goal_marker_msg.ns = "demo";
             goal_marker_msg.id = 0;
@@ -50,7 +72,7 @@ void AckermannControl::goalMsgHandler(const tf2_msgs::msg::TFMessage::ConstShare
             goal_marker_msg.color.r = 0.0f;
             goal_marker_msg.color.g = 1.0f;
             goal_marker_msg.color.b = 0.0f;
-            goal_marker_msg.color.a = 0.5f; // alpha<1 表示半透明
+            goal_marker_msg.color.a = 0.6f; // alpha<1 表示半透明
 
             goal_marker_msg.pose.position.x = T.translation.x;
             goal_marker_msg.pose.position.y = T.translation.y;
@@ -62,5 +84,38 @@ void AckermannControl::goalMsgHandler(const tf2_msgs::msg::TFMessage::ConstShare
     }
 
     addGoal(std::move(goal));
+}
+
+void AckermannControl::mpc_loop()
+{
+    while (rclcpp::ok())
+    {
+        {
+            std::lock_guard<std::mutex> lock(mGoalQueueMutex);
+            if (mGoalQueue.empty())
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                continue;
+            }
+
+            mNMPC.setGoalAndState(mGoalQueue.front());
+            mGoalQueue.pop();
+        }
+
+        const auto [us, xs] = mNMPC.solve();
+
+        std::queue<ackermann_msgs::msg::AckermannDriveStamped> temp_drive_msgs;
+
+        for (auto& u : us)
+        {
+            ackermann_msgs::msg::AckermannDriveStamped drive_msg;
+            drive_msg.drive.speed = u[0];
+            drive_msg.drive.steering_angle = u[1];
+            temp_drive_msgs.push(drive_msg);
+        } {
+            std::lock_guard<std::mutex> lock(mDriveMsgsMutex);
+            mAckerDriveMsgs = temp_drive_msgs;
+        }
+    }
 }
 

@@ -6,7 +6,7 @@ NMPC::NMPC()
         {"ipopt.sb", "yes"},
         {"ipopt.print_level", 0},
         {"print_time", 0},
-        {"ipopt.max_iter", 80},
+        {"ipopt.max_iter", 200},
         {"ipopt.acceptable_tol", 1e-3},
         {"ipopt.acceptable_obj_change_tol", 1e-3}
     };
@@ -25,19 +25,23 @@ NMPC::NMPC()
     buildModel();
 }
 
-std::pair<Eigen::MatrixXd, Eigen::MatrixXd> NMPC::solve()
+std::pair<NMPC::Solution, NMPC::Solution> NMPC::solve()
 {
     try
     {
         mNLP.solve();
-        casadi::DM result_u = mNLP.value(mUs);
-        casadi::DM result_x = mNLP.value(mXs);
-        return std::pair<Eigen::MatrixXd, Eigen::MatrixXd>{toEigen(result_u), toEigen(result_x)};
+        const casadi::DM result_u = mNLP.value(mUs);
+        const casadi::DM result_x = mNLP.value(mXs);
+
+        Solution vec_u, vec_x;
+        convertResult(result_u, vec_u);
+        convertResult(result_x, vec_x);
+        return std::make_pair(vec_u, vec_x);
     }
     catch (const std::exception& e)
     {
         std::cerr << e.what() << std::endl;
-        return std::pair<Eigen::MatrixXd, Eigen::MatrixXd>{};
+        return std::pair<Solution, Solution>{};
     }
 }
 
@@ -129,4 +133,17 @@ void NMPC::buildModel()
     mNLP.set_initial(mXs, casadi::DM::zeros(3, N + 1));
     mNLP.set_initial(mUs, casadi::DM::zeros(2, N));
     mNLP.minimize(J);
+}
+
+void NMPC::convertResult(const casadi::DM& input, std::vector<std::vector<double>>& output)
+{
+    // std::vector<std::vector<double>> result;
+    std::vector<double> input_vec = input.nonzeros();
+
+    output.reserve(input.columns());
+
+    for (size_t i = 0; i < input_vec.size(); i += input.rows())
+    {
+        output.emplace_back(input_vec.begin() + i, input_vec.begin() + i + input.rows());
+    }
 }

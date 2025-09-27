@@ -52,6 +52,7 @@ static constexpr rmw_qos_profile_t gQoSProfile_Lidar{
 
 inline const auto gQoS = rclcpp::QoS(rclcpp::QoSInitialization(gQoSProfile.history, gQoSProfile.depth),
                                      gQoSProfile);
+
 inline const rclcpp::QoS gRobStateQoS(rclcpp::QoSInitialization(gQoSProfile.history, gQoSProfile.depth),
                                       gQoSProfile);
 inline const rclcpp::QoS gControlMsgQoS(

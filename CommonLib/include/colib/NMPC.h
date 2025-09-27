@@ -13,6 +13,8 @@ class NMPC final
     static constexpr double WHEEL_BASE_INV{1.0 / WHEEL_BASE};
     static constexpr float mSafeDistance{0.55f};
 
+    using Solution = std::vector<std::vector<double>>;
+
 public:
     NMPC();
 
@@ -26,6 +28,8 @@ public:
     }
 
     std::pair<Eigen::MatrixXd, Eigen::MatrixXd> solve();
+
+    std::pair<Solution, Solution> solve2();
 
 private:
     casadi::Opti mNLP; // Construct NLP using CasADi
@@ -41,4 +45,6 @@ private:
     {
         return Eigen::Map<Eigen::MatrixXd>(input.ptr(), input.rows(), input.columns());
     }
+
+    void convertResult(const casadi::DM& input, std::vector<std::vector<double>>& output);
 };

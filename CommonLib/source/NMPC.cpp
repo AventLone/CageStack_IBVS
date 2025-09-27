@@ -20,7 +20,7 @@ NMPC::NMPC()
 
     mF = casadi::MX::eye(3) * std::vector<double>{3.2, 400.7, 3.6};
     mQ = casadi::MX::eye(3) * std::vector<double>{3.2, 300.7, 3.6};
-    mR = casadi::MX::eye(2) * std::vector<double>{0.01, 0.005};
+    mR = casadi::MX::eye(2) * std::vector<double>{0.01, 0.5};
 
     buildModel();
 }
@@ -32,12 +32,33 @@ std::pair<Eigen::MatrixXd, Eigen::MatrixXd> NMPC::solve()
         mNLP.solve();
         casadi::DM result_u = mNLP.value(mUs);
         casadi::DM result_x = mNLP.value(mXs);
+
         return std::pair<Eigen::MatrixXd, Eigen::MatrixXd>{toEigen(result_u), toEigen(result_x)};
     }
     catch (const std::exception& e)
     {
         std::cerr << e.what() << std::endl;
         return std::pair<Eigen::MatrixXd, Eigen::MatrixXd>{};
+    }
+}
+
+std::pair<NMPC::Solution, NMPC::Solution> NMPC::solve2()
+{
+    try
+    {
+        mNLP.solve();
+        casadi::DM result_u = mNLP.value(mUs);
+        casadi::DM result_x = mNLP.value(mXs);
+
+        Solution vec_u, vec_x;
+        convertResult(result_u, vec_u);
+        convertResult(result_x, vec_x);
+        return std::make_pair(vec_u, vec_x);
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << e.what() << std::endl;
+        return std::pair<Solution, Solution>{};
     }
 }
 
@@ -129,4 +150,17 @@ void NMPC::buildModel()
     mNLP.set_initial(mXs, casadi::DM::zeros(3, N + 1));
     mNLP.set_initial(mUs, casadi::DM::zeros(2, N));
     mNLP.minimize(J);
+}
+
+void NMPC::convertResult(const casadi::DM& input, std::vector<std::vector<double>>& output)
+{
+    // std::vector<std::vector<double>> result;
+    std::vector<double> input_vec = input.nonzeros();
+
+    output.reserve(input.columns());
+
+    for (size_t i = 0; i < input_vec.size(); i += input.rows())
+    {
+        output.emplace_back(input_vec.begin() + i, input_vec.begin() + i + input.rows());
+    }
 }

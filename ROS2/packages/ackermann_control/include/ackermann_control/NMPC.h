@@ -6,12 +6,14 @@
 class NMPC final
 {
     /* Hyperparameters */
-    static constexpr int N{100}; // MPC Horizon, known as prediction horizon
+    static constexpr int N{10}; // MPC Horizon, known as prediction horizon
     static constexpr double T{0.05}; // Sampling Interval [s]
-    static constexpr double MAX_VELOSITY{3.0}, MAX_DELTA{0.6}; // Hard Constraints [m/s, rad/s]
+    static constexpr double MAX_VELOSITY{2.0}, MAX_DELTA{M_PI / 2.0}; // Hard Constraints [m/s, rad/s]
     static constexpr double WHEEL_BASE{1.5};
     static constexpr double WHEEL_BASE_INV{1.0 / WHEEL_BASE};
     static constexpr float mSafeDistance{0.55f};
+
+    using Solution = std::vector<std::vector<double>>;
 
 public:
     NMPC();
@@ -25,7 +27,7 @@ public:
         mNLP.set_value(mX0, {0.0, 0.0, 0.0});
     }
 
-    std::pair<Eigen::MatrixXd, Eigen::MatrixXd> solve();
+    std::pair<Solution, Solution> solve();
 
 private:
     casadi::Opti mNLP; // Construct NLP using CasADi
@@ -61,6 +63,9 @@ private:
 
     static Eigen::MatrixXd toEigen(casadi::DM& input)
     {
+        input.nonzeros();
         return Eigen::Map<Eigen::MatrixXd>(input.ptr(), input.rows(), input.columns());
     }
+
+    static void convertResult(const casadi::DM& input, std::vector<std::vector<double>>& output);
 };

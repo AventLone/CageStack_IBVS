@@ -1,15 +1,16 @@
 #pragma once
 #include <casadi/casadi.hpp>
 #include <cassert>
-#include <Eigen/Core>
 
 class NMPC final
 {
     /* Hyperparameters */
-    static constexpr int N{10}; // MPC Horizon, known as prediction horizon
-    static constexpr double T{0.05}; // Sampling Interval [s]
-    static constexpr double MAX_VELOSITY{2.0}, MAX_DELTA{M_PI / 2.0}; // Hard Constraints [m/s, rad/s]
+    static constexpr int N{25}; // MPC Horizon, known as prediction horizon
+    static constexpr double T{0.08}; // Sampling Interval [s]
+    static constexpr double MAX_ACC{M_PI}, MAX_STEER_VELOCITY{M_PI / 4.0}; // Hard Constraints [m/s, rad/s]
+    static constexpr double MAX_VELOCITY{M_PI * 1.5}, MAX_STEER_ANGLE{M_PI / 2.0};
     static constexpr double WHEEL_BASE{1.5};
+    static constexpr double WHEEL_RADIUS{0.3};
     static constexpr double WHEEL_BASE_INV{1.0 / WHEEL_BASE};
     static constexpr float mSafeDistance{0.55f};
 
@@ -20,11 +21,11 @@ public:
 
     ~NMPC() = default;
 
-    void setGoalAndState(const std::vector<double>& goal)
+    void setGoalAndState(const std::vector<double>& goal, const std::vector<double>& state)
     {
         assert(goal.size() == 3);
         mNLP.set_value(mGoal, goal);
-        mNLP.set_value(mX0, {0.0, 0.0, 0.0});
+        mNLP.set_value(mX0, {0.0, 0.0, 0.0, state[0], state[1]});
     }
 
     std::pair<Solution, Solution> solve();
@@ -59,13 +60,6 @@ private:
     //     const casadi::MX k4 = f(x_k + dt * k3, u_k);
     //     return x_k + dt * (k1 + 2 * k2 + 2 * k3 + k4) / 6.0;
     // }
-
-
-    static Eigen::MatrixXd toEigen(casadi::DM& input)
-    {
-        input.nonzeros();
-        return Eigen::Map<Eigen::MatrixXd>(input.ptr(), input.rows(), input.columns());
-    }
 
     static void convertResult(const casadi::DM& input, std::vector<std::vector<double>>& output);
 };

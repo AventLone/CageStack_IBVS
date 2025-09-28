@@ -11,6 +11,7 @@ find_package(rclcpp REQUIRED)
 find_package(ackermann_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_msgs REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 
@@ -33,6 +34,7 @@ ament_target_dependencies(
     "ackermann_msgs"
     "tf2"
     "tf2_msgs"
+    "tf2_geometry_msgs"
     "nav_msgs"
     "visualization_msgs"
 )

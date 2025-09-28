@@ -8,6 +8,7 @@ meshs/
 
 *.obj
 *.mtl
+*.urdf
 
 .idea/
 cmake-build-release/

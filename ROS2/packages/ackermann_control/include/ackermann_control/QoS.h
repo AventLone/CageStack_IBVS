@@ -15,7 +15,7 @@ static constexpr rmw_qos_profile_t gQoSProfile{
 
 static constexpr rmw_qos_profile_t gQoSProfile_ControlMsg{
     RMW_QOS_POLICY_HISTORY_KEEP_LAST,
-    2,
+    1,
     RMW_QOS_POLICY_RELIABILITY_RELIABLE,
     RMW_QOS_POLICY_DURABILITY_VOLATILE,
     RMW_QOS_DEADLINE_DEFAULT,

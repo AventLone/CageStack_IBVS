@@ -12,7 +12,7 @@
 class AckermannControl final : public rclcpp::Node
 {
 public:
-    explicit AckermannControl(const std::string& name = "ackermann_constrol");
+    explicit AckermannControl(const std::string& name = "ackermann_control");
 
     ~AckermannControl() override
     {
@@ -25,6 +25,7 @@ public:
 
 private:
     double mDt{};
+    static constexpr int CONTROL_HORIZON{2};
 
     /* Self-State */
     double mDriveWheelAngularVelocity{};

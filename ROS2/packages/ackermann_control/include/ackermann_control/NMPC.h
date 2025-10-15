@@ -1,34 +1,42 @@
 #pragma once
 #include <casadi/casadi.hpp>
 #include <cassert>
+#include <optional>
 
 class NMPC final
 {
     /* Hyperparameters */
-    static constexpr int N{25}; // MPC Horizon, known as prediction horizon
-    static constexpr double T{0.08}; // Sampling Interval [s]
-    static constexpr double MAX_ACC{M_PI}, MAX_STEER_VELOCITY{M_PI / 4.0}; // Hard Constraints [m/s, rad/s]
+    static constexpr int N{20}; // MPC Horizon, known as prediction horizon
+    static constexpr double T{0.2}; // Sampling Interval [s]
+    static constexpr double MAX_ACC{M_PI}, MAX_STEER_VELOCITY{M_PI / 6.0}; // Hard Constraints [m/s, rad/s]
     static constexpr double MAX_VELOCITY{M_PI * 1.5}, MAX_STEER_ANGLE{M_PI / 2.0};
     static constexpr double WHEEL_BASE{1.5};
     static constexpr double WHEEL_RADIUS{0.3};
     static constexpr double WHEEL_BASE_INV{1.0 / WHEEL_BASE};
-    static constexpr float mSafeDistance{0.55f};
-
-    using Solution = std::vector<std::vector<double>>;
+    // static constexpr float mSafeDistance{0.55f};
 
 public:
+    using Solution = std::vector<std::vector<double>>;
+
     NMPC();
 
     ~NMPC() = default;
 
     void setGoalAndState(const std::vector<double>& goal, const std::vector<double>& state)
     {
-        assert(goal.size() == 3);
+        assert(goal.size() == 3 && state.size() == 2);
         mNLP.set_value(mGoal, goal);
         mNLP.set_value(mX0, {0.0, 0.0, 0.0, state[0], state[1]});
     }
 
     std::pair<Solution, Solution> solve();
+
+    // const char* solve(std::pair<Solution, Solution>& result);
+
+    bool solve(std::pair<Solution, Solution>& result);
+
+    // void setDt(const double dt)
+    // {}
 
 private:
     casadi::Opti mNLP; // Construct NLP using CasADi
@@ -62,4 +70,6 @@ private:
     // }
 
     static void convertResult(const casadi::DM& input, std::vector<std::vector<double>>& output);
+
+    // void readParameters(const )
 };

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<robot name="">
+<robot name="forklift_c">
   <joint name="left_back_wheel_joint" type="continuous">
     <origin xyz="0.216191 -0.0026624 0.0464669" rpy="0. 0. 0."/>
     <parent link="left_rotator"/>
@@ -7,21 +7,21 @@
     <axis xyz="1. 0. 0."/>
   </joint>
   <joint name="left_front_wheel_joint" type="continuous">
-    <origin xyz="0.2687795 0.5976231 0.4326027" rpy="0. 0. 1.5707964"/>
-    <parent link="ForkliftE"/>
+    <origin xyz="0.2687796 0.5974939 0.3251018" rpy="0. 0. 1.5707964"/>
+    <parent link="SM_Forklift_C01_01"/>
     <child link="left_front_wheel"/>
     <axis xyz="1. 0. 0."/>
   </joint>
   <joint name="left_rotator_joint" type="revolute">
-    <origin xyz="-1.385914 0.4062623 0.3177295" rpy="0. 0. 1.5707964"/>
-    <parent link="ForkliftE"/>
+    <origin xyz="-1.385914 0.4061331 0.2102286" rpy="0. 0. 1.5707964"/>
+    <parent link="SM_Forklift_C01_01"/>
     <child link="left_rotator"/>
     <axis xyz="0. 0. 1."/>
     <limit lower="-0.7853982" upper="0.7853982" effort="10000000." velocity="0."/>
   </joint>
   <joint name="lift_joint" type="prismatic">
-    <origin xyz="-0. 0.0001292 0.1075009" rpy="0. 0. 1.5707964"/>
-    <parent link="ForkliftE"/>
+    <origin xyz="0. 0. 0." rpy="0. 0. 1.5707964"/>
+    <parent link="SM_Forklift_C01_01"/>
     <child link="lift"/>
     <axis xyz="0. 0. 1."/>
     <limit lower="0." upper="2." effort="10000000." velocity="0."/>
@@ -33,257 +33,257 @@
     <axis xyz="1. 0. 0."/>
   </joint>
   <joint name="right_front_wheel_joint" type="continuous">
-    <origin xyz="0.2687801 -0.5973108 0.4326027" rpy="0. 0. 1.5707964"/>
-    <parent link="ForkliftE"/>
+    <origin xyz="0.2687802 -0.59744 0.3251018" rpy="0. 0. 1.5707964"/>
+    <parent link="SM_Forklift_C01_01"/>
     <child link="right_front_wheel"/>
     <axis xyz="1. 0. 0."/>
   </joint>
   <joint name="right_rotator_joint" type="revolute">
-    <origin xyz="-1.385914 -0.4060028 0.3177295" rpy="0. 0. 1.5707964"/>
-    <parent link="ForkliftE"/>
+    <origin xyz="-1.385914 -0.406132 0.2102286" rpy="0. 0. 1.5707964"/>
+    <parent link="SM_Forklift_C01_01"/>
     <child link="right_rotator"/>
     <axis xyz="0. 0. 1."/>
     <limit lower="-0.7853982" upper="0.7853982" effort="10000000." velocity="0."/>
   </joint>
-  <link name="ForkliftE">
+  <link name="SM_Forklift_C01_01">
     <visual>
-      <origin xyz="-0.7181919 0.0001294 0.1075009" rpy="0. 0. 1.5707964"/>
+      <origin xyz="-0.7181919 0.0000002 -0. " rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Body01_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Body01_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-0.7181919 0.0031845 0.1066132" rpy="0. 0. 1.5707964"/>
+      <origin xyz="-0.7181919 0.0030553 -0.0008877" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Body02_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Body02_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-1.4269949 -0.1682663 0.3648819" rpy="0. 0. 1.5707964"/>
+      <origin xyz="-1.4269949 -0.1683955 0.257381 " rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_RearAxle02_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_RearAxle02_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-1.4269235 -0.2948657 0.3709051" rpy="0. 0. 1.5707964"/>
+      <origin xyz="-1.4269235 -0.294995 0.2634042" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_RearAxleLever02_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_RearAxleLever02_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-1.4269949 0.1685266 0.3648819" rpy="0. 0. 1.5707964"/>
+      <origin xyz="-1.4269949 0.1683974 0.257381 " rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_RearAxle01_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_RearAxle01_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-1.4269235 0.2951254 0.3709051" rpy="0. 0. 1.5707964"/>
+      <origin xyz="-1.4269235 0.2949962 0.2634042" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_RearAxleLever01_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_RearAxleLever01_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-0.4893564 0.00013 0.1074877" rpy="0. 0. 1.5707964"/>
+      <origin xyz="-0.4893564 0.0000008 -0.0000132" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Decals01_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Decals01_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-0.9354185 0.044143 1.3385429" rpy="0. 0. 1.5707964"/>
+      <origin xyz="-0.9354185 0.0440138 1.231042 " rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_OperatorChairHandle02_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_OperatorChairHandle02_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-1.0071567 0.0442026 1.6983339" rpy="0. 0. 1.5707964"/>
+      <origin xyz="-1.0071567 0.0440733 1.590833 " rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_OperatorChairHead_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_OperatorChairHead_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-0.9354185 0.0424887 1.3385429" rpy="0. 0. 1.5707964"/>
+      <origin xyz="-0.9354185 0.0423595 1.231042 " rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_OperatorChairHandle01_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_OperatorChairHandle01_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.0220944 -0.1974301 1.2359986" rpy="0. 0. 1.5707964"/>
+      <origin xyz="0.0220944 -0.1975594 1.1284977" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_GearStick01_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_GearStick01_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.0220944 -0.1491049 1.2359986" rpy="0. 0. 1.5707964"/>
+      <origin xyz="0.0220944 -0.1492342 1.1284977" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_GearStick02_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_GearStick02_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.0220944 -0.1022278 1.2359986" rpy="0. 0. 1.5707964"/>
+      <origin xyz="0.0220944 -0.102357 1.1284977" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_GearStick03_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_GearStick03_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-0.1898966 0.1120663 1.440107 " rpy="0. 0. 1.5707964"/>
+      <origin xyz="-0.1898965 0.1119371 1.3326061" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_SteeringWheel_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_SteeringWheel_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.0000027 0.0001303 1.1912498" rpy="0. 0. 1.5707964"/>
+      <origin xyz="0.0000027 0.0000011 1.0837489" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Mirror_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Mirror_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-0.5702835 0.0001303 1.7053367" rpy="0. 0. 1.5707964"/>
+      <origin xyz="-0.5702835 0.0000011 1.5978359" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Glass_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Glass_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-0.5715531 0.0001303 1.9660603" rpy="0. 0. 1.5707964"/>
+      <origin xyz="-0.5715531 0.0000011 1.8585594" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Lights_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Lights_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.2661148 0.0001294 0.4322238" rpy="0. 0. 1.5707964"/>
+      <origin xyz="0.2661148 0.0000002 0.3247229" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStage02_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStage02_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.5964907 0.00013 1.26248 " rpy="0. 0. 1.5707964"/>
+      <origin xyz="0.5964908 0.0000008 1.1549791" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStage01_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStage01_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.5729446 0.0001294 1.325517 " rpy="0. 0. 1.5707964"/>
+      <origin xyz="0.5729446 0.0000002 1.2180161" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStage03_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStage03_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.5729434 0.0001303 1.35684 " rpy="0. 0. 1.5707964"/>
+      <origin xyz="0.5729434 0.0000011 1.2493391" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastForcerBig_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastForcerBig_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.5729434 0.00013 1.4047829" rpy="0. 0. 1.5707964"/>
+      <origin xyz="0.5729434 0.0000008 1.297282 " rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStageWheel10_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStageWheel10_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.572944 0.0001431 1.4915642" rpy="0. 0. 1.5707964"/>
+      <origin xyz="0.572944 0.0000139 1.3840632" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStageWheel11_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStageWheel11_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-0.4893564 0.0001303 0.1074877" rpy="0. 0. 1.5707964"/>
+      <origin xyz="-0.4893564 0.0000011 -0.0000132" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastChain02_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastChain02_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.5893643 0.00013 0.3155285" rpy="0. 0. 1.5707964"/>
+      <origin xyz="0.5893643 0.0000008 0.2080276" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStageWheel08_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStageWheel08_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.6118899 0.00013 2.197364 " rpy="0. 0. 1.5707964"/>
+      <origin xyz="0.61189 0.0000008 2.089863 " rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStageWheel04_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStageWheel04_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.5506905 0.00013 0.4011509" rpy="0. 0. 1.5707964"/>
+      <origin xyz="0.5506906 0.0000008 0.29365 " rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStageWheel09_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStageWheel09_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-0.4893564 0.00013 0.1074877" rpy="0. 0. 1.5707964"/>
+      <origin xyz="-0.4893564 0.0000008 -0.0000132" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Decals02_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Decals02_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.292181 0.0001306 0.8750474" rpy="0. 0. 1.5707964"/>
+      <origin xyz="0.2921811 0.0000014 0.7675465" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forkliftt_C01_Forcer_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forkliftt_C01_Forcer_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.0763046 0.0001306 0.7813881" rpy="0. 0. 1.5707964"/>
+      <origin xyz="0.0763046 0.0000014 0.6738872" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastForcer_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastForcer_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.5893643 0.00013 0.8105287" rpy="0. 0. 1.5707964"/>
+      <origin xyz="0.5893643 0.0000008 0.7030278" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStageWheel05_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStageWheel05_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.5893643 0.00013 0.5630286" rpy="0. 0. 1.5707964"/>
+      <origin xyz="0.5893643 0.0000008 0.4555277" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStageWheel06_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStageWheel06_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="-0.4893564 0.0001303 0.1074877" rpy="0. 0. 1.5707964"/>
+      <origin xyz="-0.4893564 0.0000011 -0.0000132" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastChain01_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastChain01_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.4385348 0.2300522 2.1317368" rpy="0. 0. 1.5707964"/>
+      <origin xyz="0.4385349 0.229923 2.024236 " rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStageWheel01_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStageWheel01_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.0000027 0.0001306 1.1912498" rpy="0. 0. 1.5707964"/>
+      <origin xyz="0.0000027 0.0000014 1.0837489" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Hose_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Hose_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.4384744 -0.229772 2.1317368" rpy="0. 0. 1.5707964"/>
+      <origin xyz="0.4384744 -0.2299013 2.024236 " rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStageWheel02_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStageWheel02_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.6000222 0.00013 2.1973906" rpy="0. 0. 1.5707964"/>
+      <origin xyz="0.6000223 0.0000008 2.0898898" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStageWheel03_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStageWheel03_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.5896212 0.00013 0.4011552" rpy="0. 0. 1.5707964"/>
+      <origin xyz="0.5896213 0.0000008 0.2936543" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStageWheel07_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStageWheel07_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <collision>
-      <origin xyz="-0.7181919 0.0001294 0.1075009" rpy="0. 0. 1.5707964"/>
+      <origin xyz="-0.7181919 0.0000002 -0. " rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Body01_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Body01_01.obj" scale="1. 1. 1."/>
       </geometry>
     </collision>
     <collision>
-      <origin xyz="-0.7181919 0.0031845 0.1066132" rpy="0. 0. 1.5707964"/>
+      <origin xyz="-0.7181919 0.0030553 -0.0008877" rpy="0. 0. 1.5707964"/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Body02_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Body02_01.obj" scale="1. 1. 1."/>
       </geometry>
     </collision>
   </link>
@@ -291,7 +291,7 @@
     <visual>
       <origin xyz="-0. 0. 0.0000001" rpy="0. 0. 0."/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Wheel01_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Wheel01_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
   </link>
@@ -299,7 +299,7 @@
     <visual>
       <origin xyz="0. 0. -0." rpy="0. 0. 0."/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Wheel02_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Wheel02_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
   </link>
@@ -307,13 +307,13 @@
     <visual>
       <origin xyz="0. 0. -0." rpy="0. 0. 0."/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_RearAxleWheelRotator02_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_RearAxleWheelRotator02_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <collision>
       <origin xyz="0. 0. -0." rpy="0. 0. 0."/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_RearAxleWheelRotator02_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_RearAxleWheelRotator02_01.obj" scale="1. 1. 1."/>
       </geometry>
     </collision>
   </link>
@@ -321,43 +321,43 @@
     <visual>
       <origin xyz="-0.0000008 -0.7562131 0.2311633" rpy="0. 0. 0."/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStage05_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStage05_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
-      <origin xyz="0.2925245 -0.7629147 0.6022711" rpy="0. 0. 0."/>
+      <origin xyz="0.2925246 -0.7629147 0.6022711" rpy="0. 0. 0."/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Fork02_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Fork02_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
       <origin xyz="-0.292527 -0.7629147 0.6022711" rpy="0. 0. 0."/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Fork01_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Fork01_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <visual>
       <origin xyz="-0.0000005 -0.5893649 0.2080148" rpy="0. 0. 0."/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStage04_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStage04_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <collision>
       <origin xyz="-0.0000008 -0.7562131 0.2311633" rpy="0. 0. 0."/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStage05_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_MastStage05_01.obj" scale="1. 1. 1."/>
       </geometry>
     </collision>
     <collision>
-      <origin xyz="0.2925245 -0.7629147 0.6022711" rpy="0. 0. 0."/>
+      <origin xyz="0.2925246 -0.7629147 0.6022711" rpy="0. 0. 0."/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Fork02_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Fork02_01.obj" scale="1. 1. 1."/>
       </geometry>
     </collision>
     <collision>
       <origin xyz="-0.292527 -0.7629147 0.6022711" rpy="0. 0. 0."/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Fork01_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Fork01_01.obj" scale="1. 1. 1."/>
       </geometry>
     </collision>
   </link>
@@ -365,7 +365,7 @@
     <visual>
       <origin xyz="0. 0. 0.0000001" rpy="0. 0. 0."/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Wheel04_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Wheel04_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
   </link>
@@ -373,7 +373,7 @@
     <visual>
       <origin xyz="-0. -0. -0." rpy="0. 0. 0."/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Wheel03_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_Wheel03_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
   </link>
@@ -381,13 +381,13 @@
     <visual>
       <origin xyz="-0. 0. 0.0921678" rpy="0. 0. 0."/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_RearAxleWheelRotator01_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_RearAxleWheelRotator01_01.obj" scale="1. 1. 1."/>
       </geometry>
     </visual>
     <collision>
       <origin xyz="-0. 0. 0.0921678" rpy="0. 0. 0."/>
       <geometry>
-        <mesh filename="file:///home/avent/Documents/ROS2/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_RearAxleWheelRotator01_01.obj" scale="1. 1. 1."/>
+        <mesh filename="file:///home/vn/Documents/MyDrawft/CageStack_IBVS/ROS2/packages/robot_description/meshes/SM_Forklift_C01_RearAxleWheelRotator01_01.obj" scale="1. 1. 1."/>
       </geometry>
     </collision>
   </link>

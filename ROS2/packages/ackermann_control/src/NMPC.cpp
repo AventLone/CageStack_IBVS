@@ -20,7 +20,7 @@ NMPC::NMPC()
 
     mF = casadi::MX::eye(4) * std::vector<double>{3.2, 600.7, 300.6, 3.2};
     mQ = casadi::MX::eye(4) * std::vector<double>{3.2, 600.7, 300.6, 3.2};
-    // mR = casadi::MX::eye(2) * std::vector<double>{0.01, 0.005};
+    mR = casadi::MX::eye(2) * std::vector<double>{0.01, 0.05};
 
     buildModel();
 }
@@ -42,6 +42,25 @@ std::pair<NMPC::Solution, NMPC::Solution> NMPC::solve()
     {
         std::cerr << e.what() << std::endl;
         return std::pair<Solution, Solution>{};
+    }
+}
+
+bool NMPC::solve(std::pair<Solution, Solution>& result)
+{
+    try
+    {
+        mNLP.solve();
+        const casadi::DM result_u = mNLP.value(mUs);
+        const casadi::DM result_x = mNLP.value(mXs);
+
+        convertResult(result_u, result.first);
+        convertResult(result_x, result.second);
+        return true;
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << e.what() << std::endl;
+        return false;
     }
 }
 
@@ -116,9 +135,9 @@ void NMPC::buildModel()
         casadi::MX e_k = casadi::MX::vertcat({e_x, e_y, e_th, dv}); // Error vector
 
         // 阶段代价
-        // J += casadi::MX::mtimes(casadi::MX::mtimes(e_k.T(), mQ), e_k) + casadi::MX::mtimes(
-        //     casadi::MX::mtimes(u_k.T(), mR), u_k);
-        J += casadi::MX::mtimes(casadi::MX::mtimes(e_k.T(), mQ), e_k);
+        J += casadi::MX::mtimes(casadi::MX::mtimes(e_k.T(), mQ), e_k) + casadi::MX::mtimes(
+            casadi::MX::mtimes(u_k.T(), mR), u_k);
+        // J += casadi::MX::mtimes(casadi::MX::mtimes(e_k.T(), mQ), e_k);
 
         // 动力学（RK4）
         casadi::MX x_next = rk4(x_k, u_k, T);

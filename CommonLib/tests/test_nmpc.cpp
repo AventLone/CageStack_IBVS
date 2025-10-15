@@ -4,10 +4,10 @@ int main()
 {
     NMPC nmpc;
 
-    nmpc.setGoal({10.0, 2.0, 0.6});
+    nmpc.setGoalAndState({5.245309829711914, 1.0, 0.0});
 
     const auto begin = std::chrono::system_clock::now();
-    const auto [u, x] = nmpc.solve2();
+    const auto [u, x] = nmpc.solve();
     const auto end = std::chrono::system_clock::now();
 
     const auto elapse = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();

@@ -1,0 +1,12 @@
+horizon: 16
+dt: 0.2
+
+max_acc: 3.1415
+max_speed: 1.0
+
+max_steer_speed: 0.66
+max_steer_angle: 0.7854
+# max_steer_angle: 1.5
+
+wheel_base: 1.65
+wheel_radius: 0.325

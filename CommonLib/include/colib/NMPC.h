@@ -1,15 +1,15 @@
 #pragma once
 #include <casadi/casadi.hpp>
 #include <cassert>
-#include <Eigen/Core>
 
 class NMPC final
 {
     /* Hyperparameters */
-    static constexpr int N{100}; // MPC Horizon, known as prediction horizon
+    static constexpr int N{200}; // MPC Horizon, known as prediction horizon
     static constexpr double T{0.05}; // Sampling Interval [s]
-    static constexpr double MAX_VELOSITY{3.0}, MAX_DELTA{0.6}; // Hard Constraints [m/s, rad/s]
+    static constexpr double MAX_ACC{M_PI}, MAX_STEER_VELOCITY{M_PI / 3.0}; // Hard Constraints [m/s, rad/s]
     static constexpr double WHEEL_BASE{1.5};
+    static constexpr double WHEEL_RADIUS{0.3};
     static constexpr double WHEEL_BASE_INV{1.0 / WHEEL_BASE};
     static constexpr float mSafeDistance{0.55f};
 
@@ -20,16 +20,14 @@ public:
 
     ~NMPC() = default;
 
-    void setGoal(const std::vector<double>& goal)
+    void setGoalAndState(const std::vector<double>& goal)
     {
         assert(goal.size() == 3);
         mNLP.set_value(mGoal, goal);
-        mNLP.set_value(mX0, {0.0, 0.0, 0.0});
+        mNLP.set_value(mX0, {0.0, 0.0, 0.0, 0.0, 0.0});
     }
 
-    std::pair<Eigen::MatrixXd, Eigen::MatrixXd> solve();
-
-    std::pair<Solution, Solution> solve2();
+    std::pair<Solution, Solution> solve();
 
 private:
     casadi::Opti mNLP; // Construct NLP using CasADi
@@ -41,10 +39,26 @@ private:
 
     void buildModel();
 
-    static Eigen::MatrixXd toEigen(casadi::DM& input)
+    template<typename T>
+    static T wrapAngle(T rad)
     {
-        return Eigen::Map<Eigen::MatrixXd>(input.ptr(), input.rows(), input.columns());
+        constexpr double two_pi = 2.0 * M_PI;
+        double r = std::fmod(rad + M_PI, two_pi);
+        if (r < 0.0)
+        {
+            r += two_pi;
+        }
+        return r - M_PI; // ∈ [-π, π)
     }
 
-    void convertResult(const casadi::DM& input, std::vector<std::vector<double>>& output);
+    // casadi::MX rk4(const casadi::MX& x_k, const casadi::MX& u_k, const double dt)
+    // {
+    //     const casadi::MX k1 = f(x_k, u_k);
+    //     const casadi::MX k2 = f(x_k + 0.5 * dt * k1, u_k);
+    //     const casadi::MX k3 = f(x_k + 0.5 * dt * k2, u_k);
+    //     const casadi::MX k4 = f(x_k + dt * k3, u_k);
+    //     return x_k + dt * (k1 + 2 * k2 + 2 * k3 + k4) / 6.0;
+    // }
+
+    static void convertResult(const casadi::DM& input, std::vector<std::vector<double>>& output);
 };

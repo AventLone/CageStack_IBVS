@@ -5,7 +5,7 @@
 
 AckermannControl::AckermannControl(const std::string& name) : rclcpp::Node(name)
 {
-    this->declare_parameter("dt", 0.08);
+    this->declare_parameter("dt", 0.2);
 
     this->get_parameter("dt", mDt);
 
@@ -26,7 +26,7 @@ AckermannControl::AckermannControl(const std::string& name) : rclcpp::Node(name)
     mGoalDisplayPub = this->create_publisher<visualization_msgs::msg::Marker>("goal_display", gRobStateQoS);
     mPathPub = this->create_publisher<nav_msgs::msg::Path>("state_path", gRobStateQoS);
 
-    mDriveMsgTimer = this->create_wall_timer(std::chrono::milliseconds(1000 * static_cast<int64_t>(mDt)), [this]()
+    mDriveMsgTimer = this->create_wall_timer(std::chrono::milliseconds(static_cast<int64_t>(mDt * 1000.0)), [this]()
                                                  {
                                                      std::lock_guard lock(mDriveMsgsMutex);
                                                      if (!mAckerDriveMsgs.empty())
@@ -104,49 +104,70 @@ void AckermannControl::mpcLoop()
 {
     while (rclcpp::ok())
     {
-        {
-            std::scoped_lock lock(mGoalMutex, mStateMutex);
-            if (mGoal.empty())
-            {
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
-                continue;
-            }
-            mNMPC.setGoalAndState(mGoal, {mDriveWheelAngularVelocity, mSteerAngle});
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        }
-
-        const auto [us, xs] = mNMPC.solve();
-
-        std::queue<ackermann_msgs::msg::AckermannDriveStamped> temp_drive_msgs;
-
         double speed{}, steer_angle{}; {
             std::lock_guard lock(mStateMutex);
             speed = mDriveWheelAngularVelocity;
             steer_angle = mSteerAngle;
         }
-        for (auto& u : us)
+
+        {
+            std::lock_guard lock(mGoalMutex);
+            if (mGoal.empty())
+            {
+                RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "Waiting for goal ...");
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                continue;
+            }
+            mNMPC.setGoalAndState(mGoal, {speed, steer_angle});
+        }
+
+        // const auto [us, xs] = mNMPC.solve();
+        std::pair<NMPC::Solution, NMPC::Solution> result;
+        if (!mNMPC.solve(result))
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            continue;
+        }
+
+        std::queue<ackermann_msgs::msg::AckermannDriveStamped> temp_drive_msgs;
+
+        // for (auto& u : us)
+        // {
+        //     ackermann_msgs::msg::AckermannDriveStamped drive_msg;
+        //     speed += mDt * u[0];
+        //     steer_angle += mDt * u[1];
+        //     drive_msg.drive.speed = speed;
+        //     drive_msg.drive.acceleration = u[0];
+        //     drive_msg.drive.steering_angle = steer_angle;
+        //     drive_msg.drive.steering_angle_velocity = u[1];
+        //     temp_drive_msgs.push(drive_msg);
+        // }
+        for (int i = 0; i < CONTROL_HORIZON; ++i)
         {
             ackermann_msgs::msg::AckermannDriveStamped drive_msg;
-            speed += mDt * u[0];
-            steer_angle += mDt * u[1];
+            drive_msg.header.stamp = this->now() ;
+            speed += mDt * result.first[i][0];
+            steer_angle += mDt * result.first[i][1];
             drive_msg.drive.speed = speed;
-            // drive_msg.drive.acceleration = u[0];
+            drive_msg.drive.acceleration = result.first[i][0];
             drive_msg.drive.steering_angle = steer_angle;
-            // drive_msg.drive.steering_angle_velocity = u[1];
+            drive_msg.drive.steering_angle_velocity = result.first[i][1];
             temp_drive_msgs.push(drive_msg);
-        } {
+        }
+        {
             std::lock_guard lock(mDriveMsgsMutex);
-            mAckerDriveMsgs = temp_drive_msgs;
+            // mAckerDriveMsgs = temp_drive_msgs;
+            mAckerDriveMsgs.swap(temp_drive_msgs);
         }
 
         nav_msgs::msg::Path state_path;
         state_path.header.frame_id = "SM_Forklift_C01_01";
-        for (const auto& x : xs)
+        for (const auto& x : result.second)
         {
             geometry_msgs::msg::PoseStamped pose;
             pose.header.frame_id = "SM_Forklift_C01_01";
             pose.header.stamp = this->now();
-            // pose.pose.orientation.
+
             pose.pose.position.x = x[0];
             pose.pose.position.y = x[1];
             tf2::Quaternion orien;
@@ -157,7 +178,7 @@ void AckermannControl::mpcLoop()
         }
         mPathPub->publish(state_path);
 
-        // break;
+        // std::this_thread::sleep_for(std::chrono::milliseconds(600));
     }
 }
 

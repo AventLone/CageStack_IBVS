@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package nmpc_test;
+
+message Pose
+{
+    double x = 1;
+    double y = 2;
+    double yaw = 3;
+}
+
+message State
+{
+    double drive_velocity = 1;
+    double drive_acc = 2;
+    double steer_angle = 3;
+    double steer_velocity = 4;
+    Pose pose = 5;
+}
+
+message Path
+{
+    repeated Pose poses = 1;
+}

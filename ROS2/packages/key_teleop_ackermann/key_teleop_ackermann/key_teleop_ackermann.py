@@ -1,32 +1,9 @@
-import sys, os, tty, termios, select, signal, math
+import math
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
 from ackermann_msgs.msg import AckermannDriveStamped as Ack
 from pynput import keyboard
-from rclpy.clock import Clock, ClockType
-
-class _RawTerminal:
-    def __enter__(self):
-        self._fd = sys.stdin.fileno()
-        self._old = termios.tcgetattr(self._fd)
-        tty.setcbreak(self._fd)  # 非 canonical，低延迟
-        return self
-    def __exit__(self, exc_type, exc, tb):
-        termios.tcsetattr(self._fd, termios.TCSADRAIN, self._old)
-
-def _read_keys():
-    """非阻塞读尽键盘缓冲，返回字符列表。"""
-    chars = []
-    while True:
-        r, _, _ = select.select([sys.stdin], [], [], 0)
-        if not r:
-            break
-        ch = os.read(sys.stdin.fileno(), 1)
-        if not ch:
-            break
-        chars.append(ch)
-    return b"".join(chars)
 
 class KeyTeleopAckermann(Node):
     def __init__(self):
@@ -36,11 +13,11 @@ class KeyTeleopAckermann(Node):
         self.max_steer   = float(self.declare_parameter('max_steer', math.pi / 2).value)   # rad
         self.accel_step  = float(self.declare_parameter('accel_step', 0.1).value)   # m/s per key
         self.steer_step  = float(self.declare_parameter('steer_step', 0.05).value)  # rad per key
-        self.rate_hz     = float(self.declare_parameter('publish_rate', 50.0).value)  # Hz
+        self.rate_hz     = float(self.declare_parameter('publish_rate', 30.0).value)  # Hz
         self.topic       = self.declare_parameter('topic', 'ackermann_cmd').value
 
         self.drive_wheels_velocity = 0.0
-        self.steer_wheels_angle_speed = 0.0
+        self.steer_wheels_angle_velocity = 0.0
 
         qos = QoSProfile(
             depth=1,
@@ -70,14 +47,13 @@ class KeyTeleopAckermann(Node):
         listener.daemon = True
         listener.start()
 
-        # self.timer = self.create_timer(0.01, self._timerCallback, clock=Clock(clock_type=ClockType.STEADY_TIME))
-
     def _timerCallback(self):
         self.msg.header.stamp = self.get_clock().now().to_msg()
         self.msg.drive.speed = self.drive_wheels_velocity
-        self.msg.drive.steering_angle += self.steer_wheels_angle_speed
-
-        self.msg.drive.steering_angle = self.clamp(self.msg.drive.steering_angle, -self.max_steer, self.max_steer)
+        # self.msg.drive.acceleration = math.pi
+        self.msg.drive.steering_angle_velocity = self.steer_wheels_angle_velocity
+        # self.msg.drive.steering_angle += self.steer_wheels_angle_speed
+        # self.msg.drive.steering_angle = self.clamp(self.msg.drive.steering_angle, -self.max_steer, self.max_steer)
 
         self.pub.publish(self.msg)
 
@@ -98,9 +74,9 @@ class KeyTeleopAckermann(Node):
             self.drive_wheels_velocity = -math.pi * 2
 
         if k == 'a':
-            self.steer_wheels_angle_speed = 0.02
+            self.steer_wheels_angle_velocity = math.pi / 4.0
         elif k == 'd':
-            self.steer_wheels_angle_speed = -0.02
+            self.steer_wheels_angle_velocity = -math.pi / 4.0
 
     def _onRelease(self, key):
         try:
@@ -112,7 +88,7 @@ class KeyTeleopAckermann(Node):
             self.drive_wheels_velocity = 0.0
 
         if k == 'a' or k == 'd':
-            self.steer_wheels_angle_speed = 0.0
+            self.steer_wheels_angle_velocity = 0.0
 
 
 def main():

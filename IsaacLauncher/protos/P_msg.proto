@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+
+package sim_data_flow;
+
+message PMsgUp{
+  uint64 timestamp = 1;
+  double gyroscope = 2;
+  double forkposez = 3;
+  double steerPosition = 4;
+  double l_wheel = 5;
+  double r_wheel = 6;
+  double steering_theta = 7;
+  uint32 dataidx_upload = 8;
+  bool HSwitchL = 9;
+  bool HSwitchR = 10;
+  bool VSwitchL = 11;
+  bool VSwitchR = 12;
+  double forkposey = 13;
+  double forkposep = 14;
+  bool torquestatus = 15;
+  bool LForkSafety = 16;               //左侧货叉是否安全
+  bool RForkSafety = 17;               //右侧货叉是否安全
+  bool forkOnHeight = 18;              //货叉是否在高点
+  bool forkOnGround = 19;              //货叉是否在最低点
+  double InertialUnitX = 20;           //陀螺仪Roll的角度X
+  double InertialUnitY = 21;           //陀螺仪Pitch的角度Y
+  double InertialUnitZ = 22;           //陀螺仪Ya的角度Z
+  double AccelerometerX = 23;          //加速度计X
+  double AccelerometerY = 24;          //加速度计Y
+  double AccelerometerZ = 25;          //加速度计Z
+  double angularVelX = 26;             //角速度X
+  double angularVelY = 27;             //角速度Y
+  double angularVelZ = 28;             //角速度Z
+}
+
+message PMsgDown{
+  uint64 timestamp = 1;
+  double steering_theta = 2;
+  double steering_speed = 3;
+  double forkspeedZ = 4;
+  double forkspeedY = 5;
+  double forkspeedP = 6;
+  bool torqueoffctl = 7;
+}
+
+

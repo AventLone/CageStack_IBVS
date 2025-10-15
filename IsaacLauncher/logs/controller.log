@@ -1,0 +1,890 @@
+2025-09-01 13:41:35 - controller - INFO - E_test.py:104 - 2157173:135898097694528 - add camera : /World/forklift_E/lift/fork_cmara
+2025-09-01 13:41:35 - controller - INFO - E_test.py:104 - 2157173:135898097694528 - add camera : /World/forklift_E/body/body_camra_front
+2025-09-01 13:41:35 - controller - INFO - E_test.py:104 - 2157173:135898097694528 - add camera : /World/forklift_E/body/body_camra_back
+2025-09-01 13:41:35 - controller - INFO - E_test.py:31 - 2157173:135817079023296 - start SensorsThread
+2025-09-01 13:44:35 - controller - INFO - E_test.py:104 - 2171501:138958094116672 - add camera : /World/forklift_E/lift/fork_cmara
+2025-09-01 13:44:35 - controller - INFO - E_test.py:104 - 2171501:138958094116672 - add camera : /World/forklift_E/body/body_camra_front
+2025-09-01 13:44:35 - controller - INFO - E_test.py:104 - 2171501:138958094116672 - add camera : /World/forklift_E/body/body_camra_back
+2025-09-01 13:44:35 - controller - INFO - E_test.py:31 - 2171501:138877364860608 - start SensorsThread
+2025-09-01 13:49:26 - controller - INFO - E_test.py:104 - 2193816:125271273924416 - add camera : /World/forklift_E/lift/fork_cmara
+2025-09-01 13:49:26 - controller - INFO - E_test.py:104 - 2193816:125271273924416 - add camera : /World/forklift_E/body/body_camra_front
+2025-09-01 13:49:26 - controller - INFO - E_test.py:104 - 2193816:125271273924416 - add camera : /World/forklift_E/body/body_camra_back
+2025-09-01 13:49:26 - controller - INFO - E_test.py:31 - 2193816:125190526723776 - start SensorsThread
+2025-09-01 13:51:35 - controller - INFO - E_test.py:104 - 2204842:129698079799104 - add camera : /World/forklift_E/lift/fork_cmara
+2025-09-01 13:51:35 - controller - INFO - E_test.py:104 - 2204842:129698079799104 - add camera : /World/forklift_E/body/body_camra_front
+2025-09-01 13:51:35 - controller - INFO - E_test.py:104 - 2204842:129698079799104 - add camera : /World/forklift_E/body/body_camra_back
+2025-09-01 13:51:35 - controller - INFO - E_test.py:31 - 2204842:129617503442624 - start SensorsThread
+2025-09-01 13:53:03 - controller - INFO - E_test.py:104 - 2211992:135545612838720 - add camera : /World/forklift_E/lift/fork_cmara
+2025-09-01 13:53:03 - controller - INFO - E_test.py:104 - 2211992:135545612838720 - add camera : /World/forklift_E/body/body_camra_front
+2025-09-01 13:53:03 - controller - INFO - E_test.py:104 - 2211992:135545612838720 - add camera : /World/forklift_E/body/body_camra_back
+2025-09-01 13:53:03 - controller - INFO - E_test.py:31 - 2211992:135465162237632 - start SensorsThread
+2025-09-01 13:54:21 - controller - INFO - E_test.py:104 - 2219093:132292998596416 - add camera : /World/forklift_E/lift/fork_cmara
+2025-09-01 13:54:21 - controller - INFO - E_test.py:104 - 2219093:132292998596416 - add camera : /World/forklift_E/body/body_camra_front
+2025-09-01 13:54:21 - controller - INFO - E_test.py:104 - 2219093:132292998596416 - add camera : /World/forklift_E/body/body_camra_back
+2025-09-01 13:54:22 - controller - INFO - E_test.py:31 - 2219093:132212126291648 - start SensorsThread
+2025-09-01 14:08:17 - controller - INFO - E_test.py:104 - 2284655:139441595385664 - add camera : /World/forklift_E/lift/fork_cmara
+2025-09-01 14:08:17 - controller - INFO - E_test.py:104 - 2284655:139441595385664 - add camera : /World/forklift_E/body/body_camra_front
+2025-09-01 14:08:17 - controller - INFO - E_test.py:104 - 2284655:139441595385664 - add camera : /World/forklift_E/body/body_camra_back
+2025-09-01 14:08:18 - controller - INFO - E_test.py:31 - 2284655:139360875833024 - start SensorsThread
+2025-09-01 14:09:15 - controller - INFO - E_test.py:104 - 2289661:132990986872640 - add camera : /World/forklift_E/lift/fork_cmara
+2025-09-01 14:09:15 - controller - INFO - E_test.py:104 - 2289661:132990986872640 - add camera : /World/forklift_E/body/body_camra_front
+2025-09-01 14:09:16 - controller - INFO - E_test.py:104 - 2289661:132990986872640 - add camera : /World/forklift_E/body/body_camra_back
+2025-09-01 14:09:16 - controller - INFO - E_test.py:31 - 2289661:132910269064896 - start SensorsThread
+2025-09-01 14:09:27 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030003046616911888 drive_velocity : 0.2893363833427429 fork_height : 0.0
+2025-09-01 14:09:27 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.03000396303832531 drive_velocity : 0.5992735028266907 fork_height : 0.0
+2025-09-01 14:09:27 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.03000485710799694 drive_velocity : 0.8671048879623413 fork_height : 0.0
+2025-09-01 14:09:27 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.03001386858522892 drive_velocity : 1.0942308902740479 fork_height : 0.0
+2025-09-01 14:09:27 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000299215316772 drive_velocity : 1.30011785030365 fork_height : 0.0
+2025-09-01 14:09:27 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999778464436531 drive_velocity : 1.148666501045227 fork_height : 0.0
+2025-09-01 14:09:27 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029997939243912697 drive_velocity : 1.119629979133606 fork_height : 0.0
+2025-09-01 14:09:27 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.0300022903829813 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 14:09:27 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029991520568728447 drive_velocity : 0.8081295490264893 fork_height : 0.0
+2025-09-01 14:09:28 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029999786987900734 drive_velocity : 0.6990005373954773 fork_height : 0.0
+2025-09-01 14:09:28 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030001763254404068 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 14:09:28 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.03000633232295513 drive_velocity : 0.5020977854728699 fork_height : 0.0
+2025-09-01 14:09:28 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030004598200321198 drive_velocity : 0.4352703392505646 fork_height : 0.0
+2025-09-01 14:09:28 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.0299992598593235 drive_velocity : 0.3748036026954651 fork_height : 0.0
+2025-09-01 14:09:28 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029995480552315712 drive_velocity : 0.3258668780326843 fork_height : 0.0
+2025-09-01 14:09:28 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.03000856563448906 drive_velocity : 0.27337703108787537 fork_height : 0.0
+2025-09-01 14:09:28 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.03000563383102417 drive_velocity : 0.235131174325943 fork_height : 0.0
+2025-09-01 14:09:28 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029996929690241814 drive_velocity : 0.20249603688716888 fork_height : 0.0
+2025-09-01 14:09:28 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.03000381588935852 drive_velocity : 0.16633571684360504 fork_height : 0.0
+2025-09-01 14:09:29 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030003326013684273 drive_velocity : 0.1428399235010147 fork_height : 0.0
+2025-09-01 14:09:29 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029994972050189972 drive_velocity : 0.12240900099277496 fork_height : 0.0
+2025-09-01 14:09:29 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029993128031492233 drive_velocity : 0.10281383991241455 fork_height : 0.0
+2025-09-01 14:09:29 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029992474243044853 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 14:09:29 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029997501522302628 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 14:09:29 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030001716688275337 drive_velocity : 0.0641065463423729 fork_height : 0.0
+2025-09-01 14:09:29 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000360682606697 drive_velocity : 0.056202128529548645 fork_height : 0.0
+2025-09-01 14:09:29 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029999472200870514 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 14:09:29 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029999472200870514 drive_velocity : 0.03923710063099861 fork_height : 0.0
+2025-09-01 14:09:29 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000004917383194 drive_velocity : 0.03226922079920769 fork_height : 0.0
+2025-09-01 14:09:30 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029999498277902603 drive_velocity : 0.028568772599101067 fork_height : 0.0
+2025-09-01 14:09:30 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999947965145111 drive_velocity : 0.023875722661614418 fork_height : 0.0
+2025-09-01 14:09:30 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999996393918991 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 14:09:30 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999918721616268 drive_velocity : 0.012948443181812763 fork_height : 0.0
+2025-09-01 14:09:30 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000178143382072 drive_velocity : 0.013475921005010605 fork_height : 0.0
+2025-09-01 14:09:30 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999938279390335 drive_velocity : 0.011669138446450233 fork_height : 0.0
+2025-09-01 14:09:30 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999989129602909 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 14:09:30 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030005808919668198 drive_velocity : 0.004101450555026531 fork_height : 0.0
+2025-09-01 14:09:30 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999269589781761 drive_velocity : 0.0020152083598077297 fork_height : 0.0
+2025-09-01 14:09:30 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029999565333127975 drive_velocity : 0.0036999823059886694 fork_height : 0.0
+2025-09-01 14:09:31 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029999708756804466 drive_velocity : 0.0031338499393314123 fork_height : 0.0
+2025-09-01 14:09:31 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029999803751707077 drive_velocity : 0.0013054902665317059 fork_height : 0.0
+2025-09-01 14:09:31 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999955788254738 drive_velocity : -0.0010562273673713207 fork_height : 0.0
+2025-09-01 14:09:31 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000511556863785 drive_velocity : -0.002533232793211937 fork_height : 0.0
+2025-09-01 14:09:31 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999993972480297 drive_velocity : -0.0018036416731774807 fork_height : 0.0
+2025-09-01 14:09:31 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.03000020794570446 drive_velocity : 9.987514931708574e-05 fork_height : 0.0
+2025-09-01 14:09:31 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999945357441902 drive_velocity : 0.0004423494392540306 fork_height : 0.0
+2025-09-01 14:09:31 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999957650899887 drive_velocity : -0.002859370782971382 fork_height : 0.0
+2025-09-01 14:09:31 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029999790713191032 drive_velocity : -0.0010223158169537783 fork_height : 0.0
+2025-09-01 14:09:31 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000124126672745 drive_velocity : -0.001915467670187354 fork_height : 0.0
+2025-09-01 14:09:32 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999928407371044 drive_velocity : -0.0012277689529582858 fork_height : 0.0
+2025-09-01 14:09:32 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029999734833836555 drive_velocity : -0.0006005284376442432 fork_height : 0.0
+2025-09-01 14:09:32 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029997089877724648 drive_velocity : -0.003986601252108812 fork_height : 0.0
+2025-09-01 14:09:32 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999984472990036 drive_velocity : -0.004261455498635769 fork_height : 0.0
+2025-09-01 14:09:32 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999941073358059 drive_velocity : -0.003947610501199961 fork_height : 0.0
+2025-09-01 14:09:32 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999921701848507 drive_velocity : -0.0023555071093142033 fork_height : 0.0
+2025-09-01 14:09:32 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999749593436718 drive_velocity : -0.004392636939883232 fork_height : 0.0
+2025-09-01 14:09:32 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.0299919955432415 drive_velocity : -0.0050455015152692795 fork_height : 0.0
+2025-09-01 14:09:32 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029999570921063423 drive_velocity : -0.005232547409832478 fork_height : 0.0
+2025-09-01 14:09:32 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999964915215969 drive_velocity : -0.001131562516093254 fork_height : 0.0
+2025-09-01 14:09:33 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999991364777088 drive_velocity : -0.0006010758224874735 fork_height : 0.0
+2025-09-01 14:09:33 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000053346157074 drive_velocity : -0.0025114845484495163 fork_height : 0.0
+2025-09-01 14:09:33 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000489205121994 drive_velocity : -0.003971524070948362 fork_height : 0.0
+2025-09-01 14:09:33 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.03000105544924736 drive_velocity : -0.004835810977965593 fork_height : 0.0
+2025-09-01 14:09:33 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000245198607445 drive_velocity : -0.0039217304438352585 fork_height : 0.0
+2025-09-01 14:09:33 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029999880120158195 drive_velocity : -0.0014956982340663671 fork_height : 0.0
+2025-09-01 14:09:33 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000148341059685 drive_velocity : -0.00045454534119926393 fork_height : 0.0
+2025-09-01 14:09:33 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029999541118741035 drive_velocity : -0.0015275332843884826 fork_height : 0.0
+2025-09-01 14:09:33 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029999982565641403 drive_velocity : -0.00419661495834589 fork_height : 0.0
+2025-09-01 14:09:33 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999967522919178 drive_velocity : -0.0031768649350851774 fork_height : 0.0
+2025-09-01 14:09:34 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029999224469065666 drive_velocity : -0.00293198530562222 fork_height : 0.0
+2025-09-01 14:09:34 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000584200024605 drive_velocity : -0.00040500075556337833 fork_height : 0.0
+2025-09-01 14:09:34 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999930828809738 drive_velocity : -0.00016708110342733562 fork_height : 0.0
+2025-09-01 14:09:34 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029999999329447746 drive_velocity : -0.004702506586909294 fork_height : 0.0
+2025-09-01 14:09:34 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029999397695064545 drive_velocity : -0.0028178482316434383 fork_height : 0.0
+2025-09-01 14:09:34 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029999280348420143 drive_velocity : -0.002630956470966339 fork_height : 0.0
+2025-09-01 14:09:34 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029999468475580215 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 14:09:34 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.03000081330537796 drive_velocity : 0.0004528382560238242 fork_height : 0.0
+2025-09-01 14:09:34 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.03000006265938282 drive_velocity : 0.000775237800553441 fork_height : 0.0
+2025-09-01 14:09:34 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029999980702996254 drive_velocity : -0.0029797034803777933 fork_height : 0.0
+2025-09-01 14:09:35 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000094324350357 drive_velocity : -0.0021964709740132093 fork_height : 0.0
+2025-09-01 14:09:35 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.03000015579164028 drive_velocity : -0.0026739032473415136 fork_height : 0.0
+2025-09-01 14:09:35 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999955601990223 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 14:09:35 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029999757185578346 drive_velocity : 0.0015868705231696367 fork_height : 0.0
+2025-09-01 14:09:35 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999974973499775 drive_velocity : 8.066149894148111e-05 fork_height : 0.0
+2025-09-01 14:09:35 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030001619830727577 drive_velocity : -0.002802253235131502 fork_height : 0.0
+2025-09-01 14:09:35 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030001435428857803 drive_velocity : -0.0012325269635766745 fork_height : 0.0
+2025-09-01 14:09:35 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000442638993263 drive_velocity : -0.0019718811381608248 fork_height : 0.0
+2025-09-01 14:09:35 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999980002641678 drive_velocity : 2.9441696824505925e-05 fork_height : 0.0
+2025-09-01 14:09:35 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000338330864906 drive_velocity : 0.0015039447462186217 fork_height : 0.0
+2025-09-01 14:09:36 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.03000115230679512 drive_velocity : 0.00012530872481875122 fork_height : 0.0
+2025-09-01 14:09:36 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999935671687126 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 14:09:36 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999979630112648 drive_velocity : -0.0020172328222543 fork_height : 0.0
+2025-09-01 14:09:36 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999984100461006 drive_velocity : -0.001906752004288137 fork_height : 0.0
+2025-09-01 14:09:36 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999984100461006 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 14:09:36 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000533908605576 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 14:09:36 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000153928995132 drive_velocity : 0.00023536983644589782 fork_height : 0.0
+2025-09-01 14:09:36 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.03000085987150669 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 14:09:36 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029998699203133583 drive_velocity : -0.001098047592677176 fork_height : 0.0
+2025-09-01 14:09:36 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999979443848133 drive_velocity : 0.0008757557370699942 fork_height : 0.0
+2025-09-01 14:09:37 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000144615769386 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 14:09:37 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.03000047616660595 drive_velocity : 0.0015586069785058498 fork_height : 0.0
+2025-09-01 14:09:37 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000321567058563 drive_velocity : 0.0006291926838457584 fork_height : 0.0
+2025-09-01 14:09:37 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.03000030852854252 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 14:09:37 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029992740601301193 drive_velocity : -0.0014344389783218503 fork_height : 0.0
+2025-09-01 14:09:37 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029992740601301193 drive_velocity : 0.0011586429318413138 fork_height : 0.0
+2025-09-01 14:09:37 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999754622578621 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 14:09:37 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000003054738045 drive_velocity : 0.0009571254486218095 fork_height : 0.0
+2025-09-01 14:09:37 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030001161620020866 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 14:09:37 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999858744442463 drive_velocity : -0.002296409336850047 fork_height : 0.0
+2025-09-01 14:09:38 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.0300007127225399 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 14:09:38 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000170692801476 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 14:09:38 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000081285834312 drive_velocity : 0.001308438484556973 fork_height : 0.0
+2025-09-01 14:09:38 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000118538737297 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 14:09:38 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999957650899887 drive_velocity : -0.0030091386288404465 fork_height : 0.0
+2025-09-01 14:09:38 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029998362064361572 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 14:09:38 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000032857060432 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 14:09:38 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029999207705259323 drive_velocity : -0.000601819483563304 fork_height : 0.0
+2025-09-01 14:09:38 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.030000414699316025 drive_velocity : 0.0005620851879939437 fork_height : 0.0
+2025-09-01 14:09:38 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.029999930411577225 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 14:09:39 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999959886074066 drive_velocity : -0.001607362530194223 fork_height : 0.0
+2025-09-01 14:09:39 - controller - INFO - E_test.py:64 - 2289661:132910269064896 - steer_angle : -0.02999987080693245 drive_velocity : -0.0018311135936528444 fork_height : 0.0
+2025-09-01 15:47:51 - controller - INFO - E_test.py:104 - 2763518:137297048856384 - add camera : /World/forklift_E/lift/fork_cmara
+2025-09-01 15:47:51 - controller - INFO - E_test.py:104 - 2763518:137297048856384 - add camera : /World/forklift_E/body/body_camra_front
+2025-09-01 15:47:51 - controller - INFO - E_test.py:104 - 2763518:137297048856384 - add camera : /World/forklift_E/body/body_camra_back
+2025-09-01 15:47:51 - controller - INFO - E_test.py:31 - 2763518:137216317712064 - start SensorsThread
+2025-09-01 15:53:13 - controller - INFO - E_test.py:104 - 2787632:126261214455616 - add camera : /World/forklift_E/lift/fork_cmara
+2025-09-01 15:53:13 - controller - INFO - E_test.py:104 - 2787632:126261214455616 - add camera : /World/forklift_E/body/body_camra_front
+2025-09-01 15:53:13 - controller - INFO - E_test.py:104 - 2787632:126261214455616 - add camera : /World/forklift_E/body/body_camra_back
+2025-09-01 15:53:13 - controller - INFO - E_test.py:31 - 2787632:126180413540032 - start SensorsThread
+2025-09-01 15:59:34 - controller - INFO - E_test.py:104 - 2818259:126151829153600 - add camera : /World/forklift_E/lift/fork_cmara
+2025-09-01 16:34:03 - controller - INFO - E_test.py:104 - 2990149:129277946554176 - add camera : /World/forklift_E/lift/fork_cmara
+2025-09-01 16:34:03 - controller - INFO - E_test.py:104 - 2990149:129277946554176 - add camera : /World/forklift_E/body/body_camra_front
+2025-09-01 16:34:03 - controller - INFO - E_test.py:104 - 2990149:129277946554176 - add camera : /World/forklift_E/body/body_camra_back
+2025-09-01 16:34:03 - controller - INFO - E_test.py:31 - 2990149:129197433415360 - start SensorsThread
+2025-09-01 16:37:49 - controller - INFO - E_test.py:104 - 3008033:123554923059008 - add camera : /World/forklift_E/lift/fork_cmara
+2025-09-01 16:39:04 - controller - INFO - E_test.py:104 - 3015615:135982349686592 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-01 16:39:05 - controller - INFO - E_test.py:104 - 3015615:135982349686592 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-01 16:39:05 - controller - INFO - E_test.py:104 - 3015615:135982349686592 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-01 16:39:05 - controller - INFO - E_test.py:31 - 3015615:135901831227072 - start SensorsThread
+2025-09-01 16:41:08 - controller - INFO - E_test.py:104 - 3026187:134846715873088 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-01 16:41:08 - controller - INFO - E_test.py:104 - 3026187:134846715873088 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-01 16:41:08 - controller - INFO - E_test.py:104 - 3026187:134846715873088 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-01 16:41:08 - controller - INFO - E_test.py:31 - 3026187:134766042572480 - start SensorsThread
+2025-09-01 17:01:39 - controller - INFO - E_test.py:104 - 3125692:138856708159296 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-01 17:01:40 - controller - INFO - E_test.py:104 - 3125692:138856708159296 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-01 17:01:40 - controller - INFO - E_test.py:104 - 3125692:138856708159296 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-01 17:01:40 - controller - INFO - E_test.py:31 - 3125692:138775759939264 - start SensorsThread
+2025-09-01 17:49:23 - controller - INFO - E_test.py:104 - 3358553:126351851411264 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-01 17:49:23 - controller - INFO - E_test.py:104 - 3358553:126351851411264 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-01 17:49:23 - controller - INFO - E_test.py:104 - 3358553:126351851411264 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-01 17:49:23 - controller - INFO - E_test.py:31 - 3358553:126270576780992 - start SensorsThread
+2025-09-01 17:51:04 - controller - INFO - E_test.py:104 - 3367203:133471202907968 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-01 17:51:05 - controller - INFO - E_test.py:104 - 3367203:133471202907968 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-01 17:51:05 - controller - INFO - E_test.py:104 - 3367203:133471202907968 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-01 17:51:05 - controller - INFO - E_test.py:31 - 3367203:133390101141184 - start SensorsThread
+2025-09-01 18:51:16 - controller - INFO - E_test.py:104 - 3661590:137950638692160 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-01 18:51:16 - controller - INFO - E_test.py:104 - 3661590:137950638692160 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-01 18:51:16 - controller - INFO - E_test.py:104 - 3661590:137950638692160 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-01 18:51:17 - controller - INFO - E_test.py:31 - 3661590:137870005896896 - start SensorsThread
+2025-09-01 18:55:26 - controller - INFO - E_test.py:104 - 3682684:125969884751680 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-01 18:55:26 - controller - INFO - E_test.py:104 - 3682684:125969884751680 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-01 18:55:26 - controller - INFO - E_test.py:104 - 3682684:125969884751680 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-01 18:55:26 - controller - INFO - E_test.py:31 - 3682684:125889062889152 - start SensorsThread
+2025-09-01 19:09:06 - controller - INFO - E_test.py:104 - 3749158:139860928923456 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-01 19:09:06 - controller - INFO - E_test.py:104 - 3749158:139860928923456 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-01 19:09:06 - controller - INFO - E_test.py:104 - 3749158:139860928923456 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-01 19:09:06 - controller - INFO - E_test.py:31 - 3749158:139780270581440 - start SensorsThread
+2025-09-01 19:09:28 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04005222022533417 drive_velocity : 0.1202455386519432 fork_height : 1.2603499044416822e-06
+2025-09-01 19:09:28 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.03999201953411102 drive_velocity : -0.10560695081949234 fork_height : 1.2058610536769265e-06
+2025-09-01 19:09:28 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.03998546302318573 drive_velocity : -0.1430535465478897 fork_height : 1.108359811041737e-06
+2025-09-01 19:09:28 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.039979878813028336 drive_velocity : -0.15709201991558075 fork_height : 1.6980321788651054e-06
+2025-09-01 19:09:29 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04001058638095856 drive_velocity : -0.1667727828025818 fork_height : 1.1960761412410648e-06
+2025-09-01 19:09:29 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.0399710051715374 drive_velocity : 0.2681904733181 fork_height : 0.0006011815858073533
+2025-09-01 19:09:29 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.039861638098955154 drive_velocity : -0.5898147225379944 fork_height : 0.028386104851961136
+2025-09-01 19:09:29 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04004773497581482 drive_velocity : -0.11588088423013687 fork_height : 0.05310218781232834
+2025-09-01 19:09:29 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.0400487557053566 drive_velocity : -0.22979819774627686 fork_height : 0.04651204124093056
+2025-09-01 19:09:29 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.0399821512401104 drive_velocity : -0.26487404108047485 fork_height : 0.018765000626444817
+2025-09-01 19:09:29 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04002897068858147 drive_velocity : -0.32788175344467163 fork_height : 0.01380788441747427
+2025-09-01 19:09:29 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.03998759388923645 drive_velocity : -0.2686271369457245 fork_height : 0.03315292298793793
+2025-09-01 19:09:29 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.039994921535253525 drive_velocity : -0.2347288280725479 fork_height : 0.04625227674841881
+2025-09-01 19:09:29 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.03998401015996933 drive_velocity : -0.20095191895961761 fork_height : 0.03464384004473686
+2025-09-01 19:09:30 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.03999456390738487 drive_velocity : -0.1653396338224411 fork_height : 0.022299297153949738
+2025-09-01 19:09:30 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.03998977690935135 drive_velocity : -0.13666051626205444 fork_height : 0.02362377569079399
+2025-09-01 19:09:30 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.039999816566705704 drive_velocity : -0.09884845465421677 fork_height : 0.03673834726214409
+2025-09-01 19:09:30 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.039995189756155014 drive_velocity : -0.08861908316612244 fork_height : 0.040291428565979004
+2025-09-01 19:09:30 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.0399920791387558 drive_velocity : -0.08091693371534348 fork_height : 0.03194068744778633
+2025-09-01 19:09:30 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.039998333901166916 drive_velocity : -0.05524409934878349 fork_height : 0.024797063320875168
+2025-09-01 19:09:30 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.03999705985188484 drive_velocity : -0.032397765666246414 fork_height : 0.029376666992902756
+2025-09-01 19:09:30 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.03999771177768707 drive_velocity : 0.0 fork_height : 0.03551637753844261
+2025-09-01 19:09:30 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.03999374806880951 drive_velocity : -0.02807985059916973 fork_height : 0.03582385927438736
+2025-09-01 19:09:30 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.039993926882743835 drive_velocity : -0.018748853355646133 fork_height : 0.029735876247286797
+2025-09-01 19:09:31 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.03999383747577667 drive_velocity : -0.007468534633517265 fork_height : 0.02771262265741825
+2025-09-01 19:09:31 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.039993491023778915 drive_velocity : 0.0008187777129933238 fork_height : 0.03094714879989624
+2025-09-01 19:09:31 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.03999478369951248 drive_velocity : 0.01475466601550579 fork_height : 0.03472038730978966
+2025-09-01 19:09:31 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.03999471291899681 drive_velocity : 0.023037465289235115 fork_height : 0.033051732927560806
+2025-09-01 19:09:31 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.039996784180402756 drive_velocity : 0.0 fork_height : 0.03007061779499054
+2025-09-01 19:09:31 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.03999899700284004 drive_velocity : 0.0371842160820961 fork_height : 0.02946600504219532
+2025-09-01 19:09:31 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.039999186992645264 drive_velocity : 0.037346865981817245 fork_height : 0.03221462294459343
+2025-09-01 19:09:31 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.040000587701797485 drive_velocity : 0.0 fork_height : 0.03353502228856087
+2025-09-01 19:09:31 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04000029340386391 drive_velocity : 0.024364298209547997 fork_height : 0.03167933598160744
+2025-09-01 19:09:31 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04000123217701912 drive_velocity : 0.016956128180027008 fork_height : 0.030239127576351166
+2025-09-01 19:09:32 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.040002599358558655 drive_velocity : 0.0056169419549405575 fork_height : 0.030759265646338463
+2025-09-01 19:09:32 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04000229015946388 drive_velocity : 0.0 fork_height : 0.032173044979572296
+2025-09-01 19:09:32 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04000180587172508 drive_velocity : -0.015344730578362942 fork_height : 0.03267621621489525
+2025-09-01 19:09:32 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04000100493431091 drive_velocity : -0.027013013139367104 fork_height : 0.031464021652936935
+2025-09-01 19:09:32 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.039869990199804306 drive_velocity : 0.0 fork_height : 0.030899645760655403
+2025-09-01 19:09:32 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.0399988517165184 drive_velocity : -0.2599449157714844 fork_height : 0.03170773386955261
+2025-09-01 19:09:32 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.03996765613555908 drive_velocity : -0.5632798671722412 fork_height : 0.03242862597107887
+2025-09-01 19:09:32 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.039858121424913406 drive_velocity : 0.0 fork_height : 0.032155707478523254
+2025-09-01 19:09:32 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.039994169026613235 drive_velocity : -0.3108035624027252 fork_height : 0.0313001424074173
+2025-09-01 19:09:32 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.03998232260346413 drive_velocity : -0.17868417501449585 fork_height : 0.03113161213696003
+2025-09-01 19:09:33 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.039983462542295456 drive_velocity : 0.0 fork_height : 0.0316297747194767
+2025-09-01 19:09:33 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.040018659085035324 drive_velocity : 0.22596384584903717 fork_height : 0.0320865698158741
+2025-09-01 19:09:33 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.0400068536400795 drive_velocity : 0.33760392665863037 fork_height : 0.03178000450134277
+2025-09-01 19:09:33 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.040018461644649506 drive_velocity : 0.3840658366680145 fork_height : 0.03137298673391342
+2025-09-01 19:09:33 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04001862183213234 drive_velocity : 0.45053529739379883 fork_height : 0.03136487305164337
+2025-09-01 19:09:33 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04000883921980858 drive_velocity : 0.0 fork_height : 0.03169494494795799
+2025-09-01 19:09:33 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.040135208517313004 drive_velocity : 0.620779275894165 fork_height : 0.031916696578264236
+2025-09-01 19:09:35 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.039964739233255386 drive_velocity : 0.0 fork_height : 0.0316087044775486
+2025-09-01 19:09:35 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.039998408406972885 drive_velocity : 0.5123149156570435 fork_height : 0.031689565628767014
+2025-09-01 19:09:35 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.03997908532619476 drive_velocity : 0.0 fork_height : 0.03176949918270111
+2025-09-01 19:09:37 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04000203311443329 drive_velocity : -0.053894609212875366 fork_height : 0.03175072371959686
+2025-09-01 19:09:37 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04004114493727684 drive_velocity : 0.0 fork_height : 0.0317252092063427
+2025-09-01 19:09:37 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04002426937222481 drive_velocity : -0.7977339625358582 fork_height : 0.03160536289215088
+2025-09-01 19:09:37 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04001890495419502 drive_velocity : 0.1010483130812645 fork_height : 0.03144186735153198
+2025-09-01 19:09:37 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04000727832317352 drive_velocity : 0.1350482702255249 fork_height : 0.031547773629426956
+2025-09-01 19:09:37 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04001312702894211 drive_velocity : 0.15318158268928528 fork_height : 0.03179685398936272
+2025-09-01 19:09:37 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04000233858823776 drive_velocity : 0.14519290626049042 fork_height : 0.031786710023880005
+2025-09-01 19:09:37 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04000924155116081 drive_velocity : 0.14008136093616486 fork_height : 0.03157062456011772
+2025-09-01 19:09:37 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.03998646140098572 drive_velocity : 0.13326193392276764 fork_height : 0.031522538512945175
+2025-09-01 19:09:38 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04000316560268402 drive_velocity : 0.11961646378040314 fork_height : 0.03168697655200958
+2025-09-01 19:09:38 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04000987485051155 drive_velocity : 0.11140225827693939 fork_height : 0.03178190067410469
+2025-09-01 19:09:38 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04002433642745018 drive_velocity : 0.09156697988510132 fork_height : 0.03167542442679405
+2025-09-01 19:09:38 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.03999704122543335 drive_velocity : 0.1012219712138176 fork_height : 0.03156379982829094
+2025-09-01 19:09:38 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04000505432486534 drive_velocity : 0.12322769314050674 fork_height : 0.031628962606191635
+2025-09-01 19:09:38 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04000936448574066 drive_velocity : 0.13435319066047668 fork_height : 0.03171953558921814
+2025-09-01 19:09:38 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.03999611735343933 drive_velocity : 0.12732790410518646 fork_height : 0.031700290739536285
+2025-09-01 19:09:38 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04000729322433472 drive_velocity : 0.11404608190059662 fork_height : 0.03160969540476799
+2025-09-01 19:09:38 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04001251980662346 drive_velocity : 0.10575851798057556 fork_height : 0.031596746295690536
+2025-09-01 19:09:38 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04000868275761604 drive_velocity : 0.08348691463470459 fork_height : 0.03166595473885536
+2025-09-01 19:09:39 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04000413045287132 drive_velocity : 0.10519280284643173 fork_height : 0.03173445910215378
+2025-09-01 19:09:39 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04000740125775337 drive_velocity : 0.12260737270116806 fork_height : 0.0316997654736042
+2025-09-01 19:09:39 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.040015045553445816 drive_velocity : 0.13684239983558655 fork_height : 0.03158264607191086
+2025-09-01 19:09:39 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04000646620988846 drive_velocity : 0.11109628528356552 fork_height : 0.03157234564423561
+2025-09-01 19:09:39 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04001154005527496 drive_velocity : 0.11779505759477615 fork_height : 0.031670358031988144
+2025-09-01 19:09:40 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04003163427114487 drive_velocity : 0.0 fork_height : 0.03888111189007759
+2025-09-01 19:09:40 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.039938073605298996 drive_velocity : -0.7984576225280762 fork_height : 0.07004424929618835
+2025-09-01 19:09:40 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04000386968255043 drive_velocity : -0.48501068353652954 fork_height : 0.1084568202495575
+2025-09-01 19:09:40 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04003632813692093 drive_velocity : -0.8483390808105469 fork_height : 0.09885185211896896
+2025-09-01 19:09:40 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04006878286600113 drive_velocity : -0.9315999746322632 fork_height : 0.07143339514732361
+2025-09-01 19:09:40 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.03995520621538162 drive_velocity : -0.6646796464920044 fork_height : 0.06100388616323471
+2025-09-01 19:09:40 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04002823680639267 drive_velocity : -0.30233702063560486 fork_height : 0.0837336927652359
+2025-09-01 19:09:40 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.040001485496759415 drive_velocity : -0.10394745320081711 fork_height : 0.09810280054807663
+2025-09-01 19:09:40 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.040019575506448746 drive_velocity : 0.03235636278986931 fork_height : 0.08903542906045914
+2025-09-01 19:09:40 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04000288248062134 drive_velocity : 0.13123337924480438 fork_height : 0.07065633684396744
+2025-09-01 19:09:41 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04000113904476166 drive_velocity : 0.1946328729391098 fork_height : 0.07033126801252365
+2025-09-01 19:09:41 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.040002305060625076 drive_velocity : 0.24119490385055542 fork_height : 0.08504617214202881
+2025-09-01 19:09:41 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04001978412270546 drive_velocity : 0.2522273063659668 fork_height : 0.09161057323217392
+2025-09-01 19:09:41 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.039997830986976624 drive_velocity : 0.24123401939868927 fork_height : 0.08437050133943558
+2025-09-01 19:09:41 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.04001469165086746 drive_velocity : 0.22170718014240265 fork_height : 0.07434084266424179
+2025-09-01 19:09:42 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.03994845598936081 drive_velocity : 0.2806818187236786 fork_height : 0.08502086997032166
+2025-09-01 19:09:42 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.039960864931344986 drive_velocity : -0.06429896503686905 fork_height : 0.15810443460941315
+2025-09-01 19:09:51 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.040000900626182556 drive_velocity : 0.3484073877334595 fork_height : 0.18159423768520355
+2025-09-01 19:09:51 - controller - INFO - E_test.py:64 - 3749158:139780270581440 - steer_angle : 0.039999183267354965 drive_velocity : 0.3209855556488037 fork_height : 0.18171647191047668
+2025-09-01 19:25:33 - controller - INFO - E_test.py:104 - 3829574:125539734222656 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-01 19:25:34 - controller - INFO - E_test.py:104 - 3829574:125539734222656 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-01 19:25:34 - controller - INFO - E_test.py:104 - 3829574:125539734222656 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-01 19:25:34 - controller - INFO - E_test.py:31 - 3829574:125459064936128 - start SensorsThread
+2025-09-01 19:26:14 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : 0.04003828018903732 drive_velocity : 1.2830268144607544 fork_height : 0.14195436239242554
+2025-09-01 19:26:14 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : 0.040106698870658875 drive_velocity : 2.6202499866485596 fork_height : 0.2961527109146118
+2025-09-01 19:26:14 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : 0.04001013562083244 drive_velocity : 3.1267642974853516 fork_height : 0.2761940658092499
+2025-09-01 19:26:15 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : 0.03999697417020798 drive_velocity : 1.285267949104309 fork_height : 0.1123141199350357
+2025-09-01 19:26:15 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : 0.040006428956985474 drive_velocity : 1.398200273513794 fork_height : 0.08213408291339874
+2025-09-01 19:26:15 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : 0.04000755399465561 drive_velocity : 0.5627498030662537 fork_height : 0.2696305513381958
+2025-09-01 19:26:15 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : 0.039994996041059494 drive_velocity : 0.8557766675949097 fork_height : 0.20796167850494385
+2025-09-01 19:26:15 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : 0.039962802082300186 drive_velocity : 0.3123164176940918 fork_height : 0.130048930644989
+2025-09-01 19:26:15 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : 0.03999115154147148 drive_velocity : -2.682674676179886e-05 fork_height : 0.12916730344295502
+2025-09-01 19:26:15 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : 0.03999381139874458 drive_velocity : 0.0 fork_height : 0.2077960968017578
+2025-09-01 19:26:15 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : 0.04000268131494522 drive_velocity : -0.5444458723068237 fork_height : 0.23146726191043854
+2025-09-01 19:26:15 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : 0.039966486394405365 drive_velocity : -1.0212984085083008 fork_height : 0.17502714693546295
+2025-09-01 19:26:16 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : 0.03999646380543709 drive_velocity : -1.5313864946365356 fork_height : 0.14099964499473572
+2025-09-01 19:26:16 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : 0.0399983748793602 drive_velocity : -1.0975236892700195 fork_height : 0.16481734812259674
+2025-09-01 19:26:16 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : 0.040006425231695175 drive_velocity : -1.0836130380630493 fork_height : 0.20987682044506073
+2025-09-01 19:26:16 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : 0.03999912738800049 drive_velocity : -1.0788252353668213 fork_height : 0.20900744199752808
+2025-09-01 19:26:16 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : 0.03998875245451927 drive_velocity : -1.5702077150344849 fork_height : 0.17202505469322205
+2025-09-01 19:26:16 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : 0.039996642619371414 drive_velocity : -1.0910983085632324 fork_height : 0.15764686465263367
+2025-09-01 19:26:16 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : 0.039985429495573044 drive_velocity : -1.7583582401275635 fork_height : 0.18382978439331055
+2025-09-01 19:26:16 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : 0.039980448782444 drive_velocity : -0.9911127686500549 fork_height : 0.20124900341033936
+2025-09-01 19:26:16 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : 0.03999848663806915 drive_velocity : -1.0743093490600586 fork_height : 0.19041387736797333
+2025-09-01 19:26:24 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : 7.71600753068924e-06 drive_velocity : -0.42596787214279175 fork_height : 0.18201082944869995
+2025-09-01 19:26:24 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : -0.08999781310558319 drive_velocity : -0.23396016657352448 fork_height : 0.1833324134349823
+2025-09-01 19:26:25 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : -0.1499883532524109 drive_velocity : -0.7817920446395874 fork_height : 0.18316049873828888
+2025-09-01 19:26:25 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : -0.20999698340892792 drive_velocity : -0.7231253981590271 fork_height : 0.17983929812908173
+2025-09-01 19:26:25 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : -0.23000164330005646 drive_velocity : -0.3601279854774475 fork_height : 0.1815105676651001
+2025-09-01 19:26:44 - controller - INFO - E_test.py:64 - 3829574:125459064936128 - steer_angle : -0.00010348192881792784 drive_velocity : 3.1864709854125977 fork_height : 0.0
+2025-09-01 19:29:41 - controller - INFO - E_test.py:104 - 3849345:123599269369664 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-01 19:29:41 - controller - INFO - E_test.py:104 - 3849345:123599269369664 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-01 19:29:41 - controller - INFO - E_test.py:104 - 3849345:123599269369664 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-01 19:29:41 - controller - INFO - E_test.py:31 - 3849345:123518264010432 - start SensorsThread
+2025-09-01 19:30:56 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 1.1941179764107801e-05 drive_velocity : 0.08714187890291214 fork_height : 8.132918338787931e-09
+2025-09-01 19:30:56 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 1.0946223483188078e-05 drive_velocity : 0.3971422612667084 fork_height : 1.832075327001803e-07
+2025-09-01 19:30:57 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 9.463952665100805e-06 drive_velocity : 0.6690376996994019 fork_height : 1.1392975451940401e-09
+2025-09-01 19:30:57 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -1.3329108696780168e-06 drive_velocity : 0.8680844902992249 fork_height : 6.98172328839064e-08
+2025-09-01 19:30:57 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 6.8027229644940235e-06 drive_velocity : 3.1415927410125732 fork_height : 3.615587829131073e-08
+2025-09-01 19:30:57 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -6.055185167497257e-06 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 19:30:57 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -4.234766947774915e-06 drive_velocity : 0.0 fork_height : 1.0170028019729216e-07
+2025-09-01 19:30:57 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -3.497832949506119e-06 drive_velocity : 0.8997671008110046 fork_height : 1.1438918079420546e-07
+2025-09-01 19:30:57 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -4.3121435737702996e-06 drive_velocity : 0.8066723942756653 fork_height : 0.0
+2025-09-01 19:30:57 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -3.2998232200043276e-06 drive_velocity : 0.0 fork_height : 9.971172687528451e-08
+2025-09-01 19:30:57 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -2.350260274397442e-06 drive_velocity : 0.6597772836685181 fork_height : 3.006180122611113e-07
+2025-09-01 19:30:58 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -1.4668309631815646e-05 drive_velocity : 0.3308239281177521 fork_height : 0.0
+2025-09-01 19:30:58 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -1.0359095540479757e-05 drive_velocity : -0.029344631358981133 fork_height : 1.7552620690253207e-08
+2025-09-01 19:30:58 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -1.0985655535478145e-05 drive_velocity : -3.1415927410125732 fork_height : 1.8662371203959083e-08
+2025-09-01 19:30:58 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -1.225947926286608e-05 drive_velocity : -0.5642574429512024 fork_height : 0.0
+2025-09-01 19:30:58 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -9.771853910933714e-06 drive_velocity : -0.829402506351471 fork_height : 0.0
+2025-09-01 19:30:58 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -7.1441963882534765e-06 drive_velocity : -1.023543357849121 fork_height : 1.9810107687590062e-07
+2025-09-01 19:30:58 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -9.18326259125024e-06 drive_velocity : -1.2472835779190063 fork_height : 2.449082501243538e-07
+2025-09-01 19:30:58 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -4.630167950381292e-06 drive_velocity : -1.7916597127914429 fork_height : 7.259352230448712e-08
+2025-09-01 19:30:59 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 2.0669817786256317e-06 drive_velocity : -1.9015341997146606 fork_height : 1.7249719874712355e-08
+2025-09-01 19:30:59 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 8.910477845347486e-06 drive_velocity : -1.7058073282241821 fork_height : 0.0
+2025-09-01 19:30:59 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 2.7914113616134273e-06 drive_velocity : -1.5322587490081787 fork_height : 2.4567448519974278e-08
+2025-09-01 19:30:59 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 6.978606961638434e-06 drive_velocity : -1.3761297464370728 fork_height : 2.9436995063747418e-08
+2025-09-01 19:31:00 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 3.393153292563511e-06 drive_velocity : 3.1415927410125732 fork_height : 1.155734730140523e-09
+2025-09-01 19:31:00 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 2.90512980427593e-06 drive_velocity : 1.6439049243927002 fork_height : 0.0
+2025-09-01 19:31:00 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 7.105189979483839e-06 drive_velocity : 1.7911807298660278 fork_height : 6.258246543211499e-08
+2025-09-01 19:31:00 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 1.3916815078118816e-06 drive_velocity : 1.9231306314468384 fork_height : 6.129134533239267e-08
+2025-09-01 19:31:00 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 2.1516420929401647e-06 drive_velocity : 2.019744873046875 fork_height : 1.0426017382769714e-07
+2025-09-01 19:31:01 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -1.3720840797759593e-05 drive_velocity : 2.3100051879882812 fork_height : 0.0
+2025-09-01 19:31:01 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -1.7848318748292513e-05 drive_velocity : 2.59182071685791 fork_height : 1.484333864709697e-07
+2025-09-01 19:31:01 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -8.558927220292389e-07 drive_velocity : 2.31769061088562 fork_height : 0.0
+2025-09-01 19:31:02 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 2.529190624045441e-06 drive_velocity : 2.1310482025146484 fork_height : 0.0
+2025-09-01 19:31:02 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -1.0104669854626991e-05 drive_velocity : 2.0438578128814697 fork_height : 1.4021376060213697e-08
+2025-09-01 19:31:02 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 1.201994928123895e-05 drive_velocity : 1.9102354049682617 fork_height : 1.0227697799791713e-07
+2025-09-01 19:31:02 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 2.6150255507673137e-06 drive_velocity : 1.7551251649856567 fork_height : 0.0
+2025-09-01 19:31:02 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 8.438983968517277e-06 drive_velocity : 1.5697438716888428 fork_height : 5.398722180416371e-08
+2025-09-01 19:31:02 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -8.329784577654209e-06 drive_velocity : 1.4050167798995972 fork_height : 3.1756236751334654e-08
+2025-09-01 19:31:02 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -3.528905835992191e-06 drive_velocity : 1.2873111963272095 fork_height : 2.947036747968923e-08
+2025-09-01 19:31:02 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 1.0016642590926494e-06 drive_velocity : 1.1547935009002686 fork_height : 2.011072979257733e-07
+2025-09-01 19:31:02 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -6.1762511904817075e-06 drive_velocity : 1.0337295532226562 fork_height : 2.8698945442329205e-08
+2025-09-01 19:31:02 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -3.832073161902372e-06 drive_velocity : 0.9465674757957458 fork_height : 1.1083548656642961e-07
+2025-09-01 19:31:04 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 1.32495606521843e-05 drive_velocity : 2.3642165660858154 fork_height : 1.0123570604037013e-07
+2025-09-01 19:31:04 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 3.6391554658621317e-06 drive_velocity : 2.4982857704162598 fork_height : 1.2838856378039054e-07
+2025-09-01 19:31:09 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 0.2799992263317108 drive_velocity : 0.12919241189956665 fork_height : 2.601515092237605e-08
+2025-09-01 19:31:09 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 0.3400174081325531 drive_velocity : 0.1279594749212265 fork_height : 4.728698854705726e-08
+2025-09-01 19:31:10 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 0.4000026285648346 drive_velocity : 0.11526070535182953 fork_height : 9.824501745470116e-08
+2025-09-01 19:31:12 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 0.4199851453304291 drive_velocity : -0.10312682390213013 fork_height : 1.2865229770397946e-08
+2025-09-01 19:31:12 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 0.1999817043542862 drive_velocity : -0.11324534565210342 fork_height : 0.0
+2025-09-01 19:31:12 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 0.13998879492282867 drive_velocity : -0.12359513342380524 fork_height : 1.2452156283870863e-07
+2025-09-01 19:31:13 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 0.060024093836545944 drive_velocity : 0.0 fork_height : 9.638769782327472e-10
+2025-09-01 19:31:13 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 0.049995604902505875 drive_velocity : -0.13585086166858673 fork_height : 0.0
+2025-09-01 19:31:13 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 0.049995604902505875 drive_velocity : 0.0 fork_height : 1.8053489725389227e-07
+2025-09-01 19:31:13 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 0.049990542232990265 drive_velocity : 0.0 fork_height : 6.244754757744886e-08
+2025-09-01 19:31:13 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 0.04999460279941559 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 19:31:14 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : 0.029992999508976936 drive_velocity : 0.0 fork_height : 3.5364036143903377e-09
+2025-09-01 19:31:14 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.030017390847206116 drive_velocity : 0.0 fork_height : 2.440489366151155e-09
+2025-09-01 19:31:14 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.16000044345855713 drive_velocity : 0.6822806000709534 fork_height : 3.860070663108672e-08
+2025-09-01 19:31:15 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.16000044345855713 drive_velocity : 0.42108723521232605 fork_height : 0.0
+2025-09-01 19:31:15 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999688863754272 drive_velocity : 0.29888656735420227 fork_height : 0.0
+2025-09-01 19:31:15 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.20000067353248596 drive_velocity : 0.16917674243450165 fork_height : 6.23826679202466e-08
+2025-09-01 19:31:15 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.20000207424163818 drive_velocity : 0.10925281047821045 fork_height : 1.1371538022331151e-07
+2025-09-01 19:31:15 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999854266643524 drive_velocity : 0.19245851039886475 fork_height : 1.2220444656207974e-09
+2025-09-01 19:31:15 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.1999979317188263 drive_velocity : 0.3202088475227356 fork_height : 0.0
+2025-09-01 19:31:15 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999906420707703 drive_velocity : 3.1415927410125732 fork_height : 1.8471880025572318e-07
+2025-09-01 19:31:15 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999776780605316 drive_velocity : 3.1415927410125732 fork_height : 0.0
+2025-09-01 19:31:15 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.2000008225440979 drive_velocity : 0.7728188633918762 fork_height : 1.0491340418639084e-07
+2025-09-01 19:31:16 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999833405017853 drive_velocity : 1.1577107906341553 fork_height : 9.523926092214197e-10
+2025-09-01 19:31:16 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.1999988853931427 drive_velocity : 1.4510747194290161 fork_height : 1.1522806042663092e-09
+2025-09-01 19:31:16 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999882578849792 drive_velocity : 1.4745928049087524 fork_height : 6.080617787063147e-09
+2025-09-01 19:31:16 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999922811985016 drive_velocity : 1.5612545013427734 fork_height : 3.1040296999407246e-09
+2025-09-01 19:31:17 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.1999998390674591 drive_velocity : 1.3567476272583008 fork_height : 0.0
+2025-09-01 19:31:17 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.1999996453523636 drive_velocity : 0.9383604526519775 fork_height : 6.608718017275805e-09
+2025-09-01 19:31:17 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999776780605316 drive_velocity : 0.8083134889602661 fork_height : 1.7009635921994004e-09
+2025-09-01 19:31:17 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999946653842926 drive_velocity : 0.7073274850845337 fork_height : 6.64584476339769e-09
+2025-09-01 19:31:17 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999933242797852 drive_velocity : 0.6155755519866943 fork_height : 0.0
+2025-09-01 19:31:17 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.20000019669532776 drive_velocity : 0.5143296718597412 fork_height : 2.387685782423432e-08
+2025-09-01 19:31:17 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999957084655762 drive_velocity : 0.34645000100135803 fork_height : 0.0
+2025-09-01 19:31:17 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999900460243225 drive_velocity : 0.3275388181209564 fork_height : 1.9383005422923816e-08
+2025-09-01 19:31:17 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999882578849792 drive_velocity : 0.25842538475990295 fork_height : 1.349485785340221e-07
+2025-09-01 19:31:17 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.20000019669532776 drive_velocity : 0.23041756451129913 fork_height : 7.86759990489827e-09
+2025-09-01 19:31:18 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999945163726807 drive_velocity : 0.17969273030757904 fork_height : 1.6889499931949103e-07
+2025-09-01 19:31:18 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999879598617554 drive_velocity : 0.0 fork_height : 2.0409329692938627e-07
+2025-09-01 19:31:18 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.1999986469745636 drive_velocity : 0.16086570918560028 fork_height : 1.0084973922630525e-07
+2025-09-01 19:31:18 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999851286411285 drive_velocity : 0.058106429874897 fork_height : 5.383193446562018e-09
+2025-09-01 19:31:18 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999970495700836 drive_velocity : 0.16976337134838104 fork_height : 8.181049793165585e-08
+2025-09-01 19:31:18 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999943673610687 drive_velocity : 0.13887663185596466 fork_height : 2.624707118314973e-09
+2025-09-01 19:31:18 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.20000046491622925 drive_velocity : 0.12063376605510712 fork_height : 0.0
+2025-09-01 19:31:18 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999954104423523 drive_velocity : 0.11485803127288818 fork_height : 4.868364200660835e-08
+2025-09-01 19:31:18 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999931752681732 drive_velocity : 0.08497492223978043 fork_height : 1.288544240196643e-07
+2025-09-01 19:31:18 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999954104423523 drive_velocity : 0.0 fork_height : 2.1867043287215893e-08
+2025-09-01 19:31:19 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.2000000774860382 drive_velocity : 0.06858858466148376 fork_height : 8.333281442673979e-08
+2025-09-01 19:31:19 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.20000028610229492 drive_velocity : 0.05478554964065552 fork_height : 8.34273983230105e-09
+2025-09-01 19:31:19 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.20000053942203522 drive_velocity : 0.0 fork_height : 2.337385174300266e-09
+2025-09-01 19:31:19 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.2000010907649994 drive_velocity : 0.041962359100580215 fork_height : 8.275597451756767e-08
+2025-09-01 19:31:19 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.2000005543231964 drive_velocity : 0.00999124813824892 fork_height : 1.0006420581021302e-07
+2025-09-01 19:31:19 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.20000037550926208 drive_velocity : 0.0 fork_height : 1.5194885349956166e-07
+2025-09-01 19:31:19 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.2000005841255188 drive_velocity : 0.010847428813576698 fork_height : 0.0
+2025-09-01 19:31:19 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.20000050961971283 drive_velocity : 0.01119973324239254 fork_height : 5.2896215407827185e-08
+2025-09-01 19:31:19 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.20000112056732178 drive_velocity : 0.0019375376868993044 fork_height : 1.060389607232537e-07
+2025-09-01 19:31:19 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.20000065863132477 drive_velocity : 0.0020315274596214294 fork_height : 1.5063993430430855e-07
+2025-09-01 19:31:20 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.20000049471855164 drive_velocity : 0.006320209242403507 fork_height : 1.1553730416835606e-07
+2025-09-01 19:31:20 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.20000028610229492 drive_velocity : 0.007610959932208061 fork_height : 0.0
+2025-09-01 19:31:20 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.20000100135803223 drive_velocity : 0.00015229219570755959 fork_height : 7.358798370660224e-08
+2025-09-01 19:31:20 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.20000050961971283 drive_velocity : -0.0008488860912621021 fork_height : 8.299167464365098e-10
+2025-09-01 19:31:20 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.20000019669532776 drive_velocity : -0.01210610382258892 fork_height : 0.0
+2025-09-01 19:31:20 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.20000016689300537 drive_velocity : -0.01692492514848709 fork_height : 0.0
+2025-09-01 19:31:20 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.20000043511390686 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 19:31:20 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.20000037550926208 drive_velocity : 0.001964009366929531 fork_height : 0.0
+2025-09-01 19:31:20 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.2000003159046173 drive_velocity : 0.03629905730485916 fork_height : 6.203429592233078e-08
+2025-09-01 19:31:20 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.2000003308057785 drive_velocity : 0.04356523975729942 fork_height : 1.2888436629054922e-07
+2025-09-01 19:31:21 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.2000010460615158 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 19:31:21 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999992847442627 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 19:31:21 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999948143959045 drive_velocity : -0.09212963283061981 fork_height : 6.298320442965633e-08
+2025-09-01 19:31:21 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999946653842926 drive_velocity : 0.0 fork_height : 9.99733629214461e-08
+2025-09-01 19:31:21 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.19999991357326508 drive_velocity : 0.0 fork_height : 6.048643541589627e-08
+2025-09-01 19:31:21 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.1999993771314621 drive_velocity : 0.04359106346964836 fork_height : 1.2022638884445769e-08
+2025-09-01 19:31:21 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.1999998390674591 drive_velocity : 0.04291725158691406 fork_height : 9.190095084932182e-08
+2025-09-01 19:31:21 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.20000125467777252 drive_velocity : 0.0 fork_height : 8.158194120255757e-09
+2025-09-01 19:31:21 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.2000000923871994 drive_velocity : 0.0 fork_height : 0.0
+2025-09-01 19:31:21 - controller - INFO - E_test.py:64 - 3849345:123518264010432 - steer_angle : -0.20000021159648895 drive_velocity : 0.045303065329790115 fork_height : 0.0
+2025-09-01 19:47:25 - controller - INFO - E_test.py:104 - 3935204:130453968512832 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-01 19:47:25 - controller - INFO - E_test.py:104 - 3935204:130453968512832 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-01 19:47:25 - controller - INFO - E_test.py:104 - 3935204:130453968512832 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-01 19:47:25 - controller - INFO - E_test.py:31 - 3935204:130373284693696 - start SensorsThread
+2025-09-01 19:52:46 - controller - INFO - E_test.py:104 - 3961729:128612501075776 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-01 19:52:46 - controller - INFO - E_test.py:104 - 3961729:128612501075776 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-01 19:52:46 - controller - INFO - E_test.py:104 - 3961729:128612501075776 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-01 19:52:46 - controller - INFO - E_test.py:31 - 3961729:128531838826176 - start SensorsThread
+2025-09-01 19:58:12 - controller - INFO - E_test.py:104 - 3986799:128613698070336 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-01 19:58:12 - controller - INFO - E_test.py:104 - 3986799:128613698070336 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-01 19:58:12 - controller - INFO - E_test.py:104 - 3986799:128613698070336 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-01 19:58:12 - controller - INFO - E_test.py:31 - 3986799:128533032588992 - start SensorsThread
+2025-09-01 20:02:24 - controller - INFO - E_test.py:104 - 4007442:129942689666880 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-01 20:02:24 - controller - INFO - E_test.py:104 - 4007442:129942689666880 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-01 20:02:24 - controller - INFO - E_test.py:104 - 4007442:129942689666880 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-01 20:02:24 - controller - INFO - E_test.py:31 - 4007442:129861876176576 - start SensorsThread
+2025-09-01 20:09:45 - controller - INFO - E_test.py:104 - 4043975:139251836507968 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-01 20:09:45 - controller - INFO - E_test.py:104 - 4043975:139251836507968 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-01 20:09:46 - controller - INFO - E_test.py:104 - 4043975:139251836507968 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-01 20:09:46 - controller - INFO - E_test.py:31 - 4043975:139170825627328 - start SensorsThread
+2025-09-01 20:17:47 - controller - INFO - E_test.py:104 - 4081776:131122940106560 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-01 20:17:47 - controller - INFO - E_test.py:104 - 4081776:131122940106560 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-01 20:17:47 - controller - INFO - E_test.py:104 - 4081776:131122940106560 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-01 20:17:48 - controller - INFO - E_test.py:31 - 4081776:131042119767744 - start SensorsThread
+2025-09-01 20:25:42 - controller - INFO - E_test.py:104 - 4117945:125154212857664 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-01 20:25:42 - controller - INFO - E_test.py:104 - 4117945:125154212857664 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-01 20:25:42 - controller - INFO - E_test.py:104 - 4117945:125154212857664 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-01 20:25:42 - controller - INFO - E_test.py:31 - 4117945:125073388201664 - start SensorsThread
+2025-09-01 20:35:16 - controller - INFO - E_test.py:104 - 4162866:130418382882624 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-01 20:35:16 - controller - INFO - E_test.py:104 - 4162866:130418382882624 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-01 20:35:16 - controller - INFO - E_test.py:104 - 4162866:130418382882624 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-01 20:35:16 - controller - INFO - E_test.py:31 - 4162866:130337574393536 - start SensorsThread
+2025-09-02 10:12:53 - controller - INFO - E_test.py:104 - 173857:138393371809600 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 10:12:53 - controller - INFO - E_test.py:104 - 173857:138393371809600 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 10:12:53 - controller - INFO - E_test.py:104 - 173857:138393371809600 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 10:12:53 - controller - INFO - E_test.py:31 - 173857:138312756627136 - start SensorsThread
+2025-09-02 10:16:37 - controller - INFO - E_test.py:104 - 175811:124597082142528 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 10:16:37 - controller - INFO - E_test.py:104 - 175811:124597082142528 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 10:16:37 - controller - INFO - E_test.py:104 - 175811:124597082142528 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 10:16:37 - controller - INFO - E_test.py:31 - 175811:124516428670656 - start SensorsThread
+2025-09-02 10:45:53 - controller - INFO - E_test.py:104 - 178251:130099634898752 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 10:45:53 - controller - INFO - E_test.py:104 - 178251:130099634898752 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 10:45:54 - controller - INFO - E_test.py:104 - 178251:130099634898752 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 10:45:54 - controller - INFO - E_test.py:31 - 178251:130018756957888 - start SensorsThread
+2025-09-02 11:01:00 - controller - INFO - E_test.py:104 - 180511:126816657958720 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 11:01:00 - controller - INFO - E_test.py:104 - 180511:126816657958720 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 11:01:00 - controller - INFO - E_test.py:104 - 180511:126816657958720 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 11:01:00 - controller - INFO - E_test.py:31 - 180511:126735953684160 - start SensorsThread
+2025-09-02 11:06:05 - controller - INFO - E_test.py:104 - 181838:132658360194880 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 11:06:05 - controller - INFO - E_test.py:104 - 181838:132658360194880 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 11:06:05 - controller - INFO - E_test.py:104 - 181838:132658360194880 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 11:06:05 - controller - INFO - E_test.py:31 - 181838:132577685923520 - start SensorsThread
+2025-09-02 11:13:34 - controller - INFO - E_test.py:104 - 183203:134115778033472 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 11:13:34 - controller - INFO - E_test.py:104 - 183203:134115778033472 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 11:13:34 - controller - INFO - E_test.py:104 - 183203:134115778033472 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 11:13:34 - controller - INFO - E_test.py:31 - 183203:134035217032896 - start SensorsThread
+2025-09-02 11:17:02 - controller - INFO - E_test.py:104 - 184376:139241190864704 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 11:17:02 - controller - INFO - E_test.py:104 - 184376:139241190864704 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 11:17:02 - controller - INFO - E_test.py:104 - 184376:139241190864704 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 11:17:02 - controller - INFO - E_test.py:31 - 184376:139160220329664 - start SensorsThread
+2025-09-02 11:17:47 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.01999945007264614 drive_velocity : -0.010645278729498386 fork_height : 0.0
+2025-09-02 11:17:47 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.01999806798994541 drive_velocity : -0.0074167801067233086 fork_height : 0.0
+2025-09-02 11:17:47 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019998274743556976 drive_velocity : -0.007144616451114416 fork_height : 0.0
+2025-09-02 11:17:47 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.01999845914542675 drive_velocity : 0.0 fork_height : 0.0
+2025-09-02 11:17:47 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.01999708265066147 drive_velocity : -0.00625547906383872 fork_height : 0.0
+2025-09-02 11:17:47 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019998790696263313 drive_velocity : -0.015203345566987991 fork_height : 0.0
+2025-09-02 11:17:47 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.0199989452958107 drive_velocity : -0.012367680668830872 fork_height : 0.0
+2025-09-02 11:17:47 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019998231902718544 drive_velocity : -0.00529412180185318 fork_height : 0.0
+2025-09-02 11:17:48 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019999613985419273 drive_velocity : 0.0 fork_height : 0.0
+2025-09-02 11:17:48 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019999666139483452 drive_velocity : -0.01590590365231037 fork_height : 0.0
+2025-09-02 11:17:48 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019998824223876 drive_velocity : 0.0 fork_height : 0.0
+2025-09-02 11:17:48 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.01999961957335472 drive_velocity : -0.007001018617302179 fork_height : 0.0
+2025-09-02 11:17:48 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.01999957114458084 drive_velocity : 0.0 fork_height : 0.0
+2025-09-02 11:17:48 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019999196752905846 drive_velocity : -0.007509841583669186 fork_height : 0.0
+2025-09-02 11:17:48 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019999831914901733 drive_velocity : -0.010997585020959377 fork_height : 0.0
+2025-09-02 11:17:48 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019998380914330482 drive_velocity : -0.007522746920585632 fork_height : 0.0
+2025-09-02 11:17:48 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.01999758370220661 drive_velocity : -0.007530225440859795 fork_height : 0.0
+2025-09-02 11:17:48 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019999565556645393 drive_velocity : -0.010310729965567589 fork_height : 0.0
+2025-09-02 11:17:49 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.020000001415610313 drive_velocity : -0.007517067715525627 fork_height : 0.0
+2025-09-02 11:17:49 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019999753683805466 drive_velocity : -0.008155172690749168 fork_height : 0.0
+2025-09-02 11:17:49 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019999030977487564 drive_velocity : -0.009087331593036652 fork_height : 0.0
+2025-09-02 11:17:49 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.01999773271381855 drive_velocity : 0.0 fork_height : 0.0
+2025-09-02 11:17:49 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019996488466858864 drive_velocity : -0.006880528759211302 fork_height : 0.0
+2025-09-02 11:17:49 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019996991381049156 drive_velocity : 0.0 fork_height : 0.0
+2025-09-02 11:17:49 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.01999736949801445 drive_velocity : -0.00669880723580718 fork_height : 0.0
+2025-09-02 11:17:49 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.020000038668513298 drive_velocity : 0.0 fork_height : 0.0
+2025-09-02 11:17:49 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019997606053948402 drive_velocity : -0.011652122251689434 fork_height : 0.0
+2025-09-02 11:17:49 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019997652620077133 drive_velocity : 0.0 fork_height : 0.0
+2025-09-02 11:17:50 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019997084513306618 drive_velocity : -0.010167612694203854 fork_height : 0.0
+2025-09-02 11:17:50 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019997263327240944 drive_velocity : -0.003166785929352045 fork_height : 0.0
+2025-09-02 11:17:50 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019997961819171906 drive_velocity : -0.00987276341766119 fork_height : 0.0
+2025-09-02 11:17:50 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.01999739743769169 drive_velocity : -0.005781416781246662 fork_height : 0.0
+2025-09-02 11:17:50 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.01999659463763237 drive_velocity : 0.0 fork_height : 0.0
+2025-09-02 11:17:50 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019998619332909584 drive_velocity : -0.011575992219150066 fork_height : 0.0
+2025-09-02 11:17:50 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.01999809220433235 drive_velocity : -0.007992468774318695 fork_height : 0.0
+2025-09-02 11:17:50 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019998284056782722 drive_velocity : -0.006689066998660564 fork_height : 0.0
+2025-09-02 11:17:50 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.01999738998711109 drive_velocity : -0.009706963784992695 fork_height : 0.0
+2025-09-02 11:17:50 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019997501745820045 drive_velocity : -0.011034749448299408 fork_height : 0.0
+2025-09-02 11:17:51 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.01999684050679207 drive_velocity : -0.006641763728111982 fork_height : 0.0
+2025-09-02 11:17:51 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019997555762529373 drive_velocity : -0.006583437789231539 fork_height : 0.0
+2025-09-02 11:17:51 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019997645169496536 drive_velocity : -0.010954344645142555 fork_height : 0.0
+2025-09-02 11:17:51 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.01999722793698311 drive_velocity : -0.007732674945145845 fork_height : 0.0
+2025-09-02 11:17:51 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.0199978519231081 drive_velocity : -0.010861488990485668 fork_height : 0.0
+2025-09-02 11:17:51 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019997138530015945 drive_velocity : -0.010404283180832863 fork_height : 0.0
+2025-09-02 11:17:51 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019997254014015198 drive_velocity : -0.00664159283041954 fork_height : 0.0
+2025-09-02 11:17:51 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.01999952457845211 drive_velocity : -0.0069733876734972 fork_height : 0.0
+2025-09-02 11:17:51 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019999492913484573 drive_velocity : -0.011045699007809162 fork_height : 0.0
+2025-09-02 11:17:51 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.01999931037425995 drive_velocity : -0.010495301336050034 fork_height : 0.0
+2025-09-02 11:17:52 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019999977201223373 drive_velocity : -0.010657241567969322 fork_height : 0.0
+2025-09-02 11:17:52 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019999327138066292 drive_velocity : -0.007570439018309116 fork_height : 0.0
+2025-09-02 11:17:52 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.01999916322529316 drive_velocity : -0.007599294185638428 fork_height : 0.0
+2025-09-02 11:17:52 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.0199996680021286 drive_velocity : 0.0 fork_height : 0.0
+2025-09-02 11:17:52 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.020000942051410675 drive_velocity : -0.015064708888530731 fork_height : 0.0
+2025-09-02 11:17:52 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.02000015787780285 drive_velocity : -0.006967460736632347 fork_height : 0.0
+2025-09-02 11:17:52 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.01999998651444912 drive_velocity : -0.007563531398773193 fork_height : 0.0
+2025-09-02 11:17:52 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.020000450313091278 drive_velocity : -0.011424792930483818 fork_height : 0.0
+2025-09-02 11:17:52 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.01999981701374054 drive_velocity : -0.007141943089663982 fork_height : 0.0
+2025-09-02 11:17:52 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019999347627162933 drive_velocity : -0.009409766644239426 fork_height : 0.0
+2025-09-02 11:17:53 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.01999886892735958 drive_velocity : -0.007222126238048077 fork_height : 0.0
+2025-09-02 11:17:53 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019996702671051025 drive_velocity : -0.011193512007594109 fork_height : 0.0
+2025-09-02 11:17:53 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019999202340841293 drive_velocity : -0.01107051968574524 fork_height : 0.0
+2025-09-02 11:17:53 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.020000865682959557 drive_velocity : -0.007100281771272421 fork_height : 0.0
+2025-09-02 11:17:53 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019998636096715927 drive_velocity : -0.007542540784925222 fork_height : 0.0
+2025-09-02 11:17:53 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.01999935694038868 drive_velocity : -0.006270500831305981 fork_height : 0.0
+2025-09-02 11:17:53 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019995905458927155 drive_velocity : -0.008082891814410686 fork_height : 0.0
+2025-09-02 11:17:53 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019997412338852882 drive_velocity : -0.012397632002830505 fork_height : 0.0
+2025-09-02 11:17:53 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019999030977487564 drive_velocity : -0.010385081171989441 fork_height : 0.0
+2025-09-02 11:17:53 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.019998816773295403 drive_velocity : -0.010947286151349545 fork_height : 0.0
+2025-09-02 11:17:54 - controller - INFO - E_test.py:64 - 184376:139160220329664 - steer_angle : -0.020001592114567757 drive_velocity : -0.014827819541096687 fork_height : 0.0
+2025-09-02 13:47:45 - controller - INFO - E_test.py:104 - 6960:127147934820160 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 13:47:46 - controller - INFO - E_test.py:104 - 6960:127147934820160 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 13:47:46 - controller - INFO - E_test.py:104 - 6960:127147934820160 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 13:47:46 - controller - INFO - E_test.py:31 - 6960:127067144316608 - start SensorsThread
+2025-09-02 13:52:00 - controller - INFO - E_test.py:104 - 8084:126270976681792 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 13:52:00 - controller - INFO - E_test.py:104 - 8084:126270976681792 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 13:52:00 - controller - INFO - E_test.py:104 - 8084:126270976681792 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 13:52:00 - controller - INFO - E_test.py:31 - 8084:126190313703104 - start SensorsThread
+2025-09-02 13:54:42 - controller - INFO - E_test.py:104 - 9124:130275548505920 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 13:54:42 - controller - INFO - E_test.py:104 - 9124:130275548505920 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 13:54:42 - controller - INFO - E_test.py:104 - 9124:130275548505920 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 13:54:42 - controller - INFO - E_test.py:31 - 9124:130194624997056 - start SensorsThread
+2025-09-02 13:57:20 - controller - INFO - E_test.py:104 - 10670:126074320004928 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 13:57:21 - controller - INFO - E_test.py:104 - 10670:126074320004928 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 13:57:21 - controller - INFO - E_test.py:104 - 10670:126074320004928 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 13:57:21 - controller - INFO - E_test.py:31 - 10670:125993620575936 - start SensorsThread
+2025-09-02 14:00:30 - controller - INFO - E_test.py:104 - 11713:126905853118272 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 14:00:30 - controller - INFO - E_test.py:104 - 11713:126905853118272 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 14:00:30 - controller - INFO - E_test.py:104 - 11713:126905853118272 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 14:00:30 - controller - INFO - E_test.py:31 - 11713:126825319130816 - start SensorsThread
+2025-09-02 14:03:29 - controller - INFO - E_test.py:104 - 12752:127588399580992 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 14:03:29 - controller - INFO - E_test.py:104 - 12752:127588399580992 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 14:03:29 - controller - INFO - E_test.py:104 - 12752:127588399580992 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 14:03:29 - controller - INFO - E_test.py:31 - 12752:127507443472064 - start SensorsThread
+2025-09-02 14:14:41 - controller - INFO - E_test.py:104 - 15802:128711891789632 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 14:14:41 - controller - INFO - E_test.py:104 - 15802:128711891789632 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 14:14:42 - controller - INFO - E_test.py:104 - 15802:128711891789632 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 14:14:42 - controller - INFO - E_test.py:31 - 15802:128631007340224 - start SensorsThread
+2025-09-02 14:19:12 - controller - INFO - E_test.py:104 - 16525:132932078769984 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 14:19:13 - controller - INFO - E_test.py:104 - 16525:132932078769984 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 14:19:13 - controller - INFO - E_test.py:104 - 16525:132932078769984 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 14:19:13 - controller - INFO - E_test.py:31 - 16525:132851531159232 - start SensorsThread
+2025-09-02 14:21:06 - controller - INFO - E_test.py:104 - 17156:134786146932544 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 14:21:06 - controller - INFO - E_test.py:104 - 17156:134786146932544 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 14:21:06 - controller - INFO - E_test.py:104 - 17156:134786146932544 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 14:21:06 - controller - INFO - E_test.py:31 - 17156:134705257109184 - start SensorsThread
+2025-09-02 14:23:30 - controller - INFO - E_test.py:104 - 18096:131255059134272 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 14:23:30 - controller - INFO - E_test.py:104 - 18096:131255059134272 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 14:23:30 - controller - INFO - E_test.py:104 - 18096:131255059134272 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 14:23:30 - controller - INFO - E_test.py:31 - 18096:131174397634240 - start SensorsThread
+2025-09-02 14:26:56 - controller - INFO - E_test.py:104 - 19149:134433639835456 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 14:26:56 - controller - INFO - E_test.py:104 - 19149:134433639835456 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 14:26:56 - controller - INFO - E_test.py:104 - 19149:134433639835456 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 14:26:56 - controller - INFO - E_test.py:31 - 19149:134352974550720 - start SensorsThread
+2025-09-02 14:32:45 - controller - INFO - E_test.py:104 - 19918:131432337811264 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 14:32:45 - controller - INFO - E_test.py:104 - 19918:131432337811264 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 14:32:45 - controller - INFO - E_test.py:104 - 19918:131432337811264 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 14:32:45 - controller - INFO - E_test.py:31 - 19918:131351802013376 - start SensorsThread
+2025-09-02 14:39:07 - controller - INFO - E_test.py:104 - 22393:137622873777984 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 14:39:07 - controller - INFO - E_test.py:104 - 22393:137622873777984 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 14:39:07 - controller - INFO - E_test.py:104 - 22393:137622873777984 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 14:39:08 - controller - INFO - E_test.py:31 - 22393:137542062040768 - start SensorsThread
+2025-09-02 14:45:15 - controller - INFO - E_test.py:104 - 23671:129779583887168 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 14:45:15 - controller - INFO - E_test.py:104 - 23671:129779583887168 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 14:45:15 - controller - INFO - E_test.py:104 - 23671:129779583887168 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 14:45:15 - controller - INFO - E_test.py:31 - 23671:129699140998848 - start SensorsThread
+2025-09-02 15:46:04 - controller - INFO - E_test.py:104 - 29759:136604370941760 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 15:46:04 - controller - INFO - E_test.py:104 - 29759:136604370941760 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 15:46:04 - controller - INFO - E_test.py:104 - 29759:136604370941760 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 15:46:04 - controller - INFO - E_test.py:31 - 29759:136523303347904 - start SensorsThread
+2025-09-02 15:54:19 - controller - INFO - E_test.py:104 - 31187:130333885007680 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 15:54:19 - controller - INFO - E_test.py:104 - 31187:130333885007680 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 15:54:19 - controller - INFO - E_test.py:104 - 31187:130333885007680 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 15:54:19 - controller - INFO - E_test.py:31 - 31187:130253284435648 - start SensorsThread
+2025-09-02 15:56:58 - controller - INFO - E_test.py:104 - 32290:137769430693696 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 15:56:58 - controller - INFO - E_test.py:104 - 32290:137769430693696 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 15:56:58 - controller - INFO - E_test.py:104 - 32290:137769430693696 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 15:56:58 - controller - INFO - E_test.py:31 - 32290:137688566490816 - start SensorsThread
+2025-09-02 15:59:12 - controller - INFO - E_test.py:104 - 32950:130491123824448 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 15:59:12 - controller - INFO - E_test.py:104 - 32950:130491123824448 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 15:59:12 - controller - INFO - E_test.py:104 - 32950:130491123824448 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 15:59:12 - controller - INFO - E_test.py:31 - 32950:130410572932800 - start SensorsThread
+2025-09-02 16:04:43 - controller - INFO - E_test.py:104 - 34645:135863622285120 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 16:04:44 - controller - INFO - E_test.py:104 - 34645:135863622285120 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 16:04:44 - controller - INFO - E_test.py:104 - 34645:135863622285120 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 16:04:44 - controller - INFO - E_test.py:31 - 34645:135782729770688 - start SensorsThread
+2025-09-02 16:06:14 - controller - INFO - E_test.py:104 - 35369:140630487402304 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 16:06:14 - controller - INFO - E_test.py:104 - 35369:140630487402304 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 16:06:14 - controller - INFO - E_test.py:104 - 35369:140630487402304 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 16:06:14 - controller - INFO - E_test.py:31 - 35369:140549614986944 - start SensorsThread
+2025-09-02 16:15:09 - controller - INFO - E_test.py:104 - 37006:131961045296960 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 16:15:10 - controller - INFO - E_test.py:104 - 37006:131961045296960 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 16:15:10 - controller - INFO - E_test.py:104 - 37006:131961045296960 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 16:15:10 - controller - INFO - E_test.py:31 - 37006:131880879888064 - start SensorsThread
+2025-09-02 16:18:24 - controller - INFO - E_test.py:104 - 38198:137645363574592 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 16:18:24 - controller - INFO - E_test.py:104 - 38198:137645363574592 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 16:18:24 - controller - INFO - E_test.py:104 - 38198:137645363574592 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 16:18:24 - controller - INFO - E_test.py:31 - 38198:137564570773184 - start SensorsThread
+2025-09-02 16:21:37 - controller - INFO - E_test.py:104 - 39382:137965071865664 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 16:21:37 - controller - INFO - E_test.py:104 - 39382:137965071865664 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 16:21:37 - controller - INFO - E_test.py:104 - 39382:137965071865664 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 16:21:37 - controller - INFO - E_test.py:31 - 39382:137884415813312 - start SensorsThread
+2025-09-02 16:24:43 - controller - INFO - E_test.py:104 - 40280:138650385495872 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 16:24:43 - controller - INFO - E_test.py:104 - 40280:138650385495872 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 16:24:43 - controller - INFO - E_test.py:104 - 40280:138650385495872 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 16:24:43 - controller - INFO - E_test.py:31 - 40280:138569033172672 - start SensorsThread
+2025-09-02 16:26:16 - controller - INFO - E_test.py:104 - 40949:130328043198272 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 16:26:16 - controller - INFO - E_test.py:104 - 40949:130328043198272 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 16:26:16 - controller - INFO - E_test.py:104 - 40949:130328043198272 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 16:26:16 - controller - INFO - E_test.py:31 - 40949:130247454348992 - start SensorsThread
+2025-09-02 16:28:00 - controller - INFO - E_test.py:104 - 41626:129872304752448 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 16:28:00 - controller - INFO - E_test.py:104 - 41626:129872304752448 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 16:28:00 - controller - INFO - E_test.py:104 - 41626:129872304752448 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 16:28:00 - controller - INFO - E_test.py:31 - 41626:129791768389312 - start SensorsThread
+2025-09-02 16:36:25 - controller - INFO - E_test.py:104 - 43181:128819692119872 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 16:36:26 - controller - INFO - E_test.py:104 - 43181:128819692119872 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 16:36:26 - controller - INFO - E_test.py:104 - 43181:128819692119872 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 16:36:26 - controller - INFO - E_test.py:31 - 43181:128739031635648 - start SensorsThread
+2025-09-02 16:40:08 - controller - INFO - E_test.py:104 - 44387:124421744850752 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 16:40:08 - controller - INFO - E_test.py:104 - 44387:124421744850752 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 16:40:08 - controller - INFO - E_test.py:104 - 44387:124421744850752 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 16:40:08 - controller - INFO - E_test.py:31 - 44387:124341070235328 - start SensorsThread
+2025-09-02 16:47:41 - controller - INFO - E_test.py:104 - 45728:125848929957696 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 16:47:41 - controller - INFO - E_test.py:104 - 45728:125848929957696 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 16:47:41 - controller - INFO - E_test.py:104 - 45728:125848929957696 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 16:47:41 - controller - INFO - E_test.py:31 - 45728:125768205719232 - start SensorsThread
+2025-09-02 16:52:08 - controller - INFO - E_test.py:104 - 47004:123575376783168 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 16:52:08 - controller - INFO - E_test.py:104 - 47004:123575376783168 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 16:52:08 - controller - INFO - E_test.py:104 - 47004:123575376783168 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 16:52:08 - controller - INFO - E_test.py:31 - 47004:123494794782400 - start SensorsThread
+2025-09-02 16:55:27 - controller - INFO - E_test.py:104 - 48053:136412176566080 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 16:55:27 - controller - INFO - E_test.py:104 - 48053:136412176566080 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 16:55:27 - controller - INFO - E_test.py:104 - 48053:136412176566080 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 16:55:27 - controller - INFO - E_test.py:31 - 48053:136331375810240 - start SensorsThread
+2025-09-02 17:10:44 - controller - INFO - E_test.py:104 - 49946:139050199480128 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 17:10:44 - controller - INFO - E_test.py:104 - 49946:139050199480128 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 17:10:44 - controller - INFO - E_test.py:104 - 49946:139050199480128 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 17:10:44 - controller - INFO - E_test.py:31 - 49946:138969111054016 - start SensorsThread
+2025-09-02 17:26:05 - controller - INFO - E_test.py:105 - 52778:136635130681152 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 17:26:05 - controller - INFO - E_test.py:105 - 52778:136635130681152 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 17:26:05 - controller - INFO - E_test.py:105 - 52778:136635130681152 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 17:26:06 - controller - INFO - E_test.py:32 - 52778:136554391529152 - start SensorsThread
+2025-09-02 17:28:38 - controller - INFO - E_test.py:105 - 54064:134784779233088 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 17:28:38 - controller - INFO - E_test.py:105 - 54064:134784779233088 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 17:28:38 - controller - INFO - E_test.py:105 - 54064:134784779233088 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 17:28:39 - controller - INFO - E_test.py:32 - 54064:134703822644928 - start SensorsThread
+2025-09-02 17:29:59 - controller - INFO - E_test.py:105 - 54701:131051691534144 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 17:29:59 - controller - INFO - E_test.py:105 - 54701:131051691534144 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 17:29:59 - controller - INFO - E_test.py:105 - 54701:131051691534144 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 17:29:59 - controller - INFO - E_test.py:32 - 54701:130971237639872 - start SensorsThread
+2025-09-02 17:31:23 - controller - INFO - E_test.py:105 - 55357:138229139720000 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 17:31:23 - controller - INFO - E_test.py:105 - 55357:138229139720000 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 17:31:23 - controller - INFO - E_test.py:105 - 55357:138229139720000 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 17:31:23 - controller - INFO - E_test.py:32 - 55357:138148450567872 - start SensorsThread
+2025-09-02 17:33:12 - controller - INFO - E_test.py:105 - 56042:125116110890816 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 17:33:12 - controller - INFO - E_test.py:105 - 56042:125116110890816 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 17:33:12 - controller - INFO - E_test.py:105 - 56042:125116110890816 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 17:33:12 - controller - INFO - E_test.py:32 - 56042:125035224225472 - start SensorsThread
+2025-09-02 17:35:11 - controller - INFO - E_test.py:105 - 57807:134081317046080 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-02 17:35:11 - controller - INFO - E_test.py:105 - 57807:134081317046080 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-02 17:35:11 - controller - INFO - E_test.py:105 - 57807:134081317046080 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-02 17:35:11 - controller - INFO - E_test.py:32 - 57807:134000502015680 - start SensorsThread
+2025-09-02 17:35:20 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.024086112156510353 drive_velocity : 0.001872917404398322 fork_pose : ForkPose(z=0.2557608, y=0.015820364, pitch=0.01621705)
+2025-09-02 17:35:20 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.024085596203804016 drive_velocity : 0.00258789025247097 fork_pose : ForkPose(z=0.25520805, y=0.06582074, pitch=0.01634032)
+2025-09-02 17:35:20 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.02408657781779766 drive_velocity : 0.002578992862254381 fork_pose : ForkPose(z=0.2546552, y=0.11581952, pitch=0.016462177)
+2025-09-02 17:35:21 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.024085287004709244 drive_velocity : 0.002137100789695978 fork_pose : ForkPose(z=0.25400987, y=0.17415045, pitch=0.016602825)
+2025-09-02 17:35:21 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.024084972217679024 drive_velocity : 0.0022436396684497595 fork_pose : ForkPose(z=0.2534557, y=0.22414742, pitch=0.016722294)
+2025-09-02 17:35:21 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.024084750562906265 drive_velocity : 0.00234007416293025 fork_pose : ForkPose(z=0.25290063, y=0.27414352, pitch=0.01684112)
+2025-09-02 17:37:54 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.49836015701293945 drive_velocity : -0.007490880321711302 fork_pose : ForkPose(z=0.56328106, y=0.01074926, pitch=0.02839555)
+2025-09-02 17:37:54 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.49834612011909485 drive_velocity : 0.00033375335624441504 fork_pose : ForkPose(z=0.5630037, y=0.035749674, pitch=0.028395738)
+2025-09-02 17:37:54 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.4983491599559784 drive_velocity : 0.002075541066005826 fork_pose : ForkPose(z=0.5626344, y=0.069082916, pitch=0.028397407)
+2025-09-02 17:37:54 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.4983580708503723 drive_velocity : 0.0015193414874374866 fork_pose : ForkPose(z=0.5622649, y=0.102416374, pitch=0.028399762)
+2025-09-02 17:37:55 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.49836650490760803 drive_velocity : 0.000730744272004813 fork_pose : ForkPose(z=0.5618954, y=0.13574937, pitch=0.028402058)
+2025-09-02 17:37:55 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.4983735978603363 drive_velocity : -2.3981410777196288e-05 fork_pose : ForkPose(z=0.5615254, y=0.16908255, pitch=0.028404571)
+2025-09-02 17:37:55 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.49837908148765564 drive_velocity : 0.0008725067018531263 fork_pose : ForkPose(z=0.5611555, y=0.20241573, pitch=0.028406687)
+2025-09-02 17:37:55 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.4983825981616974 drive_velocity : 0.0010569753358140588 fork_pose : ForkPose(z=0.560785, y=0.23574856, pitch=0.028409043)
+2025-09-02 17:38:15 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.6470124125480652 drive_velocity : -0.0071907490491867065 fork_pose : ForkPose(z=0.19534041, y=-0.07414803, pitch=0.029334007)
+2025-09-02 17:38:15 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.6689000725746155 drive_velocity : 0.07606658339500427 fork_pose : ForkPose(z=0.19504055, y=-0.049092907, pitch=0.029187083)
+2025-09-02 17:38:15 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.6980093717575073 drive_velocity : -0.16921687126159668 fork_pose : ForkPose(z=0.1946484, y=-0.015923543, pitch=0.029083662)
+2025-09-02 17:38:15 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.7268169522285461 drive_velocity : -0.24987179040908813 fork_pose : ForkPose(z=0.19426122, y=0.017230816, pitch=0.02899378)
+2025-09-02 17:38:15 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.7482146620750427 drive_velocity : -0.36963069438934326 fork_pose : ForkPose(z=0.19397427, y=0.04211335, pitch=0.028931761)
+2025-09-02 17:38:15 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.7763317823410034 drive_velocity : -0.18408580124378204 fork_pose : ForkPose(z=0.19359264, y=0.07532265, pitch=0.028864115)
+2025-09-02 17:38:15 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.7853986620903015 drive_velocity : -0.06762881577014923 fork_pose : ForkPose(z=0.19321552, y=0.1085783, pitch=0.028820807)
+2025-09-02 17:38:15 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.7853994965553284 drive_velocity : -0.0028101035859435797 fork_pose : ForkPose(z=0.19284354, y=0.1418796, pitch=0.02880699)
+2025-09-02 17:38:15 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.7853977680206299 drive_velocity : -0.0001841040066210553 fork_pose : ForkPose(z=0.19256681, y=0.16687782, pitch=0.028811665)
+2025-09-02 17:38:15 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.7853975892066956 drive_velocity : -0.0008444227278232574 fork_pose : ForkPose(z=0.19219841, y=0.20020841, pitch=0.028818365)
+2025-09-02 17:38:16 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.7853970527648926 drive_velocity : 0.00045436088112182915 fork_pose : ForkPose(z=0.19182973, y=0.2335381, pitch=0.02882476)
+2025-09-02 17:38:16 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.7853974103927612 drive_velocity : -0.00013418879825621843 fork_pose : ForkPose(z=0.19145975, y=0.2668688, pitch=0.028831944)
+2025-09-02 17:38:16 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.7853972911834717 drive_velocity : -0.0002391799644101411 fork_pose : ForkPose(z=0.19118279, y=0.29186502, pitch=0.028836705)
+2025-09-02 17:38:16 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.785398006439209 drive_velocity : -0.0007007147651165724 fork_pose : ForkPose(z=0.1908107, y=0.3, pitch=0.028845698)
+2025-09-02 17:38:49 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5350295901298523 drive_velocity : -2.71937894821167 fork_pose : ForkPose(z=0.28404492, y=0.09311753, pitch=0.007897933)
+2025-09-02 17:38:49 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5356522798538208 drive_velocity : -2.8055107593536377 fork_pose : ForkPose(z=0.2837677, y=0.11808993, pitch=0.007996483)
+2025-09-02 17:38:49 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5364904999732971 drive_velocity : -2.788811683654785 fork_pose : ForkPose(z=0.2833969, y=0.15139201, pitch=0.008127154)
+2025-09-02 17:38:50 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5373290181159973 drive_velocity : -2.796786308288574 fork_pose : ForkPose(z=0.28302646, y=0.18469635, pitch=0.008256156)
+2025-09-02 17:38:52 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402374863624573 drive_velocity : 0.0003673944156616926 fork_pose : ForkPose(z=0.2756749, y=-0.24904872, pitch=0.009943354)
+2025-09-02 17:38:52 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402577519416809 drive_velocity : 0.007170144468545914 fork_pose : ForkPose(z=0.27530348, y=-0.21570446, pitch=0.010062412)
+2025-09-02 17:38:52 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402734279632568 drive_velocity : 0.0038159044925123453 fork_pose : ForkPose(z=0.27493373, y=-0.18236507, pitch=0.01018295)
+2025-09-02 17:38:52 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402685403823853 drive_velocity : 0.002754527609795332 fork_pose : ForkPose(z=0.27465606, y=-0.15736386, pitch=0.010272481)
+2025-09-02 17:38:52 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402639508247375 drive_velocity : 0.002179787028580904 fork_pose : ForkPose(z=0.274286, y=-0.124031335, pitch=0.0103907995)
+2025-09-02 17:38:52 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.540267288684845 drive_velocity : 0.0033874798100441694 fork_pose : ForkPose(z=0.27391654, y=-0.090697475, pitch=0.010508498)
+2025-09-02 17:38:52 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402669310569763 drive_velocity : 0.005030021071434021 fork_pose : ForkPose(z=0.27354756, y=-0.057361092, pitch=0.010625403)
+2025-09-02 17:38:52 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402673482894897 drive_velocity : 0.005422022193670273 fork_pose : ForkPose(z=0.2731786, y=-0.024028534, pitch=0.010741898)
+2025-09-02 17:38:52 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402652025222778 drive_velocity : 0.0034723381977528334 fork_pose : ForkPose(z=0.27281025, y=0.009304351, pitch=0.010857106)
+2025-09-02 17:38:52 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.540266752243042 drive_velocity : 0.0038950524758547544 fork_pose : ForkPose(z=0.27244243, y=0.042637683, pitch=0.010971474)
+2025-09-02 17:38:53 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402674674987793 drive_velocity : 0.004193600732833147 fork_pose : ForkPose(z=0.27207357, y=0.0759717, pitch=0.011085784)
+2025-09-02 17:38:53 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402660369873047 drive_velocity : 0.005199942737817764 fork_pose : ForkPose(z=0.27170473, y=0.109302975, pitch=0.011199177)
+2025-09-02 17:38:53 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402661561965942 drive_velocity : 0.004693333059549332 fork_pose : ForkPose(z=0.27142787, y=0.13430114, pitch=0.011283786)
+2025-09-02 17:38:54 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402559638023376 drive_velocity : -0.012594429776072502 fork_pose : ForkPose(z=0.26570338, y=-0.24904509, pitch=0.012952554)
+2025-09-02 17:38:54 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402362942695618 drive_velocity : 0.0065939840860664845 fork_pose : ForkPose(z=0.2653314, y=-0.21569048, pitch=0.013051053)
+2025-09-02 17:38:55 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402620434761047 drive_velocity : 0.0045000724494457245 fork_pose : ForkPose(z=0.26496118, y=-0.18235444, pitch=0.013154001)
+2025-09-02 17:38:55 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402559041976929 drive_velocity : 0.003131573088467121 fork_pose : ForkPose(z=0.2645914, y=-0.14901732, pitch=0.013255679)
+2025-09-02 17:38:55 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.540252149105072 drive_velocity : 0.0037113907746970654 fork_pose : ForkPose(z=0.26422283, y=-0.115684204, pitch=0.013355452)
+2025-09-02 17:38:55 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402540564537048 drive_velocity : 0.0038389025721699 fork_pose : ForkPose(z=0.26385418, y=-0.08234895, pitch=0.013454941)
+2025-09-02 17:38:55 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402540564537048 drive_velocity : 0.002657955978065729 fork_pose : ForkPose(z=0.26348576, y=-0.04901439, pitch=0.013553997)
+2025-09-02 17:38:55 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.540253758430481 drive_velocity : 0.003237565979361534 fork_pose : ForkPose(z=0.26320967, y=-0.02401468, pitch=0.013627788)
+2025-09-02 17:38:55 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.540253221988678 drive_velocity : 0.0029180680867284536 fork_pose : ForkPose(z=0.2628417, y=0.009318411, pitch=0.013725335)
+2025-09-02 17:38:55 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402548313140869 drive_velocity : 0.004157290328294039 fork_pose : ForkPose(z=0.2624727, y=0.042653035, pitch=0.013823155)
+2025-09-02 17:38:57 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402505397796631 drive_velocity : 0.0026567382737994194 fork_pose : ForkPose(z=0.25785786, y=-0.26475638, pitch=0.014994895)
+2025-09-02 17:38:57 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402229428291321 drive_velocity : 0.006449514999985695 fork_pose : ForkPose(z=0.25748643, y=-0.2323389, pitch=0.015083856)
+2025-09-02 17:38:57 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402600765228271 drive_velocity : 0.006113533861935139 fork_pose : ForkPose(z=0.25711644, y=-0.19900227, pitch=0.015174206)
+2025-09-02 17:38:57 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402660965919495 drive_velocity : 0.00566297210752964 fork_pose : ForkPose(z=0.256747, y=-0.16566473, pitch=0.015263447)
+2025-09-02 17:38:57 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402636528015137 drive_velocity : 0.0033785852137953043 fork_pose : ForkPose(z=0.25637814, y=-0.1323307, pitch=0.015351616)
+2025-09-02 17:38:57 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402652025222778 drive_velocity : 0.004313245881348848 fork_pose : ForkPose(z=0.2561009, y=-0.10733056, pitch=0.0154180555)
+2025-09-02 17:38:57 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402634739875793 drive_velocity : 0.003859522519633174 fork_pose : ForkPose(z=0.25573182, y=-0.073994905, pitch=0.015505659)
+2025-09-02 17:38:57 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.540264368057251 drive_velocity : 0.0034788961056619883 fork_pose : ForkPose(z=0.25536317, y=-0.040662352, pitch=0.0155927595)
+2025-09-02 17:38:57 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402631759643555 drive_velocity : 0.004342291038483381 fork_pose : ForkPose(z=0.25499466, y=-0.00732785, pitch=0.015679274)
+2025-09-02 17:38:57 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402625799179077 drive_velocity : 0.003949244040995836 fork_pose : ForkPose(z=0.2546264, y=0.02600475, pitch=0.015765106)
+2025-09-02 17:38:58 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402634143829346 drive_velocity : 0.005420892033725977 fork_pose : ForkPose(z=0.25425813, y=0.059338566, pitch=0.015850203)
+2025-09-02 17:38:58 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402634143829346 drive_velocity : 0.005420892033725977 fork_pose : ForkPose(z=0.25425813, y=0.059338566, pitch=0.015850203)
+2025-09-02 17:38:58 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.5402645468711853 drive_velocity : 0.0023476702626794577 fork_pose : ForkPose(z=0.25361267, y=0.11766895, pitch=0.015998634)
+2025-09-02 17:39:55 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.06773834675550461 drive_velocity : 0.014924939721822739 fork_pose : ForkPose(z=0.09602477, y=-0.08332875, pitch=0.026051331)
+2025-09-02 17:39:56 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.06774605810642242 drive_velocity : 0.001925877295434475 fork_pose : ForkPose(z=0.09565756, y=-0.04999861, pitch=0.026075587)
+2025-09-02 17:39:56 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.06774584203958511 drive_velocity : 0.0009740274981595576 fork_pose : ForkPose(z=0.095290445, y=-0.016664455, pitch=0.026099524)
+2025-09-02 17:39:56 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.06774567812681198 drive_velocity : 0.0020481343381106853 fork_pose : ForkPose(z=0.094923, y=0.016670004, pitch=0.026123153)
+2025-09-02 17:39:56 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.06774608790874481 drive_velocity : 0.00037627178244292736 fork_pose : ForkPose(z=0.09455547, y=0.050003037, pitch=0.02614687)
+2025-09-02 17:39:56 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.06774519383907318 drive_velocity : 0.0008811449515633285 fork_pose : ForkPose(z=0.09418805, y=0.0833358, pitch=0.026170202)
+2025-09-02 17:39:56 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.06774627417325974 drive_velocity : 0.0026960796676576138 fork_pose : ForkPose(z=0.09391256, y=0.10833785, pitch=0.026187612)
+2025-09-02 17:39:56 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.06774502247571945 drive_velocity : 0.0017388744745403528 fork_pose : ForkPose(z=0.09354491, y=0.14166668, pitch=0.026210673)
+2025-09-02 17:39:56 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.06774546951055527 drive_velocity : 0.0011665534693747759 fork_pose : ForkPose(z=0.09317709, y=0.17499846, pitch=0.026233433)
+2025-09-02 17:39:56 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.06774589419364929 drive_velocity : 0.001885944395326078 fork_pose : ForkPose(z=0.092808895, y=0.20832998, pitch=0.026256176)
+2025-09-02 17:39:56 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.06774546951055527 drive_velocity : 0.0011892798356711864 fork_pose : ForkPose(z=0.092439935, y=0.24165963, pitch=0.02627911)
+2025-09-02 17:39:57 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.06774557381868362 drive_velocity : 0.0023687463253736496 fork_pose : ForkPose(z=0.0921628, y=0.2666573, pitch=0.026296368)
+2025-09-02 17:39:57 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.06774591654539108 drive_velocity : -0.11009165644645691 fork_pose : ForkPose(z=0.091793224, y=0.29998517, pitch=0.026318876)
+2025-09-02 17:39:57 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.06775085628032684 drive_velocity : 0.00047711399383842945 fork_pose : ForkPose(z=0.09142501, y=0.3, pitch=0.026341721)
+2025-09-02 17:39:57 - controller - INFO - E_test.py:65 - 57807:134000502015680 - steer_angle : -0.06774459034204483 drive_velocity : 0.0029071103781461716 fork_pose : ForkPose(z=0.09105557, y=0.3, pitch=0.026362551)
+2025-09-03 13:52:59 - controller - INFO - E_test.py:105 - 88738:138286025156416 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-03 13:52:59 - controller - INFO - E_test.py:105 - 88738:138286025156416 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-03 13:52:59 - controller - INFO - E_test.py:105 - 88738:138286025156416 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-03 13:52:59 - controller - INFO - E_test.py:32 - 88738:138205191988928 - start SensorsThread
+2025-09-03 13:54:18 - controller - INFO - E_test.py:65 - 88738:138205191988928 - steer_angle : -0.03334526717662811 drive_velocity : 0.0030301439110189676 fork_pose : ForkPose(z=0.1759616, y=0.024168883, pitch=0.018225512)
+2025-09-03 13:54:18 - controller - INFO - E_test.py:65 - 88738:138205191988928 - steer_angle : -0.03334702551364899 drive_velocity : 0.0030366498976945877 fork_pose : ForkPose(z=0.1755019, y=0.06583518, pitch=0.018313728)
+2025-09-03 13:54:18 - controller - INFO - E_test.py:65 - 88738:138205191988928 - steer_angle : -0.03334707394242287 drive_velocity : 0.002181030809879303 fork_pose : ForkPose(z=0.17504172, y=0.1075009, pitch=0.018401595)
+2025-09-03 13:54:18 - controller - INFO - E_test.py:65 - 88738:138205191988928 - steer_angle : -0.03334726020693779 drive_velocity : 0.002352640498429537 fork_pose : ForkPose(z=0.17448905, y=0.15749869, pitch=0.018506082)
+2025-09-03 13:54:19 - controller - INFO - E_test.py:65 - 88738:138205191988928 - steer_angle : -0.033346302807331085 drive_velocity : 0.0028638215735554695 fork_pose : ForkPose(z=0.17402777, y=0.19916257, pitch=0.018592969)
+2025-09-03 14:56:35 - controller - INFO - E_test.py:151 - 94672:126675991377728 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-03 14:56:35 - controller - INFO - E_test.py:151 - 94672:126675991377728 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-03 14:56:35 - controller - INFO - E_test.py:151 - 94672:126675991377728 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-03 14:56:36 - controller - INFO - E_test.py:32 - 94672:126595553552064 - start SensorsThread
+2025-09-03 14:57:43 - controller - INFO - E_test.py:151 - 95688:136725107562304 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-03 14:57:43 - controller - INFO - E_test.py:151 - 95688:136725107562304 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-03 14:57:43 - controller - INFO - E_test.py:151 - 95688:136725107562304 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-03 14:57:43 - controller - INFO - E_test.py:32 - 95688:136644229326528 - start SensorsThread
+2025-09-03 14:59:47 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.05623209476470947 drive_velocity : 0.0023151892237365246 fork_pose : ForkPose(z=0.820651, y=0.015122039, pitch=0.025816584)
+2025-09-03 14:59:48 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.05623029172420502 drive_velocity : 0.00012915174011141062 fork_pose : ForkPose(z=0.82009214, y=0.06512232, pitch=0.025829665)
+2025-09-03 14:59:48 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.0562305711209774 drive_velocity : -0.0007520689978264272 fork_pose : ForkPose(z=0.8197191, y=0.09845708, pitch=0.025838504)
+2025-09-03 14:59:48 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.05623043328523636 drive_velocity : -0.0008594905375503004 fork_pose : ForkPose(z=0.8191588, y=0.14845866, pitch=0.025852034)
+2025-09-03 14:59:48 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.05623019486665726 drive_velocity : 0.0008380449144169688 fork_pose : ForkPose(z=0.81869197, y=0.19012691, pitch=0.025862833)
+2025-09-03 14:59:48 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.056230489164590836 drive_velocity : 0.0010846105869859457 fork_pose : ForkPose(z=0.81831837, y=0.22346203, pitch=0.025871543)
+2025-09-03 14:59:50 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.05624086409807205 drive_velocity : 0.0016470010159537196 fork_pose : ForkPose(z=0.81075996, y=-0.034853786, pitch=0.02603913)
+2025-09-03 14:59:50 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.05624062567949295 drive_velocity : 0.0003907964564859867 fork_pose : ForkPose(z=0.81038785, y=-0.0015204026, pitch=0.026046798)
+2025-09-03 14:59:50 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.05624128505587578 drive_velocity : -5.037561641074717e-05 fork_pose : ForkPose(z=0.8098296, y=0.048480358, pitch=0.02605807)
+2025-09-03 14:59:50 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.056241728365421295 drive_velocity : 0.0009648657869547606 fork_pose : ForkPose(z=0.80936426, y=0.090147935, pitch=0.026067525)
+2025-09-03 14:59:50 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.05624151974916458 drive_velocity : 0.00142980320379138 fork_pose : ForkPose(z=0.8088983, y=0.13181591, pitch=0.026077205)
+2025-09-03 14:59:52 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.05625402554869652 drive_velocity : 0.0009106678771786392 fork_pose : ForkPose(z=0.8015313, y=-0.0681667, pitch=0.026223935)
+2025-09-03 14:59:52 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.05624670907855034 drive_velocity : 0.0013786767376586795 fork_pose : ForkPose(z=0.8009726, y=-0.018167295, pitch=0.026234394)
+2025-09-03 14:59:52 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.05624663457274437 drive_velocity : 0.0007628455059602857 fork_pose : ForkPose(z=0.8006002, y=0.0151664745, pitch=0.026241325)
+2025-09-03 14:59:52 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.056245774030685425 drive_velocity : 0.0004174142377451062 fork_pose : ForkPose(z=0.8000411, y=0.06516684, pitch=0.026252037)
+2025-09-03 14:59:55 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.05624568834900856 drive_velocity : 0.004785524215549231 fork_pose : ForkPose(z=0.7844875, y=0.12354281, pitch=0.026520949)
+2025-09-03 14:59:55 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.056246500462293625 drive_velocity : 0.0005563712911680341 fork_pose : ForkPose(z=0.7841148, y=0.15687619, pitch=0.026526824)
+2025-09-03 14:59:55 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.05624721571803093 drive_velocity : 0.0010402583284303546 fork_pose : ForkPose(z=0.7835556, y=0.20687856, pitch=0.026535345)
+2025-09-03 14:59:56 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.05624610185623169 drive_velocity : -0.0002999939024448395 fork_pose : ForkPose(z=0.78308827, y=0.24854685, pitch=0.026542991)
+2025-09-03 14:59:57 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.056262604892253876 drive_velocity : 4.604288551490754e-05 fork_pose : ForkPose(z=0.7767435, y=0.0902382, pitch=0.02664071)
+2025-09-03 14:59:57 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.05626284331083298 drive_velocity : 0.001807899447157979 fork_pose : ForkPose(z=0.77637136, y=0.12357256, pitch=0.026646202)
+2025-09-03 14:59:57 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.05626203492283821 drive_velocity : -0.0010499670170247555 fork_pose : ForkPose(z=0.7759056, y=0.16524029, pitch=0.026653081)
+2025-09-03 14:59:57 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.05626330524682999 drive_velocity : 0.0017018970102071762 fork_pose : ForkPose(z=0.77544045, y=0.20690885, pitch=0.026659481)
+2025-09-03 14:59:57 - controller - INFO - E_test.py:65 - 95688:136644229326528 - steer_angle : -0.056263528764247894 drive_velocity : 0.00023104227147996426 fork_pose : ForkPose(z=0.77497303, y=0.24857737, pitch=0.026666267)
+2025-09-03 15:15:55 - controller - INFO - E_test.py:151 - 98559:129254257047360 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-03 15:15:55 - controller - INFO - E_test.py:151 - 98559:129254257047360 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-03 15:15:56 - controller - INFO - E_test.py:151 - 98559:129254257047360 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-03 15:22:39 - controller - INFO - E_test.py:151 - 99987:125580346939200 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-03 15:22:39 - controller - INFO - E_test.py:151 - 99987:125580346939200 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-03 15:22:39 - controller - INFO - E_test.py:151 - 99987:125580346939200 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-03 15:25:09 - controller - INFO - E_test.py:151 - 100843:135339125638976 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-03 15:25:09 - controller - INFO - E_test.py:151 - 100843:135339125638976 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-03 15:25:09 - controller - INFO - E_test.py:151 - 100843:135339125638976 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-03 15:37:37 - controller - INFO - E_test.py:151 - 102375:129149027116864 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-03 15:37:37 - controller - INFO - E_test.py:151 - 102375:129149027116864 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-03 15:37:37 - controller - INFO - E_test.py:151 - 102375:129149027116864 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-03 15:39:49 - controller - INFO - E_test.py:151 - 103026:123427428771648 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-03 15:39:49 - controller - INFO - E_test.py:151 - 103026:123427428771648 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-03 15:39:49 - controller - INFO - E_test.py:151 - 103026:123427428771648 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-03 16:04:35 - controller - INFO - E_test.py:151 - 105172:128705638590272 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-03 16:04:35 - controller - INFO - E_test.py:151 - 105172:128705638590272 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-03 16:04:35 - controller - INFO - E_test.py:151 - 105172:128705638590272 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-03 16:19:11 - controller - INFO - E_test.py:151 - 107176:138310371092288 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-03 16:19:11 - controller - INFO - E_test.py:151 - 107176:138310371092288 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-03 16:19:11 - controller - INFO - E_test.py:151 - 107176:138310371092288 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-03 20:31:37 - controller - INFO - E_test.py:104 - 121048:138313296340800 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-03 20:31:37 - controller - INFO - E_test.py:104 - 121048:138313296340800 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-03 20:31:37 - controller - INFO - E_test.py:104 - 121048:138313296340800 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-03 20:33:29 - controller - INFO - E_test.py:104 - 121844:135210008442688 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-03 20:33:29 - controller - INFO - E_test.py:104 - 121844:135210008442688 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-03 20:33:29 - controller - INFO - E_test.py:104 - 121844:135210008442688 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-03 20:35:34 - controller - INFO - E_test.py:104 - 123231:134344375478080 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-03 20:35:34 - controller - INFO - E_test.py:104 - 123231:134344375478080 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-03 20:35:34 - controller - INFO - E_test.py:104 - 123231:134344375478080 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-03 20:38:39 - controller - INFO - E_test.py:104 - 124497:136145580590912 - add camera : /World/forklift_E/Links/lift/fork_cmara
+2025-09-03 20:38:39 - controller - INFO - E_test.py:104 - 124497:136145580590912 - add camera : /World/forklift_E/Links/body/body_camra_front
+2025-09-03 20:38:39 - controller - INFO - E_test.py:104 - 124497:136145580590912 - add camera : /World/forklift_E/Links/body/body_camra_back
+2025-09-03 20:46:45 - controller - INFO - E_test.py:106 - 127331:124857211324224 - add camera : /World/forklift_E/lift/fork_cmara

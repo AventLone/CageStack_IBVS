@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+import "foxglove/Point3.proto";
+
+package pb;
+
+message ImuData{
+    foxglove.Point3 orientation = 1;
+
+    foxglove.Point3 angular_velocity = 2;
+
+    foxglove.Point3 acceleration = 3;
+}

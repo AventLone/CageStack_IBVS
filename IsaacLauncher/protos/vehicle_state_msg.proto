@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+import "Quaternion.proto";
+import "Vector3.proto";
+import "pose.proto";
+import "imu.proto";
+
+package sim_data_flow;
+
+message VehicleStateMsg {
+    uint64 timestamp = 1;
+    double drive_velocity = 2;
+    double steer_angle = 3;
+    double wheel_l = 4;
+    double wheel_r = 5;
+    double fork_x = 6;
+    double fork_y = 7;
+    double fork_z = 8;
+    double fork_cl = 9;
+    double fork_cr = 10;
+    double fork_roll = 11;
+    double fork_pitch = 12;
+    bool adjust_control = 13;
+    Pose robot_pose = 14;
+    Pose target_pose = 15;
+    bool data_record = 16;
+    imu.Imu imu = 17;
+    uint32 dataidx_upload = 18;
+    double ClampPressure = 19;
+    bool HSwitchL = 20;
+    bool HSwitchR = 21;
+    bool VSwitchL = 22;
+    bool VSwitchR = 23;
+    bool torquestatus = 24;
+    uint64 seq_num = 25;
+}
+

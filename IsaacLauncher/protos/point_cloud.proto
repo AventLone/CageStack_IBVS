@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package pb;
+
+message PointCloud2
+{
+  uint32 seq = 1;
+  uint64 timestamp = 2;
+  string frame_id = 3;
+  uint32 size = 4;
+  uint64 send_time = 5;
+  float convert_time = 6;
+  repeated float data = 7[packed = true];
+}
+

@@ -55,7 +55,8 @@ include_directories(${CMAKE_SOURCE_DIR}/include
 )
 
 file(GLOB_RECURSE CPP_SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/source/*.cpp)
-add_library(${PROJECT_NAME} ${CPP_SOURCE_FILES})
+add_library(${PROJECT_NAME} ${CPP_SOURCE_FILES}
+    include/colib/kinematics.hpp)
 
 target_compile_features(${PROJECT_NAME} PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 target_include_directories(${PROJECT_NAME} PUBLIC

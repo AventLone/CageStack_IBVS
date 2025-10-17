@@ -24,7 +24,7 @@ vehicle:
     fork_joint_names: ["fork_z"]   # Fork height, side-shift, mast tilt
     drive_wheel_joint_names: ["drive_joint"]
     steer_wheel_joint_names: ["steer_joint"]
-    drive_wheel_radius: 0.5
+    drive_wheel_radius: 0.11
 
 # 3 传感器配置
 sensors:

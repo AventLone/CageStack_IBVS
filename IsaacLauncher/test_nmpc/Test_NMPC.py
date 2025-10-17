@@ -8,7 +8,6 @@ from ecal.core.publisher import ProtoPublisher
 import math, sys, queue
 import numpy as np
 from collections import deque
-from nmpc import NMPC
 from utils import SimTimer
 # from ecal.core._ecal_cffi import lib as ecal_c   # 暴露 C API, 包含 etime_set_nanoseconds
 
@@ -67,12 +66,15 @@ class TestPre:
 
 
         self.cmds_queue = deque(maxlen=1)
+        self.path_queue = deque(maxlen=2)
 
         # Ecal publisher and subscriber
         self.state_publisher = ProtoPublisher(vehicle_cfg["vehicle_state_topic"], VehicleControl_pb2.State)
         self.goal_publisher = ProtoPublisher("goal", VehicleControl_pb2.Pose)
         self.cmd_subscriber = ProtoSubscriber("nmpc_cmd", VehicleControl_pb2.State)
+        self.path_subscriber = ProtoSubscriber("nmpc_path", VehicleControl_pb2.Path)
         self.cmd_subscriber.set_callback(self._cmdHandler)
+        self.path_subscriber.set_callback(self._pathHandler)
 
         # import carb
         # settings = carb.settings.get_settings()
@@ -80,46 +82,21 @@ class TestPre:
         # settings.set("/app/runLoops/main/rateLimitFrequency", 100)   # 例如 30Hz ⇒ RTF = 30 * physics_dt = 0.5×
 
         # Start sub tasks
-        asyncio.get_event_loop().create_task(self._statePub())
-        asyncio.get_event_loop().create_task(self._step())
-        asyncio.get_event_loop().create_task(self._printError())
+        asyncio.ensure_future(self._statePub())
+        asyncio.ensure_future(self._step())
+        asyncio.ensure_future(self._printError())
+        asyncio.ensure_future(self._drawPath())
         # asyncio.get_event_loop().create_task(self._printTimeGap())
 
         from omni.usd import get_context
         stage = get_context().get_stage()
 
         self.goal_prim  = stage.GetPrimAtPath("/World/SM_PaletteA_02")
-        self.forklift_prim = stage.GetPrimAtPath("/World/forklift_E/Links/front_left_wheel/mid")
+        # self.forklift_prim = stage.GetPrimAtPath("/World/forklift_E/Links/front_left_wheel/mid")
         if not self.goal_prim .IsValid():
             raise RuntimeError("Prim not found: /World/SM_PaletteA_02")
 
-        # relative_goal_position, yaw = self.self_and_goal
-        # print(f"Start goal error: x {relative_goal_position[0]:.3f}, y {relative_goal_position[1]:.3f}, yaw {yaw:.3f}")
-
-
-        # --- 用法示例 ---
-        # poses = [(0.0, 0.0, 0.0),
-        #          (1.0, 0.2, 0.1),
-        #          (2.0, 0.6, 0.2),
-        #          (3.0, 1.1, 0.25),
-        #          (4.0, 1.6, 0.30)]
-        # visualize_xytheta_path_with_arrows("PlannedPath",
-        #                                    poses,
-        #                                    draw_points=True,
-        #                                    arrow_every=2,
-        #                                    arrow_len=0.4)
-        # from visualize_path import visualize_xytheta_path_with_arrows
-        # poses = [(0.0, 0.0, 0.0),
-        #          (1.0, 0.2, 0.1),
-        #          (2.0, 0.6, 0.2),
-        #          (3.0, 1.1, 0.25),
-        #          (4.0, 1.6, 0.30)]
-        # visualize_xytheta_path_with_arrows("PlannedPath",
-        #                                    poses,
-        #                                    draw_points=True,
-        #                                    arrow_every=2,
-        #                                    arrow_len=0.4)
-
+        self.nmpc_dt = 0.1
 
     def run(self):
         while self.app.is_running():
@@ -142,12 +119,18 @@ class TestPre:
     def _cmdHandler(self, topic_name, msg: VehicleControl_pb2.State, msg_time):
         self.cmds_queue.append(msg)
 
+    def _pathHandler(self, topic_name, msg: VehicleControl_pb2.Path, msg_time):
+        path = list()
+        for pose in msg.poses:
+            path.append((pose.x, pose.y, 3.5))
+        self.path_queue.append(path)
+
     async def _step(self):
-        dt = 0.2
+        # dt = 0.2
         ddt = 0.02
-        steps = round(dt / ddt)
+        steps = round(self.nmpc_dt / ddt)
         while ecal_core.ok():
-            if not self.world.is_playing():
+            if not self.world.is_playing() or self.require_reset:
                 await asyncio.sleep(0.05)
                 continue
 
@@ -175,6 +158,22 @@ class TestPre:
             # await self.simu_timer.sleep(10.0)
             # print(f"End: x {self.forklift.get_world_pose()[0][0]:.3f}, y {self.forklift.get_world_pose()[0][1]:.3f}")
             # break
+
+    async def _drawPath(self):
+        import visualization
+        while ecal_core.ok():
+            if not self.world.is_playing() or self.require_reset:
+                await asyncio.sleep(0.05)
+                continue
+            if len(self.cmds_queue) == 0:
+                await asyncio.sleep(0.1)
+                continue
+            path = self.path_queue.popleft()
+
+            visualization.drawPath(path)
+            # visualization.draw_vertical_rect(path[-1], path_msg.poses[-1].yaw)
+            await self.simu_timer.sleep(self.nmpc_dt)
+
 
     async def _printError(self):
         while ecal_core.ok():
@@ -222,14 +221,17 @@ class TestPre:
         from omni.usd import get_world_transform_matrix
 
         position, orientation = self.forklift.get_world_pose()
-        # forklift_pose = get_world_transform_matrix(self.forklift_prim)
-        # forklift_position = forklift_pose.ExtractTranslation()
-        # _, _, forklift_yaw = quat2rpy(forklift_pose.ExtractRotationQuat().GetNormalized())
         _, _, forklift_yaw = quat2rpy(orientation)
 
+        position_ = np.array([[np.cos(forklift_yaw), -np.sin(forklift_yaw)],
+                              [np.sin(forklift_yaw),
+                               np.cos(forklift_yaw)]]) @ np.array(
+                                   [0.2687796, 0.0]) + position[0:2]
+
         self_pose = VehicleControl_pb2.Pose()
-        self_pose.x = position[0] + 0.2687796
-        self_pose.y = position[1]
+        # self_pose.x = position[0] + 0.2687796
+        self_pose.x = position_[0]
+        self_pose.y = position_[1]
         self_pose.yaw = forklift_yaw
 
         goal_pose = get_world_transform_matrix(self.goal_prim)

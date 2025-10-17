@@ -8,16 +8,7 @@ from ecal.core.publisher import ProtoPublisher
 import math, sys, queue
 import numpy as np
 from collections import deque
-
-# def get_pose_relative_to(child_path: str, parent_path: str):
-#     stage = get_context().get_stage()
-#     cache = UsdGeom.XformCache(Usd.TimeCode.Default())
-#     A = cache.GetLocalToWorldTransform(stage.GetPrimAtPath(child_path))
-#     B = cache.GetLocalToWorldTransform(stage.GetPrimAtPath(parent_path))
-#     M = B.GetInverse() * A                     # parent系下的 child 变换
-#     tf = Gf.Transform(); tf.SetMatrix(M)
-#     return tf.GetTranslation(), tf.GetRotation().GetQuat(), tf.GetScale()
-
+from utils import SimTimer
 
 def quat2rpy(quat):
     try:
@@ -51,12 +42,13 @@ class TestPre:
         if not ecal_core.is_initialized():
             ecal_core.initialize(sys.argv, "Test NMPC Pre")
 
-        config = ConfigLoader("/home/vn/Documents/Projects/IsaacSimLauncher/configs/e_test.yaml").load()
+        config = ConfigLoader("/home/vn/Documents/MyDrawft/CageStack_IBVS/IsaacLauncher/configs/st_test.yaml").load()
         simulate_config = config["simulation_app"]
         self.app = SimulationApp(simulate_config["config"])
 
         from isaacsim.core.utils.stage import open_stage
-        open_stage(simulate_config["stage_file_path"])
+        # open_stage(simulate_config["stage_file_path"])
+        open_stage("/home/vn/Documents/IsaacSimAssets/Assets/Isaac/5.0/Isaac/VN/Stages/st_test_nmpc.usd")
 
         from isaacsim.core.api.world import World
         self.world = World(physics_dt=simulate_config["physics_dt"],       # Physics time step
@@ -65,40 +57,45 @@ class TestPre:
         self.require_reset = False
         self.world.reset()
 
+        self.simu_timer = SimTimer(self.world)
+
         from devices import Vehicle2
         vehicle_cfg = config["vehicle"]
         self.forklift = Vehicle2(world=self.world, cfg=vehicle_cfg)
-        # self.world.add_physics_callback("cmd_handler", self._on_cmd)
-        # self.world.scene.add(self.forklift)
-        # self.world.reset()
 
-        # from isaacsim.robot.wheeled_robots.controllers.ackermann_controller import AckermannController
-        # self.controller = AckermannController(
-        #     "ackermann_controller", wheel_base=1.5, track_width=1.0, front_wheel_radius=0.3
-        # )
 
-        # self.cmd_queue = queue.Queue(maxsize=16)
-        self.cmd_queue = deque(maxlen=16)
+        self.cmds_queue = deque(maxlen=1)
+        self.path_queue = deque(maxlen=2)
 
         # Ecal publisher and subscriber
         self.state_publisher = ProtoPublisher(vehicle_cfg["vehicle_state_topic"], VehicleControl_pb2.State)
         self.goal_publisher = ProtoPublisher("goal", VehicleControl_pb2.Pose)
         self.cmd_subscriber = ProtoSubscriber("nmpc_cmd", VehicleControl_pb2.State)
+        self.path_subscriber = ProtoSubscriber("nmpc_path", VehicleControl_pb2.Path)
         self.cmd_subscriber.set_callback(self._cmdHandler)
+        self.path_subscriber.set_callback(self._pathHandler)
+
+        # import carb
+        # settings = carb.settings.get_settings()
+        # settings.set("/app/runLoops/main/rateLimitEnabled", True)   # 开启限速
+        # settings.set("/app/runLoops/main/rateLimitFrequency", 100)   # 例如 30Hz ⇒ RTF = 30 * physics_dt = 0.5×
 
         # Start sub tasks
-        asyncio.get_event_loop().create_task(self._statePub())
-        asyncio.get_event_loop().create_task(self._step())
+        asyncio.ensure_future(self._statePub())
+        asyncio.ensure_future(self._step())
+        asyncio.ensure_future(self._printError())
+        asyncio.ensure_future(self._drawPath())
+        # asyncio.get_event_loop().create_task(self._printTimeGap())
 
         from omni.usd import get_context
-        # from pxr import UsdGeom, Gf, Usd
-
         stage = get_context().get_stage()
-        
-        self.goal_prim  = stage.GetPrimAtPath("/World/SM_PaletteA_02")
+
+        self.goal_prim  = stage.GetPrimAtPath("/World/blockpallet_a02")
+        # self.forklift_prim = stage.GetPrimAtPath("/World/forklift_E/Links/front_left_wheel/mid")
         if not self.goal_prim .IsValid():
-            raise RuntimeError("Prim not found: /World/SM_PaletteA_02")
-        # parent_prim = stage.GetPrimAtPath(parent_path)
+            raise RuntimeError("Prim not found: /World/blockpallet_a02")
+
+        self.nmpc_dt = 0.1
 
     def run(self):
         while self.app.is_running():
@@ -119,26 +116,74 @@ class TestPre:
 
 
     def _cmdHandler(self, topic_name, msg: VehicleControl_pb2.State, msg_time):
-        self.cmd_queue.append(msg)
+        self.cmds_queue.append(msg)
 
+    def _pathHandler(self, topic_name, msg: VehicleControl_pb2.Path, msg_time):
+        path = list()
+        for pose in msg.poses:
+            path.append((pose.x, pose.y, 3.5))
+        self.path_queue.append(path)
 
     async def _step(self):
+        # dt = 0.2
+        ddt = 0.02
+        steps = round(self.nmpc_dt / ddt)
         while ecal_core.ok():
-            if not self.world.is_playing():
+            if not self.world.is_playing() or self.require_reset:
                 await asyncio.sleep(0.05)
                 continue
 
-            if len(self.cmd_queue) == 0:
+            if len(self.cmds_queue) == 0:
                 self.forklift.move(0.0)
                 self.forklift.setSteerVelocity(0.0)
-                await asyncio.sleep(0.01)
+                await asyncio.sleep(0.1)
                 continue
 
-            cmd:VehicleControl_pb2.State = self.cmd_queue.popleft()
+            cmd:VehicleControl_pb2.State = self.cmds_queue.popleft()
 
             self.forklift.move(cmd.drive_velocity)
-            self.forklift.setSteerVelocity(cmd.steer_velocity)
-            await asyncio.sleep(0.1)
+
+            steer_ang = self.forklift.steer_angle
+            for _ in range(steps):
+                await self.simu_timer.sleep(ddt)
+                steer_ang += cmd.steer_velocity * ddt
+                self.forklift.steer(steer_ang)
+
+            # print(f"Start: x {self.forklift.get_world_pose()[0][0]:.3f}, y {self.forklift.get_world_pose()[0][1]:.3f}")
+            # self.forklift.steer(math.pi / 6.0)
+            # self.forklift.move(1.0)
+            # await self.simu_timer.sleep(10.0)
+            # self.forklift.move(-1.0)
+            # await self.simu_timer.sleep(10.0)
+            # print(f"End: x {self.forklift.get_world_pose()[0][0]:.3f}, y {self.forklift.get_world_pose()[0][1]:.3f}")
+            # break
+
+    async def _drawPath(self):
+        import visualization
+        while ecal_core.ok():
+            if not self.world.is_playing() or self.require_reset:
+                await asyncio.sleep(0.05)
+                continue
+            if len(self.cmds_queue) == 0:
+                await asyncio.sleep(0.1)
+                continue
+            path = self.path_queue.popleft()
+
+            visualization.drawPath(path)
+            # visualization.draw_vertical_rect(path[-1], path_msg.poses[-1].yaw)
+            await self.simu_timer.sleep(self.nmpc_dt)
+
+
+    async def _printError(self):
+        while ecal_core.ok():
+            if not self.world.is_playing() or self.require_reset:
+                await asyncio.sleep(0.05)
+                continue
+            # position, yaw = self.self_and_goal
+            self_pose, goal_pose = self.self_and_goal
+            print(f"error: x {goal_pose.x - self_pose.x:.3f}, y {goal_pose.y - self_pose.y:.3f}, yaw {goal_pose.yaw - self_pose.yaw:.3f}")
+            # print(self_pose)
+            await asyncio.sleep(2.0)
 
 
     async def _statePub(self):
@@ -148,43 +193,56 @@ class TestPre:
                 continue
 
             state = VehicleControl_pb2.State()
-            goal = VehicleControl_pb2.Pose()
+            self_pose, goal_pose = self.self_and_goal
 
             state.drive_velocity = self.forklift.drive_velocity[0]
             state.steer_angle = self.forklift.steer_angle
+            state.pose.x = self_pose.x
+            state.pose.y = self_pose.y
+            state.pose.yaw = self_pose.yaw
             self.state_publisher.send(state)
 
-            # position, yaw = self.get_pose_relative_to(child_path="/World/SM_PaletteA_02",
-            #                                           parent_path="/World/forklift_E/Links/body")
-            position, yaw = self.relative_goal
+            self.goal_publisher.send(goal_pose)
 
-            goal.x = position[0]
-            goal.y = position[1]
-            goal.yaw = wrap_to_pi(yaw)
+            await asyncio.sleep(0.006)
 
-            self.goal_publisher.send(goal)
-            
-            await asyncio.sleep(0.02)
+    async def _printTimeGap(self):
+        import time
+        while ecal_core.ok():
+            begin = time.perf_counter()
+            await self.simu_timer.sleep(1.0)
+            end = time.perf_counter()
+            print(f"Real time{(end - begin) * 1000}")
 
     @property
-    def relative_goal(self):
-        from omni.usd import get_local_transform_matrix
-        goal_pose = get_local_transform_matrix(self.goal_prim)
+    def self_and_goal(self):
+        # from omni.usd import get_local_transform_matrix
+        from omni.usd import get_world_transform_matrix
 
+        position, orientation = self.forklift.get_world_pose()
+        _, _, forklift_yaw = quat2rpy(orientation)
+
+        position_ = np.array([[np.cos(forklift_yaw), -np.sin(forklift_yaw)],
+                              [np.sin(forklift_yaw),
+                               np.cos(forklift_yaw)]]) @ np.array(
+                                   [0.2687796, 0.0]) + position[0:2]
+
+        self_pose = VehicleControl_pb2.Pose()
+        # self_pose.x = position[0] + 0.2687796
+        self_pose.x = position_[0]
+        self_pose.y = position_[1]
+        self_pose.yaw = forklift_yaw
+
+        goal_pose = get_world_transform_matrix(self.goal_prim)
         goal_position = goal_pose.ExtractTranslation()
         _, _, yaw_a = quat2rpy(goal_pose.ExtractRotationQuat().GetNormalized())
-        yaw_a += math.pi / 2.0
 
-        # position_b = pose_b.ExtractTranslation()
-        position, orientation = self.forklift.get_world_pose()
-        _, _, yaw_b = quat2rpy(orientation)
+        goal = VehicleControl_pb2.Pose()
+        goal.x = goal_position[0] - 1.2
+        goal.y = goal_position[1]
+        goal.yaw = yaw_a
 
-        # pose_a2b = pose_b.GetInverse() * pose_a
-
-        # position = pose_a2b.ExtractTranslation()
-        # rotation = pose_a2b.ExtractRotationQuat().GetNormalized()
-        # _, _, yaw = quat2rpy(rotation)
-        return goal_position - position, yaw_a - yaw_b
+        return self_pose, goal
 
     @staticmethod
     def get_pose_relative_to(child_path: str, parent_path: str):

@@ -1,6 +1,6 @@
-#include "colib/NmpcServer.h"
+#include "colib/ControllerServer.h"
 
-void NmpcServer::nmpcLoop()
+void ControllerServer::nmpcLoop()
 {
     const auto getGoalAndState = [](const nmpc_test::Pose& goal_msg,
                                     const nmpc_test::State& state_msg) -> std::pair<std::vector<double>, std::vector<double>>
@@ -20,9 +20,6 @@ void NmpcServer::nmpcLoop()
 
     nmpc_test::Pose goal_message{};
     nmpc_test::State state_message{};
-    // std::chrono::time_point<std::chrono::high_resolution_clock> begin;
-    // std::chrono::time_point<std::chrono::high_resolution_clock> end;
-    // std::vector<double> goal, state;
     while (eCAL::Ok())
     {
         if (!mGoalSubscriber.Receive(goal_message))
@@ -49,11 +46,11 @@ void NmpcServer::nmpcLoop()
         // }
 
         const auto [goal, state] = getGoalAndState(goal_message, state_message);
-        mNMPC.setGoalAndState(goal, state);
+        mController.setGoalAndState(goal, state);
 
         const auto begin = std::chrono::high_resolution_clock::now();
-        std::pair<NMPC::Solution, NMPC::Solution> result;
-        if (!mNMPC.solve(result))
+        std::pair<nmpc::Solution, nmpc::Solution> result;
+        if (!mController.solve(result))
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             continue;
@@ -68,9 +65,21 @@ void NmpcServer::nmpcLoop()
         cmd.set_steer_velocity(result.first.front()[1]);
         mCmdsPublisher.Send(cmd);
 
-        std::cout << "Goal: " << goal << std::endl;
+        nmpc_test::Path path_msg;
+        path_msg.mutable_poses()->Reserve(static_cast<int>(result.second.size()));
+        for (const auto& x : result.second)
+        {
+            nmpc_test::Pose pose;
+            pose.set_x(x[0]);
+            pose.set_y(x[1]);
+            pose.set_yaw(x[2]);
+            path_msg.add_poses()->CopyFrom(pose);
+        }
+        mPathPublisher.Send(path_msg);
+
+        // std::cout << "Goal: " << goal << std::endl;
         std::cout << "First control: " << result.first.front() << std::endl;
-        std::cout << "Last state: " << result.second.back() << std::endl;
+        // std::cout << "Last state: " << result.second.back() << std::endl;
         std::printf("----------------- NMPC end, elapse: %ld ms -----------------\n", duration);
         std::printf("##############################################################\n");
     }

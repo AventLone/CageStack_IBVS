@@ -1,8 +1,7 @@
 #pragma once
-#include "./NMPC.h"
+#include "./kinematics.hpp"
 #include <ecal/msg/protobuf/publisher.h>
 #include <ecal/msg/protobuf/subscriber.h>
-#include <ecal/msg/string/publisher.h>
 #include "VehicleControl.pb.h"        // 依 proto 文件名而定
 #include <thread>
 #include <ecal/ecal_core.h>
@@ -10,14 +9,14 @@
 #include <ecal/ecal.h>
 #include <queue>
 
-class NmpcServer
+class ControllerServer
 {
 public:
-    explicit NmpcServer(const NMPC::Params& params) : mControlLen(params.horizon),
-                                                      mNMPC(4, 2, params),
-                                                      mGoalSubscriber("goal"),
-                                                      mStateSubscriber("vehicle/status"),
-                                                      mCmdsPublisher("nmpc_cmd")
+    explicit ControllerServer(const nmpc::Params& params) : mController(params),
+                                                            mGoalSubscriber("goal"),
+                                                            mStateSubscriber("vehicle/status"),
+                                                            mCmdsPublisher("nmpc_cmd"),
+                                                            mPathPublisher("nmpc_path")
     {
         if (!eCAL::IsInitialized())
         {
@@ -47,27 +46,28 @@ public:
         //                          mCmdsPublisher.Send(cmd);
         //                      }
         //                  });
-        mNmpcThread = std::thread(&NmpcServer::nmpcLoop, this);
+        mControllerThread = std::thread(&ControllerServer::nmpcLoop, this);
         std::cout << "NMPC server start." << std::endl;
     }
 
-    ~NmpcServer()
+    ~ControllerServer()
     {
-        if (mNmpcThread.joinable())
+        if (mControllerThread.joinable())
         {
-            mNmpcThread.join();
+            mControllerThread.join();
         }
-        mTimer.Stop();
+        // mTimer.Stop();
         mCmdsPublisher.Destroy();
+        mPathPublisher.Destroy();
+
         mGoalSubscriber.Destroy();
+        mStateSubscriber.Destroy();
     }
 
     // void cmdsPubLoop();
 
 private:
-    // NMPC::Ptr mNMPC;
-    uint16_t mControlLen;
-    NMPC mNMPC;
+    ControllerE mController;
 
     std::vector<double> mGoal;
     std::vector<double> mState; // dirve velocity, steer_angle
@@ -77,10 +77,10 @@ private:
     eCAL::protobuf::CSubscriber<nmpc_test::Pose> mGoalSubscriber;
     eCAL::protobuf::CSubscriber<nmpc_test::State> mStateSubscriber;
     eCAL::protobuf::CPublisher<nmpc_test::State> mCmdsPublisher;
-    eCAL::string::CPublisher<std::string> mTestPub;
+    eCAL::protobuf::CPublisher<nmpc_test::Path> mPathPublisher;
     eCAL::CTimer mTimer;
 
-    std::thread mNmpcThread;
+    std::thread mControllerThread;
     std::mutex mGoalMutex, mStateMutex, mCmdsMutex;
 
     void nmpcLoop();

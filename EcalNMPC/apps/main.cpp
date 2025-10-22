@@ -1,13 +1,12 @@
-#include "colib/utils/files.hpp"
-#include "colib/ControllerServer.h"
+#include "nmpc/utils/files.hpp"
+#include "nmpc/ControllerServer.h"
 
 int main(const int argc, char** argv)
 {
     eCAL::Initialize(argc, argv, "ST control server");
 
-    const nmpc::Params nmpc_params = nmpc::readYaml("/home/vn/Documents/MyDrawft/CageStack_IBVS/EcalNMPC/configs/nmpc_st.ymal");
+    const nmpc::Params nmpc_params = nmpc::readYaml(PARAM_PATH);
     std::cout << nmpc_params << std::endl;
-
     ControllerServer controller_server_st(nmpc_params);
 
     while (eCAL::Ok())

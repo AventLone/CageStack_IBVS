@@ -1,17 +1,21 @@
 #pragma once
-#include "colib/kinematics.hpp"
+#include "nmpc/kinematics.hpp"
 #include <ecal/ecal.h>
 #include <ecal/msg/protobuf/publisher.h>
 #include <ecal/msg/protobuf/subscriber.h>
-#include <ecal/ecal_server.h>
-#include <condition_variable>
-#include "adaptive_control_msg.pb.h"
+#include "vehicle_state_msg.pb.h"
 #include <thread>
-
 #include <queue>
 
 class ControllerServer
 {
+    struct Cmd
+    {
+        double steer_angle;
+        double drive_velocity;
+        double steer_velocity;
+    };
+
 public:
     explicit ControllerServer(const nmpc::Params& parmas);
 
@@ -27,25 +31,20 @@ public:
     }
 
 private:
-    nmpc::Params mNmpcParams;
     ControllerBicycle mController;
 
-    std::queue<adaptive_control_msg::ForkliftState> mCmdsQueue;
+    std::queue<Cmd> mCmdsQueue;
 
     eCAL::CTimer mTimer;
-    eCAL::CServiceServer mServer;
-    eCAL::protobuf::CSubscriber<adaptive_control_msg::ForkliftState> mGoalSubscriber;
-    eCAL::protobuf::CPublisher<adaptive_control_msg::ForkliftState> mCmdsPublisher;
+    eCAL::protobuf::CSubscriber<sim_data_flow::VehicleStateMsg> mGoalSubscriber;
+    eCAL::protobuf::CPublisher<sim_data_flow::VehicleStateMsg> mCmdsPublisher;
 
     std::thread mControllerThread;
-    bool mIsTriggered{false};
-    std::condition_variable mTriggerEvent;
-    std::mutex mTriggerMutex;
-    std::mutex mGoalMutex, mStateMutex, mCmdsMutex;
+    std::mutex mCmdsMutex;
 
     void nmpcLoop();
 
-    bool getCmd(adaptive_control_msg::ForkliftState& cmd)
+    bool getCmd(Cmd& cmd)
     {
         std::lock_guard<std::mutex> lock(mCmdsMutex);
         if (mCmdsQueue.empty())

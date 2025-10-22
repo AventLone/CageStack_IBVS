@@ -37,7 +37,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 ## 3) Protobuf：生成 C++ 代码
 find_package(Protobuf REQUIRED)
-set(PROTO_FILES ${CMAKE_SOURCE_DIR}/proto/VehicleControl.proto)
+file(GLOB_RECURSE PROTO_FILES ${CMAKE_CURRENT_SOURCE_DIR}/protos/*.proto)
 protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
 add_library(my_proto_msgs ${PROTO_SRCS} ${PROTO_HDRS})
 target_include_directories(my_proto_msgs PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
@@ -56,7 +56,9 @@ include_directories(${CMAKE_SOURCE_DIR}/include
 
 file(GLOB_RECURSE CPP_SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/source/*.cpp)
 add_library(${PROJECT_NAME} ${CPP_SOURCE_FILES}
-    include/colib/kinematics.hpp)
+    include/colib/kinematics.hpp
+    source/ControllerServer.cpp
+    include/colib/ControllerServer.h)
 
 target_compile_features(${PROJECT_NAME} PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 target_include_directories(${PROJECT_NAME} PUBLIC

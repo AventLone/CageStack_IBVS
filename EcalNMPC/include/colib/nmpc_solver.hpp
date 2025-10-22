@@ -39,6 +39,11 @@ public:
 
     bool solve(std::pair<Solution, Solution>& result);
 
+    void setQ(const std::vector<double>& q = {666.6, 0.1, 0.1, 0.1})
+    {
+        mQ = casadi::MX::eye(4) * q;
+    }
+
 private:
     const Params mParams;
 
@@ -83,9 +88,9 @@ Solver<Kinematics>::Solver(const Params& params) : mParams(params), kinematicFun
     // mQ = casadi::MX::eye(3) * std::vector<double>{3.2, 199.7, 39.7};
     // mR = casadi::MX::eye(2) * std::vector<double>{0.1, 0.01};
 
-    mF = casadi::MX::eye(4) * std::vector<double>{3.2, 666.6, 666.6, 3.7};
-    mQ = casadi::MX::eye(4) * std::vector<double>{3.2, 666.6, 3.7, 0.1};
-    mR = casadi::MX::eye(2) * std::vector<double>{2.0, 0.1};
+    mF = casadi::MX::eye(4) * std::vector<double>{666.6, 666.6, 666.6, 666.6};
+    mQ = casadi::MX::eye(4) * std::vector<double>{3.2, 7777.6, 66.6, 0.1};
+    mR = casadi::MX::eye(2) * std::vector<double>{1.0, 0.1};
 
     buildModel();
 }
@@ -125,7 +130,7 @@ void Solver<Kinematics>::buildModel()
     mNLP.subject_to(-mParams.max_speed <= v <= mParams.max_speed);
     mNLP.subject_to(-mParams.max_steer_speed <= w <= mParams.max_steer_speed);
     mNLP.subject_to(-mParams.max_steer_angle <= steer_angle <= mParams.max_steer_angle);
-    mNLP.subject_to(p_x <= mGoal(0));
+    // mNLP.subject_to(p_x <= mGoal(0));
 
     /* Objective function */
     casadi::MX J = casadi::MX::zeros(1, 1);

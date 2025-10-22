@@ -1,43 +1,89 @@
 #include "colib/ControllerServer.h"
 
+ControllerServer::ControllerServer(const nmpc::Params& params) : mNmpcParams(params),
+                                                                 mController(mNmpcParams),
+                                                                 mServer("forklift"),
+                                                                 mGoalSubscriber("goal"),
+                                                                 mCmdsPublisher("nmpc_cmd")
+{
+    if (!eCAL::IsInitialized())
+    {
+        std::cerr << "eCAL is not initialized!" << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+    mServer.AddMethodCallback("wake", "protobuf", "protobuf", [this](const std::string& method_name,
+                                                                     const std::string& req_type,
+                                                                     const std::string& resp_type,
+                                                                     const std::string& request_bytes,
+                                                                     std::string& response_bytes)-> int
+                                  {
+                                      adaptive_control_msg::ControlRequest request;
+                                      request.ParseFromString(request_bytes);
+                                      if (request.wake_up())
+                                      {
+                                          std::lock_guard<std::mutex> lock(mTriggerMutex);
+                                          mIsTriggered = true;
+                                          mTriggerEvent.notify_one();
+                                      }
+                                      else
+                                      {
+                                          std::lock_guard<std::mutex> lock(mTriggerMutex);
+                                          mIsTriggered = false;
+                                      }
+
+                                      adaptive_control_msg::ControlResponse response;
+                                      response.set_ok(true);
+                                      response.set_run(request.wake_up());
+                                      response.set_dt(mNmpcParams.dt);
+                                      response_bytes = response.SerializeAsString();
+                                      return 0;
+                                  });
+
+    mTimer.Start(30, [this]() -> void
+                     {
+                         if (adaptive_control_msg::ForkliftState cmd; getCmd(cmd))
+                         {
+                             mCmdsPublisher.Send(cmd);
+                         }
+                     });
+
+    mControllerThread = std::thread(&ControllerServer::nmpcLoop, this);
+    std::cout << "Controller server start." << std::endl;
+}
+
 void ControllerServer::nmpcLoop()
 {
-    const auto getGoalAndState = [](const nmpc_test::Pose& goal_msg,
-                                    const nmpc_test::State& state_msg) -> std::pair<std::vector<double>, std::vector<double>>
+    const auto getGoalAndSteer = [](const adaptive_control_msg::ForkliftState& goal_state_msg) -> std::pair<std::vector<double>, double>
         {
-            std::vector<double> goal{goal_msg.x(), goal_msg.y(), goal_msg.yaw()};
-            std::vector<double> state{
-                        state_msg.pose().x(), state_msg.pose().y(),
-                        state_msg.pose().yaw(), state_msg.steer_angle()
-                    };
-            return std::make_pair(goal, state);
+            std::vector<double> goal{goal_state_msg.pose().x(), goal_state_msg.pose().y(), goal_state_msg.pose().yaw()};
+            return std::make_pair(goal, goal_state_msg.steer_angle());
         };
 
-    while (eCAL::Ok() && (!mGoalSubscriber.IsCreated() || !mStateSubscriber.IsCreated()))
+    while (eCAL::Ok() && !mGoalSubscriber.IsCreated())
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
-    nmpc_test::Pose goal_message{};
-    nmpc_test::State state_message{};
+    bool stage2 = false;
+    adaptive_control_msg::ForkliftState goal_state_msg;
     while (eCAL::Ok())
     {
-        if (!mGoalSubscriber.Receive(goal_message))
         {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            continue;
+            std::unique_lock<std::mutex> lock(mTriggerMutex);
+            mTriggerEvent.wait(lock, [this]() -> bool { return mIsTriggered; });
         }
-        if (!mStateSubscriber.Receive(state_message))
+
+        if (!mGoalSubscriber.Receive(goal_state_msg))
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             continue;
         }
 
         std::cout << "--------------------- NMPC begin ---------------------" << std::endl;
-        const double error_x = goal_message.x() - state_message.pose().x();
-        const double error_y = goal_message.y() - state_message.pose().y();
-        const double error_yaw = goal_message.yaw() - state_message.pose().yaw();
-        std::cout << "Error: x " << error_x << ", y " << error_y << ", yaw " << error_yaw << std::endl;
+        // double error_x = goal_message.x() - state_message.pose().x();
+        // const double error_y = goal_message.y() - state_message.pose().y();
+        // const double error_yaw = goal_message.yaw() - state_message.pose().yaw();
+
         // if (std::abs(error_x) <= 0.01 && std::abs(error_y) <= 0.01 && std::abs(error_yaw) <= 0.01)
         // {
         //     std::cout << "-----------------------------------------------------\n"
@@ -45,8 +91,31 @@ void ControllerServer::nmpcLoop()
         //     break;
         // }
 
-        const auto [goal, state] = getGoalAndState(goal_message, state_message);
-        mController.setGoalAndState(goal, state);
+        // auto [goal, state] = getGoalAndState(goal_message, state_message);
+
+        auto [goal, steer_angle] = getGoalAndSteer(goal_state_msg);
+
+        static bool stage2 = false;
+        if (std::abs(goal[1]) < 0.006 && std::abs(goal[2]) < 0.02)
+        {
+            if (!stage2)
+            {
+                stage2 = true;
+                mController.setQ();
+            }
+        }
+
+        if (!stage2)
+        {
+            goal[0] -= 1.5;
+        }
+        else
+        {
+            goal[0] += 1.0;
+        }
+
+        std::cout << "Goal: x " << goal[0] << ", y " << goal[1] << ", yaw " << goal[2] << std::endl;
+        mController.setGoalAndState(goal, {0.0, 0.0, 0.0, steer_angle});
 
         const auto begin = std::chrono::high_resolution_clock::now();
         std::pair<nmpc::Solution, nmpc::Solution> result;
@@ -58,28 +127,24 @@ void ControllerServer::nmpcLoop()
         const auto end = std::chrono::high_resolution_clock::now();
         const long duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
 
-        std::queue<nmpc_test::State> cmds_queue;
-        nmpc_test::State cmd;
+        std::queue<adaptive_control_msg::ForkliftState> cmds_queue;
+        adaptive_control_msg::ForkliftState cmd;
 
-        cmd.set_drive_velocity(result.first.front()[0]);
-        cmd.set_steer_velocity(result.first.front()[1]);
-        mCmdsPublisher.Send(cmd);
-
-        nmpc_test::Path path_msg;
-        path_msg.mutable_poses()->Reserve(static_cast<int>(result.second.size()));
-        for (const auto& x : result.second)
+        const auto& us = result.first;
+        const auto& xs = result.second;
+        for (size_t i = 0; i < 2; ++i)
         {
-            nmpc_test::Pose pose;
-            pose.set_x(x[0]);
-            pose.set_y(x[1]);
-            pose.set_yaw(x[2]);
-            path_msg.add_poses()->CopyFrom(pose);
+            const auto& u = us[i];
+            cmd.set_drive_velocity(u[0]);
+            cmd.set_steer_velocity(u[1]);
+            cmds_queue.push(cmd);
+        } //
+        {
+            std::lock_guard<std::mutex> lock(mCmdsMutex);
+            mCmdsQueue.swap(cmds_queue);
         }
-        mPathPublisher.Send(path_msg);
 
-        // std::cout << "Goal: " << goal << std::endl;
         std::cout << "First control: " << result.first.front() << std::endl;
-        // std::cout << "Last state: " << result.second.back() << std::endl;
         std::printf("----------------- NMPC end, elapse: %ld ms -----------------\n", duration);
         std::printf("##############################################################\n");
     }

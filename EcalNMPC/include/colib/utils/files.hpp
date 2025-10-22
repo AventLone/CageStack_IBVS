@@ -1,14 +1,17 @@
-#include "colib/ControllerServer.h"
+#pragma once
+#include "colib/kinematics.hpp"
 #include <yaml-cpp/yaml.h>
 
-nmpc::Params readYaml(const std::string& file_path)
+namespace nmpc
+{
+inline Params readYaml(const std::string& file_path)
 {
     static const auto getVar = [](const YAML::Node& yaml_node, const char* key, auto& var) -> void
         {
             var = yaml_node[key].as<std::decay_t<decltype(var)>>();
         };
 
-    nmpc::Params params{};
+    Params params{};
 
     try
     {
@@ -42,6 +45,7 @@ nmpc::Params readYaml(const std::string& file_path)
 
     return params;
 }
+}
 
 inline std::ostream& operator<<(std::ostream& os, const nmpc::Params& p)
 {
@@ -52,25 +56,4 @@ inline std::ostream& operator<<(std::ostream& os, const nmpc::Params& p)
            << "\nmax_acc: " << p.max_acc << "\nmax_speed: " << p.max_speed
            << "\nmax_steer_speed: " << p.max_steer_speed << ", max_steer_angle: " << p.max_steer_angle
            << "\n--------------------------------------------------------";
-}
-
-int main(const int argc, char** argv)
-{
-    eCAL::Initialize(argc, argv, "Test NMPC", eCAL::Init::All | eCAL::Init::TimeSync);
-
-    std::cout << "master=" << eCAL::Time::IsMaster()
-            << " synced=" << eCAL::Time::IsSynchronized() << "\n";
-
-    const nmpc::Params nmpc_params = readYaml("/home/vn/Documents/MyDrawft/CageStack_IBVS/EcalNMPC/configs/nmpc.ymal");
-    std::cout << nmpc_params << std::endl;
-
-    ControllerServer nmpc_server(nmpc_params);
-
-    while (eCAL::Ok())
-    {
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
-    }
-    eCAL::Finalize();
-
-    return 0;
 }

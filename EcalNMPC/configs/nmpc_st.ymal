@@ -6,11 +6,16 @@ state_len: 4
 output_len: 4
 
 max_acc: 3.1415
-max_speed: 1.0
+max_speed: 2.0
 
-max_steer_speed: 0.66
-max_steer_angle: 0.786
-#max_steer_angle: 1.5854
+max_steer_speed: 0.5
+max_steer_angle: 1.14
+#max_steer_angle: 1.4
 
 wheel_base: 1.37231
 wheel_radius: 0.11
+
+# Weights
+weight_Q: [2.0, 5.0, 2.2, 0.1, 10.0]
+weight_F: [1.0e5, 1.0e5, 1.0e5, 1.0e5]
+weight_R: [0.1, 0.1]

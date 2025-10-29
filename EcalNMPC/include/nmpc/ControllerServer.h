@@ -1,5 +1,5 @@
 #pragma once
-#include "colib/kinematics.hpp"
+#include "nmpc/kinematics.hpp"
 #include <ecal/ecal.h>
 #include <ecal/msg/protobuf/publisher.h>
 #include <ecal/msg/protobuf/subscriber.h>

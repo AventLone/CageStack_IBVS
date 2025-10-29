@@ -16,6 +16,8 @@ struct Params
     /* Constraits */
     double max_acc, max_speed;
     double max_steer_speed, max_steer_angle;
+
+    std::vector<double> weight_Q, weight_F, weight_R;
 };
 
 using Solution = std::vector<std::vector<double>>;
@@ -32,16 +34,25 @@ public:
 
     void setGoalAndState(const std::vector<double>& goal, const std::vector<double>& state)
     {
-        assert(goal.size() == 3);
         mNLP.set_value(mGoal, goal);
         mNLP.set_value(mX0, state);
     }
 
     bool solve(std::pair<Solution, Solution>& result);
 
-    void setQ(const std::vector<double>& q = {666.6, 0.1, 0.1, 0.1})
+    void setWeightQ(const std::vector<double>& q)
     {
-        mQ = casadi::MX::eye(4) * q;
+        mNLP.set_value(mQ, q);
+    }
+
+    void setWeightF(const std::vector<double>& f)
+    {
+        mNLP.set_value(mF, f);
+    }
+
+    void setWeightR(const std::vector<double>& r)
+    {
+        mNLP.set_value(mR, r);
     }
 
 private:
@@ -77,20 +88,16 @@ Solver<Kinematics>::Solver(const Params& params) : mParams(params), kinematicFun
     mGoal = mNLP.parameter(3);
     mX0 = mNLP.parameter(mParams.state_len);
 
+    mQ = mNLP.parameter(5);
+    mF = mNLP.parameter(4);
+    mR = mNLP.parameter(2);
+
     mUs = mNLP.variable(mParams.input_len, mParams.horizon);
     mXs = mNLP.variable(mParams.state_len, mParams.horizon + 1);
 
-    // mF = casadi::MX::eye(4) * std::vector<double>{3.2, 300.7, 30.6, 3.2};
-    // mQ = casadi::MX::eye(4) * std::vector<double>{3.2, 300.7, 300.6, 3.2};
-    // mR = casadi::MX::eye(2) * std::vector<double>{0.01, 0.005};
-
-    // mF = casadi::MX::eye(3) * std::vector<double>{2.0 * 199.7, 2.0 * 199.7, 2.0 * 199.7};
-    // mQ = casadi::MX::eye(3) * std::vector<double>{3.2, 199.7, 39.7};
-    // mR = casadi::MX::eye(2) * std::vector<double>{0.1, 0.01};
-
-    mF = casadi::MX::eye(4) * std::vector<double>{666.6, 666.6, 666.6, 666.6};
-    mQ = casadi::MX::eye(4) * std::vector<double>{3.2, 7777.6, 66.6, 0.1};
-    mR = casadi::MX::eye(2) * std::vector<double>{1.0, 0.1};
+    setWeightQ(mParams.weight_Q);
+    setWeightF(mParams.weight_F);
+    setWeightR(mParams.weight_R);
 
     buildModel();
 }
@@ -122,7 +129,6 @@ void Solver<Kinematics>::buildModel()
     const auto v = mUs(0, casadi::Slice()); // Control variable: a [m/s]
     const auto w = mUs(1, casadi::Slice()); // Control variable: delta [rad]
 
-    const auto p_x = mXs(0, casadi::Slice()); // State variable: position.x [m]
     const auto steer_angle = mXs(3, casadi::Slice());
 
     /* Constraints */
@@ -130,7 +136,11 @@ void Solver<Kinematics>::buildModel()
     mNLP.subject_to(-mParams.max_speed <= v <= mParams.max_speed);
     mNLP.subject_to(-mParams.max_steer_speed <= w <= mParams.max_steer_speed);
     mNLP.subject_to(-mParams.max_steer_angle <= steer_angle <= mParams.max_steer_angle);
-    // mNLP.subject_to(p_x <= mGoal(0));
+
+    /* Weights */
+    const auto weight_Q = casadi::MX::diag(mQ);
+    const auto weight_F = casadi::MX::diag(mF);
+    const auto weight_R = casadi::MX::diag(mR);
 
     /* Objective function */
     casadi::MX J = casadi::MX::zeros(1, 1);
@@ -145,18 +155,22 @@ void Solver<Kinematics>::buildModel()
         auto dx = mGoal(0) - x_k(0);
         auto dy = mGoal(1) - x_k(1);
         auto th = x_k(2);
-        auto dv = 1.5 * dx - u_k(0);
+        auto dv = 15.0 * dx - u_k(0);
         auto e_x = casadi::MX::cos(th) * dx + casadi::MX::sin(th) * dy;
         auto e_y = -casadi::MX::sin(th) * dx + casadi::MX::cos(th) * dy;
-        // auto e_th = casadi::MX::atan2(casadi::MX::sin(mGoal(2) - th), casadi::MX::cos(mGoal(2) - th));
-        auto e_th = mGoal(2) - th;
+        auto e_th = casadi::MX::atan2(casadi::MX::sin(mGoal(2) - th), casadi::MX::cos(mGoal(2) - th));
+        auto s_penalty = casadi::MX::fmax(0.0, -dx);
+        auto mix = casadi::MX::fmax(0.0, u_k(0));
+
+        // auto e_th = mGoal(2) - th;
         // casadi::MX e_k = casadi::MX::vertcat({e_x, e_y, e_th, dv}); // Error vector
-        casadi::MX e_k = casadi::MX::vertcat({e_x, e_y, e_th, x_k(3)}); // Error vector
+        // casadi::MX e_k = casadi::MX::vertcat({e_x, e_y, e_th, x_k(3)}); // Error vector
         // casadi::MX e_k = casadi::MX::vertcat({e_x, e_y, e_th}); // Error vector
+        casadi::MX e_k = casadi::MX::vertcat({e_x, e_y, e_th, x_k(3), s_penalty}); // Error vector
 
         // 阶段代价
-        J += casadi::MX::mtimes(casadi::MX::mtimes(e_k.T(), mQ), e_k) + casadi::MX::mtimes(
-            casadi::MX::mtimes(u_k.T(), mR), u_k);
+        J += casadi::MX::mtimes(casadi::MX::mtimes(e_k.T(), weight_Q), e_k) + casadi::MX::mtimes(
+            casadi::MX::mtimes(u_k.T(), weight_R), u_k);
 
         // 运动学
         casadi::MX x_next = kinematicFunc(x_k, u_k);
@@ -180,7 +194,7 @@ void Solver<Kinematics>::buildModel()
         casadi::MX e_n = casadi::MX::vertcat({e_x, e_y, e_th, x_n(3)}); // Error vector
         // casadi::MX e_n = casadi::MX::vertcat({e_x, e_y, e_th}); // Error vector
 
-        J += casadi::MX::mtimes(casadi::MX::mtimes(e_n.T(), mF), e_n);
+        J += casadi::MX::mtimes(casadi::MX::mtimes(e_n.T(), weight_F), e_n);
     }
 
     mNLP.set_initial(mXs, casadi::DM::zeros(mParams.state_len, mParams.horizon + 1));

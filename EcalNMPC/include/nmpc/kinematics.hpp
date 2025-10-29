@@ -1,5 +1,5 @@
 #pragma once
-#include "colib/nmpc_solver.hpp"
+#include "nmpc/nmpc_solver.hpp"
 
 struct Bicycle
 {

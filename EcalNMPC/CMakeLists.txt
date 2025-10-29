@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(CommonLib VERSION 0.0.1 LANGUAGES CXX)
+project(nmpc VERSION 0.0.1 LANGUAGES CXX)
 
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
@@ -55,10 +55,7 @@ include_directories(${CMAKE_SOURCE_DIR}/include
 )
 
 file(GLOB_RECURSE CPP_SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/source/*.cpp)
-add_library(${PROJECT_NAME} ${CPP_SOURCE_FILES}
-    include/colib/kinematics.hpp
-    source/ControllerServer.cpp
-    include/colib/ControllerServer.h)
+add_library(${PROJECT_NAME} ${CPP_SOURCE_FILES})
 
 target_compile_features(${PROJECT_NAME} PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 target_include_directories(${PROJECT_NAME} PUBLIC

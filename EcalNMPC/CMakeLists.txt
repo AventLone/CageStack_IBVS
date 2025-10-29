@@ -16,17 +16,14 @@ elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
     # add_compile_options(-O2)
     # set(CMAKE_CXX_FLAG "-O2")
     set(CMAKE_CXX_FLAG "-O3")
-    set(CMAKE_CUDA_FLAGS "-O2")  # 确保只有一个优化等级
 elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
     message(STATUS "Build type is RelWithDebInfo")
     # add_compile_options(-O1)
     set(CMAKE_CXX_FLAG "-O1")
-    set(CMAKE_CUDA_FLAGS "-O1")  # 确保只有一个优化等级
 elseif (CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
     message(STATUS "Build type is MinSizeRel")
     # add_compile_options(-Os)
     set(CMAKE_CXX_FLAG "-Os")
-    set(CMAKE_CUDA_FLAGS "-Os")  # 确保只有一个优化等级
 else ()
     message(STATUS "Unknown build type: ${CMAKE_BUILD_TYPE}")
 endif ()
@@ -44,15 +41,9 @@ target_include_directories(my_proto_msgs PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 target_link_libraries(my_proto_msgs PUBLIC protobuf::libprotobuf)
 ######################################################
 
-
 find_package(casadi QUIET CONFIG)
 find_package(yaml-cpp REQUIRED)
-find_package(Eigen3 REQUIRED)
 find_package(eCAL REQUIRED)
-
-include_directories(${CMAKE_SOURCE_DIR}/include
-    ${EIGEN3_INCLUDE_DIRS}
-)
 
 file(GLOB_RECURSE CPP_SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/source/*.cpp)
 add_library(${PROJECT_NAME} ${CPP_SOURCE_FILES})
@@ -61,7 +52,6 @@ target_compile_features(${PROJECT_NAME} PUBLIC c_std_99 cxx_std_17)  # Require C
 target_include_directories(${PROJECT_NAME} PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
-    ${EIGEN3_INCLUDE_DIRS}
 )
 target_link_libraries(${PROJECT_NAME}
     casadi::casadi
@@ -71,4 +61,4 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 #enable_testing()
-add_subdirectory(tests)
+add_subdirectory(apps)

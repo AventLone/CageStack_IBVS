@@ -21,7 +21,7 @@ message ForkPose
     double cr = 8;
 }
 
-message ForkliftState 
+message ForkliftState
 {
     uint64 timestamp = 1;
     double drive_velocity = 2;
@@ -29,6 +29,15 @@ message ForkliftState
     double steer_angle = 4;
     Pose2D pose = 5;
     ForkPose fork_pose = 6;
+}
+
+message ControlCmd
+{
+    bool finished = 1;
+    uint64 timestamp = 2;
+    double drive_velocity = 3;
+    double steer_velocity = 4;
+    ForkPose fork_pose = 5;
 }
 
 message ControlRequest

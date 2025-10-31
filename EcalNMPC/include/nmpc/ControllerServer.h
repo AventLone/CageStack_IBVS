@@ -35,7 +35,7 @@ private:
     eCAL::CTimer mTimer;
     eCAL::CServiceServer mServer;
     eCAL::protobuf::CSubscriber<adaptive_control_msg::ForkliftState> mGoalSubscriber;
-    eCAL::protobuf::CPublisher<adaptive_control_msg::ForkliftState> mCmdsPublisher;
+    eCAL::protobuf::CPublisher<adaptive_control_msg::ControlCmd> mCmdsPublisher;
 
     std::thread mControllerThread;
     bool mIsTriggered{false};

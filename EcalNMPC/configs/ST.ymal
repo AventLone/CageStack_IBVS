@@ -16,6 +16,6 @@ wheel_base: 1.37231
 wheel_radius: 0.11
 
 # Weights
-weight_Q: [2.0, 5.0, 2.2, 0.1, 10.0]
-weight_F: [1.0e5, 1.0e5, 1.0e5, 1.0e5]
-weight_R: [0.1, 0.1]
+weight_Q: [2.0, 3.0, 2.0, 0.1, 1.0e3]
+weight_F: [1.0e6, 1.0e6, 1.0e6, 1.0e6]
+weight_R: [0.2, 0.1]

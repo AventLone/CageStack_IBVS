@@ -42,6 +42,7 @@ target_link_libraries(my_proto_msgs PUBLIC protobuf::libprotobuf)
 ######################################################
 
 find_package(casadi QUIET CONFIG)
+find_package(Eigen3 REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(eCAL REQUIRED)
 
@@ -55,6 +56,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 )
 target_link_libraries(${PROJECT_NAME}
     casadi::casadi
+    Eigen3::Eigen
     yaml-cpp
     eCAL::core
     my_proto_msgs

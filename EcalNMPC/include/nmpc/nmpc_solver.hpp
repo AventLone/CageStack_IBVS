@@ -55,6 +55,28 @@ public:
         mNLP.set_value(mR, r);
     }
 
+    void resetWeightQ()
+    {
+        setWeightQ(mParams.weight_Q);
+    }
+
+    void resetWeightF()
+    {
+        setWeightF(mParams.weight_F);
+    }
+
+    void resetWeightR()
+    {
+        setWeightR(mParams.weight_R);
+    }
+
+    void resetWeights()
+    {
+        resetWeightQ();
+        resetWeightF();
+        resetWeightR();
+    }
+
 private:
     const Params mParams;
 
@@ -89,7 +111,7 @@ Solver<Kinematics>::Solver(const Params& params) : mParams(params), kinematicFun
     mX0 = mNLP.parameter(mParams.state_len);
 
     mQ = mNLP.parameter(5);
-    mF = mNLP.parameter(4);
+    mF = mNLP.parameter(5);
     mR = mNLP.parameter(2);
 
     mUs = mNLP.variable(mParams.input_len, mParams.horizon);
@@ -166,7 +188,8 @@ void Solver<Kinematics>::buildModel()
         // casadi::MX e_k = casadi::MX::vertcat({e_x, e_y, e_th, dv}); // Error vector
         // casadi::MX e_k = casadi::MX::vertcat({e_x, e_y, e_th, x_k(3)}); // Error vector
         // casadi::MX e_k = casadi::MX::vertcat({e_x, e_y, e_th}); // Error vector
-        casadi::MX e_k = casadi::MX::vertcat({e_x, e_y, e_th, x_k(3), s_penalty}); // Error vector
+        casadi::MX e_k = casadi::MX::vertcat({e_x, e_y, e_th, x_k(3), mix * s_penalty}); // Error vector
+        // casadi::MX e_k = casadi::MX::vertcat({e_x, e_y, e_th, x_k(3), dv}); // Error vector
 
         // 阶段代价
         J += casadi::MX::mtimes(casadi::MX::mtimes(e_k.T(), weight_Q), e_k) + casadi::MX::mtimes(
@@ -191,7 +214,8 @@ void Solver<Kinematics>::buildModel()
         // casadi::MX e_th = casadi::MX::atan2(casadi::MX::sin(mGoal(2) - th), casadi::MX::cos(mGoal(2) - th));
         auto e_th = mGoal(2) - th;
         // casadi::MX e_n = casadi::MX::vertcat({e_x, e_y, e_th, dv}); // Error vector
-        casadi::MX e_n = casadi::MX::vertcat({e_x, e_y, e_th, x_n(3)}); // Error vector
+        // casadi::MX e_n = casadi::MX::vertcat({e_x, e_y, e_th, x_n(3)}); // Error vector
+        casadi::MX e_n = casadi::MX::vertcat({e_x, e_y, e_th, x_n(3), dv}); // Error vector
         // casadi::MX e_n = casadi::MX::vertcat({e_x, e_y, e_th}); // Error vector
 
         J += casadi::MX::mtimes(casadi::MX::mtimes(e_n.T(), weight_F), e_n);

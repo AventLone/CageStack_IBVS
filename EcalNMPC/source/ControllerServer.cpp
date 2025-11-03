@@ -1,4 +1,5 @@
 #include "nmpc/ControllerServer.h"
+#include <Eigen/Geometry>
 
 static void printPath(const nmpc::Solution& path)
 {
@@ -25,6 +26,8 @@ ControllerServer::ControllerServer(const nmpc::Params& params) : mNmpcParams(par
                                                                      const std::string& request_bytes,
                                                                      std::string& response_bytes)-> int
                                   {
+                                      mController.resetWeights();
+
                                       adaptive_control_msg::ControlRequest request;
                                       request.ParseFromString(request_bytes);
                                       if (request.wake_up())
@@ -72,8 +75,9 @@ void ControllerServer::nmpcLoop()
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
-    bool stage2 = false;
-    bool stage3 = false;
+    uint16_t stable_count = 0;
+    bool stage2 = false; // Goal before fork-in
+    bool stage3 = false; // Check if fork height reached goal
     adaptive_control_msg::ForkliftState goal_state_msg;
     while (eCAL::Ok())
     {
@@ -88,28 +92,45 @@ void ControllerServer::nmpcLoop()
             continue;
         }
 
-        auto goal = getGoal(goal_state_msg);
+        std::vector<double> goal = getGoal(goal_state_msg);
         const double steer_angle = goal_state_msg.steer_angle();
         const double fork_z = goal_state_msg.fork_pose().z();
 
-        if (std::abs(goal[1]) < 0.005 && std::abs(goal[2]) < 0.006 && steer_angle < 0.006)
+        if (std::abs(goal[1]) < 0.005 && std::abs(goal[2]) < 0.006 && steer_angle < 0.005)
         {
-            if (!stage2)
+            ++stable_count;
+            if (!stage2 && stable_count >= 10)
             {
                 stage2 = true;
+                std::cout << "Stage2!" << std::endl;
                 mController.setWeightQ({1.0e3, 0.0, 0.0, 1.0e3, 0.0});
-                mController.setWeightF({1.0e3, 0.0, 0.0, 1.0e3});
+                mController.setWeightF({1.0e3, 0.0, 0.0, 1.0e3, 0.0});
+            }
+
+            if (!stage2)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
         }
 
+        // Eigen::Isometry2d transform_goal(Eigen::Isometry2d::Identity()), transform_goal_offset(Eigen::Isometry2d::Identity());
+        // transform_goal.rotate(Eigen::Rotation2Dd(goal[2]));
+        // transform_goal.translate(Eigen::Vector2d(goal[0], goal[1]));
+
         if (!stage2)
         {
-            goal[0] -= 1.5;
+            goal[0] -= 1.6;
+            // transform_goal_offset.translate(Eigen::Vector2d(-1.5, 0));
         }
         else
         {
-            goal[0] += 0.3;
+            goal[0] += 0.4;
+            // transform_goal_offset.translate(Eigen::Vector2d(0.4, 0));
         }
+        // Eigen::Isometry2d transform_stage2_goal = transform_goal * transform_goal_offset;
+        //
+        // goal[0] = transform_stage2_goal.translation()[0];
+        // goal[1] = transform_stage2_goal.translation()[1];
 
         adaptive_control_msg::ControlCmd cmd;
         if (stage2 && goal[0] <= 0.01)
@@ -132,12 +153,16 @@ void ControllerServer::nmpcLoop()
                 mCmdsPublisher.Send(cmd);
                 stage2 = false;
                 stage3 = false;
+                stable_count = 0;
+                mController.resetWeights();
+                std::cout << "Task done." << std::endl;
+
                 std::lock_guard<std::mutex> lock(mTriggerMutex);
                 mIsTriggered = false;
             }
-            std::cout << "Task done." << std::endl;
             continue;
         }
+
         std::cout << "--------------------- NMPC begin ---------------------" << std::endl;
         std::cout << "Goal: x " << goal[0] << ", y " << goal[1] << ", yaw " << goal[2] << std::endl;
         mController.setGoalAndState(goal, {0.0, 0.0, 0.0, steer_angle});
@@ -164,24 +189,11 @@ void ControllerServer::nmpcLoop()
         mCmdsPublisher.Send(cmd);
 
         const auto& xs = result.second;
-        // for (size_t i = 0; i < 2; ++i)
-        // {
-        //     const auto& u = us[i];
-        //     cmd.set_drive_velocity(u[0]);
-        //     cmd.set_steer_velocity(u[1]);
-        //     cmds_queue.push(cmd);
-        // } //
-        // {
-        //     std::lock_guard<std::mutex> lock(mCmdsMutex);
-        //     mCmdsQueue.swap(cmds_queue);
-        // }
 
         std::cout << "First control: " << u << std::endl;
         // std::cout << "Path: " << std::endl;
         // printPath(xs);
         std::printf("----------------- NMPC end, elapse: %ld ms -----------------\n", duration);
         std::printf("##############################################################\n");
-        // break;
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
 }

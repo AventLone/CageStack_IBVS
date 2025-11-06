@@ -9,7 +9,6 @@ int main(const int argc, char** argv)
     std::cout << nmpc_params << std::endl;
 
     ControllerServer controller_server_st(nmpc_params);
-
     while (eCAL::Ok())
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(20));

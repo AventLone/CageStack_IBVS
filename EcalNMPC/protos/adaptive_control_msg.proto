@@ -37,7 +37,8 @@ message ControlCmd
     uint64 timestamp = 2;
     double drive_velocity = 3;
     double steer_velocity = 4;
-    ForkPose fork_pose = 5;
+    double steer_angle = 5;
+    ForkPose fork_pose = 6;
 }
 
 message ControlRequest

@@ -13,7 +13,7 @@
 class ControllerServer
 {
 public:
-    explicit ControllerServer(const nmpc::Params& parmas);
+    explicit ControllerServer(nmpc::Params parmas);
 
     ~ControllerServer()
     {
@@ -27,9 +27,23 @@ public:
     }
 
 private:
+    struct
+    {
+        bool stage1, stage2, stage3;
+
+        void reset() noexcept
+        {
+            stage1 = false;
+            stage2 = false;
+            stage3 = false;
+        }
+    } mStageFlags{};
+
+
     nmpc::Params mNmpcParams;
     ControllerBicycle mController;
 
+    std::queue<adaptive_control_msg::ForkliftState> mForkliftStateQueue;
     std::queue<adaptive_control_msg::ForkliftState> mCmdsQueue;
 
     eCAL::CTimer mTimer;
@@ -45,6 +59,26 @@ private:
 
     void nmpcLoop();
 
+    bool getForkliftState(std::vector<double>& goal, double& steer_angle, double& fork_z)
+    {
+        adaptive_control_msg::ForkliftState forklift_state; //
+        {
+            std::lock_guard<std::mutex> lock(mGoalMutex);
+            if (mForkliftStateQueue.empty())
+            {
+                return false;
+            }
+            forklift_state = std::move(mForkliftStateQueue.front());
+            mForkliftStateQueue.pop();
+        }
+
+        goal = std::vector<double>{forklift_state.pose().x(), forklift_state.pose().y(), forklift_state.pose().yaw()};
+        steer_angle = forklift_state.steer_angle();
+        fork_z = forklift_state.fork_pose().z();
+
+        return true;
+    }
+
     bool getCmd(adaptive_control_msg::ForkliftState& cmd)
     {
         std::lock_guard<std::mutex> lock(mCmdsMutex);
@@ -52,7 +86,7 @@ private:
         {
             return false;
         }
-        cmd = mCmdsQueue.front();
+        cmd = std::move(mCmdsQueue.front());
         mCmdsQueue.pop();
         return true;
     }

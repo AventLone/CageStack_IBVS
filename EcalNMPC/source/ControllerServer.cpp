@@ -1,5 +1,6 @@
 #include "nmpc/ControllerServer.h"
 #include <Eigen/Geometry>
+#include <utility>
 
 static void printPath(const nmpc::Solution& path)
 {
@@ -9,17 +10,29 @@ static void printPath(const nmpc::Solution& path)
     }
 }
 
-ControllerServer::ControllerServer(const nmpc::Params& params) : mNmpcParams(params),
-                                                                 mController(mNmpcParams),
-                                                                 mServer("forklift/adaptive_control_trigger"),
-                                                                 mGoalSubscriber("forklift/goal"),
-                                                                 mCmdsPublisher("forklift/cmds")
+ControllerServer::ControllerServer(nmpc::Params params) : mNmpcParams(std::move(params)),
+                                                          mController(mNmpcParams),
+                                                          mServer("forklift/adaptive_control_trigger"),
+                                                          mGoalSubscriber("forklift/goal"),
+                                                          mCmdsPublisher("forklift/cmds")
 {
     if (!eCAL::IsInitialized())
     {
         std::cerr << "eCAL is not initialized!" << std::endl;
         std::exit(EXIT_FAILURE);
     }
+
+    mGoalSubscriber.AddReceiveCallback([this](const char* topic_name, const adaptive_control_msg::ForkliftState& state_msg,
+                                              long long time_, long long clock_, long long id_)
+        {
+            std::lock_guard<std::mutex> lock(mGoalMutex);
+            mForkliftStateQueue.push(state_msg);
+            if (mForkliftStateQueue.size() > 1)
+            {
+                mForkliftStateQueue.pop();
+            }
+        });
+
     mServer.AddMethodCallback("wake", "protobuf", "protobuf", [this](const std::string& method_name,
                                                                      const std::string& req_type,
                                                                      const std::string& resp_type,
@@ -27,6 +40,7 @@ ControllerServer::ControllerServer(const nmpc::Params& params) : mNmpcParams(par
                                                                      std::string& response_bytes)-> int
                                   {
                                       mController.resetWeights();
+                                      mStageFlags.reset();
 
                                       adaptive_control_msg::ControlRequest request;
                                       request.ParseFromString(request_bytes);
@@ -64,20 +78,18 @@ ControllerServer::ControllerServer(const nmpc::Params& params) : mNmpcParams(par
 
 void ControllerServer::nmpcLoop()
 {
-    const auto getGoal = [](const adaptive_control_msg::ForkliftState& goal_state_msg) -> std::vector<double>
-        {
-            std::vector<double> goal{goal_state_msg.pose().x(), goal_state_msg.pose().y(), goal_state_msg.pose().yaw()};
-            return goal;
-        };
+    // const auto getGoal = [](const adaptive_control_msg::ForkliftState& goal_state_msg) -> std::vector<double>
+    //     {
+    //         std::vector<double> goal{goal_state_msg.pose().x(), goal_state_msg.pose().y(), goal_state_msg.pose().yaw()};
+    //         return goal;
+    //     };
 
     while (eCAL::Ok() && !mGoalSubscriber.IsCreated())
     {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
     uint16_t stable_count = 0;
-    bool stage2 = false; // Goal before fork-in
-    bool stage3 = false; // Check if fork height reached goal
     adaptive_control_msg::ForkliftState goal_state_msg;
     while (eCAL::Ok())
     {
@@ -86,30 +98,55 @@ void ControllerServer::nmpcLoop()
             mTriggerEvent.wait(lock, [this]() -> bool { return mIsTriggered; });
         }
 
-        if (!mGoalSubscriber.Receive(goal_state_msg))
+        // if (!mGoalSubscriber.Receive(goal_state_msg))
+        // {
+        //     std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        //     continue;
+        // }
+        //
+        // std::vector<double> goal = getGoal(goal_state_msg);
+        // const double steer_angle = goal_state_msg.steer_angle();
+        // const double fork_z = goal_state_msg.fork_pose().z();
+        std::vector<double> goal;
+        double steer_angle, fork_z;
+        if (!getForkliftState(goal, steer_angle, fork_z))
         {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
             continue;
         }
 
-        std::vector<double> goal = getGoal(goal_state_msg);
-        const double steer_angle = goal_state_msg.steer_angle();
-        const double fork_z = goal_state_msg.fork_pose().z();
-
-        if (std::abs(goal[1]) < 0.005 && std::abs(goal[2]) < 0.006 && steer_angle < 0.005)
+        adaptive_control_msg::ControlCmd cmd;
+        if (std::abs(goal[1]) <= 0.03 && std::abs(goal[2]) <= 0.006)
         {
             ++stable_count;
-            if (!stage2 && stable_count >= 10)
+            if (!mStageFlags.stage1 && stable_count >= 10)
             {
-                stage2 = true;
+                mStageFlags.stage1 = true;
                 std::cout << "Stage2!" << std::endl;
-                mController.setWeightQ({1.0e3, 0.0, 0.0, 1.0e3, 0.0});
-                mController.setWeightF({1.0e3, 0.0, 0.0, 1.0e3, 0.0});
             }
-
-            if (!stage2)
+            if (!mStageFlags.stage1)
             {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                continue;
+            }
+        }
+        else
+        {
+            stable_count = 0;
+        }
+
+        if (mStageFlags.stage1 && !mStageFlags.stage2)
+        {
+            if (steer_angle <= 0.001)
+            {
+                mStageFlags.stage2 = true;
+            }
+            else
+            {
+                cmd.set_drive_velocity(0.0);
+                cmd.set_steer_angle(0.0);
+                mCmdsPublisher.Send(cmd);
+                continue;
             }
         }
 
@@ -117,9 +154,9 @@ void ControllerServer::nmpcLoop()
         // transform_goal.rotate(Eigen::Rotation2Dd(goal[2]));
         // transform_goal.translate(Eigen::Vector2d(goal[0], goal[1]));
 
-        if (!stage2)
+        if (!mStageFlags.stage1)
         {
-            goal[0] -= 1.6;
+            goal[0] -= 1.5;
             // transform_goal_offset.translate(Eigen::Vector2d(-1.5, 0));
         }
         else
@@ -132,27 +169,26 @@ void ControllerServer::nmpcLoop()
         // goal[0] = transform_stage2_goal.translation()[0];
         // goal[1] = transform_stage2_goal.translation()[1];
 
-        adaptive_control_msg::ControlCmd cmd;
-        if (stage2 && goal[0] <= 0.01)
+
+        if (mStageFlags.stage1 && goal[0] <= 0.02)
         {
             auto* fork_cmd = new adaptive_control_msg::ForkPose;
             fork_cmd->set_z(0.2);
             cmd.set_allocated_fork_pose(fork_cmd);
             mCmdsPublisher.Send(cmd);
-            if (!stage3)
+            if (!mStageFlags.stage3)
             {
-                stage3 = true;
+                mStageFlags.stage3 = true;
             }
         }
 
-        if (stage3)
+        if (mStageFlags.stage3)
         {
             if (std::abs(fork_z - 0.2) < 0.01)
             {
                 cmd.set_finished(true);
                 mCmdsPublisher.Send(cmd);
-                stage2 = false;
-                stage3 = false;
+                mStageFlags.reset();
                 stable_count = 0;
                 mController.resetWeights();
                 std::cout << "Task done." << std::endl;
@@ -179,12 +215,20 @@ void ControllerServer::nmpcLoop()
 
         std::queue<adaptive_control_msg::ForkliftState> cmds_queue;
 
-
         const auto& us = result.first;
         const auto& u = us.front();
 
         cmd.set_drive_velocity(-u[0]);
-        cmd.set_steer_velocity(u[1]);
+        if (!mStageFlags.stage2)
+        {
+            cmd.set_steer_angle(steer_angle);
+            cmd.set_steer_velocity(u[1]);
+        }
+        else
+        {
+            cmd.set_steer_angle(0.0);
+            cmd.set_steer_velocity(0.0);
+        }
 
         mCmdsPublisher.Send(cmd);
 
@@ -195,5 +239,6 @@ void ControllerServer::nmpcLoop()
         // printPath(xs);
         std::printf("----------------- NMPC end, elapse: %ld ms -----------------\n", duration);
         std::printf("##############################################################\n");
+        // break;
     }
 }

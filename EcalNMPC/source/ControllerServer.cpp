@@ -1,4 +1,5 @@
 #include "nmpc/ControllerServer.h"
+#include "nmpc/utils/debug_block.hpp"
 #include <Eigen/Geometry>
 #include <utility>
 
@@ -23,7 +24,7 @@ ControllerServer::ControllerServer(nmpc::Params params) : mNmpcParams(std::move(
     }
 
     mGoalSubscriber.AddReceiveCallback([this](const char* topic_name, const adaptive_control_msg::ForkliftState& state_msg,
-                                              long long time_, long long clock_, long long id_)
+                                              long long time, long long clock, long long id)
         {
             std::lock_guard<std::mutex> lock(mGoalMutex);
             mForkliftStateQueue.push(state_msg);
@@ -73,17 +74,11 @@ ControllerServer::ControllerServer(nmpc::Params params) : mNmpcParams(std::move(
     //                  });
 
     mControllerThread = std::thread(&ControllerServer::nmpcLoop, this);
-    std::cout << "Controller server start." << std::endl;
+    std::cout << "NMPC server start." << std::endl;
 }
 
 void ControllerServer::nmpcLoop()
 {
-    // const auto getGoal = [](const adaptive_control_msg::ForkliftState& goal_state_msg) -> std::vector<double>
-    //     {
-    //         std::vector<double> goal{goal_state_msg.pose().x(), goal_state_msg.pose().y(), goal_state_msg.pose().yaw()};
-    //         return goal;
-    //     };
-
     while (eCAL::Ok() && !mGoalSubscriber.IsCreated())
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -98,15 +93,6 @@ void ControllerServer::nmpcLoop()
             mTriggerEvent.wait(lock, [this]() -> bool { return mIsTriggered; });
         }
 
-        // if (!mGoalSubscriber.Receive(goal_state_msg))
-        // {
-        //     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        //     continue;
-        // }
-        //
-        // std::vector<double> goal = getGoal(goal_state_msg);
-        // const double steer_angle = goal_state_msg.steer_angle();
-        // const double fork_z = goal_state_msg.fork_pose().z();
         std::vector<double> goal;
         double steer_angle, fork_z;
         if (!getForkliftState(goal, steer_angle, fork_z))
@@ -122,7 +108,10 @@ void ControllerServer::nmpcLoop()
             if (!mStageFlags.stage1 && stable_count >= 10)
             {
                 mStageFlags.stage1 = true;
-                std::cout << "Stage2!" << std::endl;
+                debugBlock([]()-> void
+                    {
+                        std::cout << "Stage2!" << std::endl;
+                    });
             }
             if (!mStageFlags.stage1)
             {
@@ -191,7 +180,7 @@ void ControllerServer::nmpcLoop()
                 mStageFlags.reset();
                 stable_count = 0;
                 mController.resetWeights();
-                std::cout << "Task done." << std::endl;
+                std::cout << "[NMPC server] Task done." << std::endl;
 
                 std::lock_guard<std::mutex> lock(mTriggerMutex);
                 mIsTriggered = false;
@@ -199,8 +188,12 @@ void ControllerServer::nmpcLoop()
             continue;
         }
 
-        std::cout << "--------------------- NMPC begin ---------------------" << std::endl;
-        std::cout << "Goal: x " << goal[0] << ", y " << goal[1] << ", yaw " << goal[2] << std::endl;
+        debugBlock([&goal]()-> void
+            {
+                std::cout << "--------------------- NMPC begin ---------------------" << std::endl;
+                std::cout << "Goal: x " << goal[0] << ", y " << goal[1] << ", yaw " << goal[2] << std::endl;
+            });
+
         mController.setGoalAndState(goal, {0.0, 0.0, 0.0, steer_angle});
 
         const auto begin = std::chrono::high_resolution_clock::now();
@@ -233,12 +226,16 @@ void ControllerServer::nmpcLoop()
         mCmdsPublisher.Send(cmd);
 
         const auto& xs = result.second;
+        debugBlock([&u, duration]()-> void
+            {
+                std::cout << "First control: " << u << std::endl;
+                // std::cout << "Path: " << std::endl;
+                // printPath(xs);
+                std::printf("----------------- NMPC end, elapse: %ld ms -----------------\n", duration);
+                std::printf("##############################################################\n");
+            });
 
-        std::cout << "First control: " << u << std::endl;
-        // std::cout << "Path: " << std::endl;
-        // printPath(xs);
-        std::printf("----------------- NMPC end, elapse: %ld ms -----------------\n", duration);
-        std::printf("##############################################################\n");
+
         // break;
     }
 }

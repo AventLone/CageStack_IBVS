@@ -10,7 +10,7 @@ from isaacsim.core.utils.extensions import enable_extension
 enable_extension("isaacsim.ros2.bridge")   # enable ROS2 bridge extension
 simulation_app.update()
 
-import asyncio, time
+import asyncio, time, threading, sys
 from itertools import chain
 import numpy as np
 from isaacsim.core.api import World
@@ -20,6 +20,7 @@ from utils.common import SimTimer
 from isaacsim.sensors.rtx.impl import LidarRtx
 from isaacsim.sensors.camera.camera import Camera
 from omni.kit.async_engine import run_coroutine
+from concurrent.futures import ThreadPoolExecutor, Future, ProcessPoolExecutor
 
 
 class SensorSet:
@@ -67,6 +68,7 @@ class Test(Node):
         self._sensors = SensorSet()
 
         self._simu_timer = SimTimer(self._world)
+        self._executor = ProcessPoolExecutor(max_workers=3)  # 程序全局创建一次
 
         self._fork_rgb_pub = self.create_publisher(msg_type=sensor_msgs.msg.Image, topic="fork_rgb", qos_profile=2)
         self._fork_depth_pub = self.create_publisher(msg_type=sensor_msgs.msg.Image, topic="fork_depth", qos_profile=2)
@@ -90,6 +92,8 @@ class Test(Node):
                                                           qos_profile=2)
 
     async def _pub_images(self):
+        pub_period = 0.02
+        next_time = time.perf_counter() + pub_period
 
         def process_image(arr: np.ndarray, encoding="rgb8", scale=None):
             if scale is not None:
@@ -121,12 +125,45 @@ class Test(Node):
 
             timestamp = self.get_clock().now().to_msg()
 
+            begin = time.time()
+            
+            # sub_task = list() # Offload CPU-heavy processing to executor
+
+            # sub_task.append(event_loop.run_in_executor(
+            #     self._executor, lambda:(
+            #         process_image(rgb_imgs[0]),
+            #         process_image(rgb_imgs[1]),
+            #         process_image(rgb_imgs[2])
+            #     )
+            # ))
+
+            # sub_task.append(event_loop.run_in_executor(
+            #     self._executor, lambda: (
+            #         process_image(depth_imgs[0], "mono16", 1000),
+            #         process_image(depth_imgs[1], "mono16", 1000),
+            #         process_image(depth_imgs[2], "mono16", 1000)
+            #     )
+            # ))
+
+            # sub_task.append(event_loop.run_in_executor(
+            #     self._executor, lambda: (
+            #         process_image(semantics[0]["data"].astype(np.uint8), "mono8"),
+            #         process_image(semantics[1]["data"].astype(np.uint8), "mono8"),
+            #         process_image(semantics[2]["data"].astype(np.uint8), "mono8")
+            #     )
+            # ))
+
+            # rgb_msg_turple, depth_msg_tuple, semantic_msg_tuple = await asyncio.gather(*sub_task)
+
             rgb_msg_list, depth_msg_list, semantic_msg_list = list(), list(), list()
 
             for i in range(3):
                 rgb_msg_list.append(process_image(rgb_imgs[i]))
                 depth_msg_list.append(process_image(depth_imgs[i], "mono16", 1000))
                 semantic_msg_list.append(process_image(semantics[i]["data"].astype(np.uint8), "mono8"))
+
+
+            print(f"Semantic time elapse {time.time() - begin}")
 
             for msg in chain(rgb_msg_list, depth_msg_list, semantic_msg_list):
                 msg.header.stamp = timestamp
@@ -141,7 +178,10 @@ class Test(Node):
             self._left_semantics_pub.publish(semantic_msg_list[1])
             self._right_semantics_pub.publish(semantic_msg_list[2])
 
-            await asyncio.sleep(0.01)
+            now = time.perf_counter()
+            sleep_duration = next_time - now
+            await asyncio.sleep(max(sleep_duration, 0.001))
+            next_time += pub_period
 
 
     def _simulate(self):
@@ -158,6 +198,7 @@ class Test(Node):
         run_coroutine(self._pub_images())
         self._simulate()
         self.destroy_node()
+        self._executor.shutdown()
         simulation_app.close()
 
 

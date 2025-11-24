@@ -5,6 +5,7 @@
 #include <Eigen/Geometry>
 
 ImageProcess::ImageProcess() : rclcpp::Node("image_process"),
+                               mCloudProjector(View::TOP, 0.005f),
                                mForkCameraExtrinsics(Eigen::Isometry3f::Identity()),
                                mLeftCameraExtrinsics(Eigen::Isometry3f::Identity()),
                                mRightCameraExtrinsics(Eigen::Isometry3f::Identity())
@@ -58,6 +59,8 @@ void ImageProcess::imgsHandler(const ImgMsg::ConstSharedPtr& fork_semantics, con
     imgs->fork_depth = std::move(fork_depth_ptr->image);
     imgs->left_depth = std::move(left_depth_ptr->image);
     imgs->right_depth = std::move(right_depth_ptr->image);
+
+    // OrthographicProjector<pcl::PointXYZ> projector;
 
     std::lock_guard<std::mutex> lock(mImgsBufferMutex);
     mImgsBuffer.push(std::move(imgs));

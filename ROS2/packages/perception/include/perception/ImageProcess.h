@@ -9,6 +9,7 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <visualization_msgs/msg/marker.hpp>
+#include "perception/OrthographicProjector.hpp"
 
 class ImageProcess final : public rclcpp::Node
 {
@@ -21,7 +22,7 @@ class ImageProcess final : public rclcpp::Node
         cv::Mat fork_semantics, fork_depth, left_semantics, left_depth, right_semantics, right_depth;
     };
 
-
+    OrthographicProjector<pcl::PointXYZ> mCloudProjector;
     std::queue<ImageSet::Ptr> mImgsBuffer;
     std::queue<std::unique_ptr<CloudXYZ>> mTargetCloudBuffer;
     std::mutex mImgsBufferMutex, mTargeCloudBufferMutex;

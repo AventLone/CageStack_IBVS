@@ -10,9 +10,13 @@
 #include <pcl/point_types.h>
 #include <visualization_msgs/msg/marker.hpp>
 #include "perception/OrthographicProjector.hpp"
+#include "perception/types/point_cloud.h"
+#include "perception/concurrentqueue.h"
 
 class ImageProcess final : public rclcpp::Node
 {
+    template<class T>
+    using lockfree_queue = moodycamel::ConcurrentQueue<T>;
     using CloudXYZ = pcl::PointCloud<pcl::PointXYZ>;
     using CloudPtr = std::unique_ptr<CloudXYZ>;
 
@@ -23,9 +27,9 @@ class ImageProcess final : public rclcpp::Node
     };
 
     OrthographicProjector<pcl::PointXYZ> mCloudProjector;
-    std::queue<ImageSet::Ptr> mImgsBuffer;
-    std::queue<std::unique_ptr<CloudXYZ>> mTargetCloudBuffer;
-    std::mutex mImgsBufferMutex, mTargeCloudBufferMutex;
+
+    lockfree_queue<ImageSet::Ptr> mImgsBuffer{1024};
+    lockfree_queue<SemanticCloudPtr> mCloudBuffer{1024};
     std::thread mCloudPubLoopThread, mTargetPosePubLoopThread;
 
     Eigen::Isometry3f mForkCameraExtrinsics, mLeftCameraExtrinsics, mRightCameraExtrinsics;
@@ -68,36 +72,6 @@ private:
                      const ImgMsg::ConstSharedPtr& fork_depth,
                      const ImgMsg::ConstSharedPtr& left_depth,
                      const ImgMsg::ConstSharedPtr& right_depth);
-
-    ImageSet::Ptr getImgSet()
-    {
-        std::lock_guard<std::mutex> lock(mImgsBufferMutex);
-        if (mImgsBuffer.empty())
-        {
-            return nullptr;
-        }
-        ImageSet::Ptr img_set = std::move(mImgsBuffer.front());
-        mImgsBuffer.pop();
-        return img_set;
-    }
-
-    void pushTargetCloud(std::unique_ptr<CloudXYZ>&& cloud)
-    {
-        std::lock_guard<std::mutex> lock(mTargeCloudBufferMutex);
-        mTargetCloudBuffer.push(std::move(cloud));
-    }
-
-    std::unique_ptr<CloudXYZ> getTargetCloud()
-    {
-        std::lock_guard<std::mutex> lock(mTargeCloudBufferMutex);
-        if (mTargetCloudBuffer.empty())
-        {
-            return nullptr;
-        }
-        std::unique_ptr<CloudXYZ> target_cloud = std::move(mTargetCloudBuffer.front());
-        mTargetCloudBuffer.pop();
-        return target_cloud;
-    }
 
     void cloudPubLoop();
 

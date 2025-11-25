@@ -2,7 +2,11 @@
 #include <cv_bridge/cv_bridge.hpp>
 #include <pcl/common/transforms.h>
 #include <pcl_conversions/pcl_conversions.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <Eigen/Geometry>
+#include "perception/features_detect_2d.h"
+#include "perception/feature_detect_3d.hpp"
+#include "perception/filter.h"
 
 ImageProcess::ImageProcess() : rclcpp::Node("image_process"),
                                mCloudProjector(View::TOP, 0.005f),
@@ -37,6 +41,7 @@ ImageProcess::ImageProcess() : rclcpp::Node("image_process"),
     mRightCameraExtrinsics.pretranslate(Eigen::Vector3f(-0.4f, -0.6f, 1.0f));
 
     mCloudPubLoopThread = std::thread(&ImageProcess::cloudPubLoop, this);
+    mTargetPosePubLoopThread = std::thread(&ImageProcess::targetPosePubLoop, this);
     RCLCPP_INFO(get_logger(), "The node has been activated.");
 }
 
@@ -60,10 +65,9 @@ void ImageProcess::imgsHandler(const ImgMsg::ConstSharedPtr& fork_semantics, con
     imgs->left_depth = std::move(left_depth_ptr->image);
     imgs->right_depth = std::move(right_depth_ptr->image);
 
-    // OrthographicProjector<pcl::PointXYZ> projector;
-
-    std::lock_guard<std::mutex> lock(mImgsBufferMutex);
-    mImgsBuffer.push(std::move(imgs));
+    // std::lock_guard<std::mutex> lock(mImgsBufferMutex);
+    // mImgsBuffer.push(std::move(imgs));
+    mImgsBuffer.enqueue(std::move(imgs));
 }
 
 void ImageProcess::cloudPubLoop()
@@ -75,98 +79,118 @@ void ImageProcess::cloudPubLoop()
     constexpr float cx = 480.0f;
     constexpr float cy = 393.0f;
 
+    constexpr float depth_threshold = 10.0f;
+
+    bool has_logged = false;
+
     while (rclcpp::ok())
     {
-        // const auto begin_time = std::chrono::high_resolution_clock::now();
-        ImageSet::Ptr img_set = getImgSet();
-        if (img_set == nullptr)
+        ImageSet::Ptr img_set;
+        if (!mImgsBuffer.try_dequeue(img_set))
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             continue;
         }
 
-        img_set->fork_depth.setTo(0, img_set->fork_semantics != 3);
-        img_set->left_depth.setTo(0, img_set->left_semantics != 3);
-        img_set->right_depth.setTo(0, img_set->right_semantics != 2);
-
-        CloudXYZ target_cloud_on_fork, target_cloud_on_left, target_cloud_on_right;
-        for (int v = 0; v < img_set->fork_depth.rows; v += 6)
+        SemanticCloud target_cloud_on_fork, target_cloud_on_left, target_cloud_on_right;
+        for (int v = 0; v < img_set->fork_depth.rows; v += 25)
         {
             const uint16_t* target_on_fork = img_set->fork_depth.ptr<uint16_t>(v);
             const uint16_t* target_on_left = img_set->left_depth.ptr<uint16_t>(v);
             const uint16_t* target_on_right = img_set->right_depth.ptr<uint16_t>(v);
 
+            const uint8_t* labels_on_fork = img_set->fork_semantics.ptr<uint8_t>(v);
+            const uint8_t* labels_on_left = img_set->left_semantics.ptr<uint8_t>(v);
+            const uint8_t* labels_on_right = img_set->right_semantics.ptr<uint8_t>(v);
+
             for (int u = 0; u < img_set->fork_depth.cols; u += 6)
             {
                 if (target_on_fork[u] > 0)
                 {
-                    if (const float depth = static_cast<float>(target_on_fork[u]) * 1.0e-3f; depth < 10.0f)
+                    if (const float depth = static_cast<float>(target_on_fork[u]) * 1.0e-3f; depth < depth_threshold)
                     {
                         const float X = (static_cast<float>(u) - cx) * depth * fx_inv;
                         const float Y = (static_cast<float>(v) - cy) * depth * fy_inv;
-                        target_cloud_on_fork.emplace_back(depth, -X, -Y);
+                        const uint32_t label = labels_on_fork[u];
+                        SemanticPoint point{};
+                        point.x = depth;
+                        point.y = -X;
+                        point.z = -Y;
+                        point.label = label;
+                        target_cloud_on_fork.push_back(point);
                     }
                 }
 
                 if (target_on_left[u] > 0)
                 {
-                    if (const float depth = static_cast<float>(target_on_left[u]) * 1.0e-3f; depth < 10.0f)
+                    if (const float depth = static_cast<float>(target_on_left[u]) * 1.0e-3f; depth < depth_threshold)
                     {
                         const float X = (static_cast<float>(u) - cx) * depth * fx_inv;
                         const float Y = (static_cast<float>(v) - cy) * depth * fy_inv;
-                        target_cloud_on_left.emplace_back(depth, -X, -Y);
+                        const uint32_t label = labels_on_left[u];
+                        SemanticPoint point{};
+                        point.x = depth;
+                        point.y = -X;
+                        point.z = -Y;
+                        point.label = label;
+                        target_cloud_on_left.push_back(point);
                     }
                 }
 
                 if (target_on_right[u] > 0)
                 {
-                    if (const float depth = static_cast<float>(target_on_right[u]) * 1.0e-3f; depth < 10.0f)
+                    if (const float depth = static_cast<float>(target_on_right[u]) * 1.0e-3f; depth < depth_threshold)
                     {
                         const float X = (static_cast<float>(u) - cx) * depth * fx_inv;
                         const float Y = (static_cast<float>(v) - cy) * depth * fy_inv;
-                        target_cloud_on_right.emplace_back(depth, -X, -Y);
+                        const uint32_t label = labels_on_right[u];
+                        SemanticPoint point{};
+                        point.x = depth;
+                        point.y = -X;
+                        point.z = -Y;
+                        point.label = label;
+
+                        target_cloud_on_right.push_back(point);
                     }
                 }
             }
         }
 
-        auto cloud = std::make_unique<CloudXYZ>();
+        auto cloud = std::make_unique<SemanticCloud>();
 
         if (!target_cloud_on_fork.empty())
         {
-            CloudXYZ cloud_in_base;
+            SemanticCloud cloud_in_base;
             pcl::transformPointCloud(target_cloud_on_fork, cloud_in_base, mForkCameraExtrinsics);
             *cloud = std::move(cloud_in_base);
         }
 
         if (!target_cloud_on_left.empty())
         {
-            CloudXYZ cloud_in_base;
+            SemanticCloud cloud_in_base;
             pcl::transformPointCloud(target_cloud_on_left, cloud_in_base, mLeftCameraExtrinsics);
             *cloud += cloud_in_base;
         }
 
         if (!target_cloud_on_right.empty())
         {
-            CloudXYZ cloud_in_base;
+            SemanticCloud cloud_in_base;
             pcl::transformPointCloud(target_cloud_on_right, cloud_in_base, mRightCameraExtrinsics);
             *cloud += cloud_in_base;
         }
 
         if (!cloud->empty())
         {
+            pcl::PointCloud<pcl::PointXYZRGB> colored_cloud;
+            getCloud(*cloud, colored_cloud);
+
             sensor_msgs::msg::PointCloud2 cloud_msg;
-            pcl::toROSMsg(*cloud, cloud_msg);
-            pushTargetCloud(std::move(cloud));
+            pcl::toROSMsg(colored_cloud, cloud_msg);
+            mCloudBuffer.enqueue(std::move(cloud));
             cloud_msg.header.stamp = now();
             cloud_msg.header.frame_id = "map";
             mTargetCloudPub->publish(cloud_msg);
         }
-
-        // const auto elapse_time = std::chrono::duration_cast<std::chrono::milliseconds>(
-        //     std::chrono::high_resolution_clock::now() - begin_time).count();
-        //
-        // RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 1000, "Elapse: %ld.", elapse_time);
     }
 }
 
@@ -174,12 +198,56 @@ void ImageProcess::targetPosePubLoop()
 {
     while (rclcpp::ok())
     {
-        std::unique_ptr<CloudXYZ> target_cloud = getTargetCloud();
-        if (target_cloud == nullptr)
+        SemanticCloudPtr cloud;
+        if (!mCloudBuffer.try_dequeue(cloud))
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             continue;
         }
-        cv::Mat top_view;
+        pcl::PointCloud<pcl::PointXYZ> cage_posts_cloud;
+        getCloud(*cloud, 17, cage_posts_cloud);
+        Eigen::Vector4f centroid;
+        pcl::compute3DCentroid(cage_posts_cloud, centroid);
+        float angle = computeAngleByPCA(cage_posts_cloud);
+
+        const Eigen::Vector3f target_size = getCloudSize(cage_posts_cloud);
+
+        Eigen::Isometry2f T_1(Eigen::Isometry2f::Identity()), T_2(Eigen::Isometry2f::Identity());
+        T_1.rotate(angle);
+        T_1.pretranslate(centroid.head<2>());
+        T_2.translate(Eigen::Vector2f(0.5f * target_size[1], 0.0f));
+        Eigen::Isometry2f T_3 = T_1 * T_2;
+        const Eigen::Vector2f mark_position = T_3.translation();
+
+        visualization_msgs::msg::Marker target_marker_msg;
+        target_marker_msg.header.frame_id = "map"; // 或者 base_link/odom
+        target_marker_msg.header.stamp = this->now();
+        target_marker_msg.ns = "demo";
+        target_marker_msg.id = 0;
+        target_marker_msg.type = visualization_msgs::msg::Marker::CUBE;
+        target_marker_msg.action = visualization_msgs::msg::Marker::ADD;
+
+        // Cube 尺寸（米）
+        target_marker_msg.scale.x = target_size[1];
+        target_marker_msg.scale.y = target_size[1];
+        target_marker_msg.scale.z = target_size[2];
+
+        // 半透明颜色 (r,g,b,a)
+        target_marker_msg.color.r = 0.0f;
+        target_marker_msg.color.g = 1.0f;
+        target_marker_msg.color.b = 0.0f;
+        target_marker_msg.color.a = 0.8f; // alpha<1 表示半透明
+
+        tf2::Quaternion tf2_quat;
+        tf2_quat.setRPY(0.0, 0.0, angle);
+        geometry_msgs::msg::Quaternion geom_quat;
+        tf2::convert(tf2_quat, geom_quat);
+
+        target_marker_msg.pose.position.x = mark_position[0];
+        target_marker_msg.pose.position.y = mark_position[1];
+        target_marker_msg.pose.position.z = centroid[2];
+        target_marker_msg.pose.orientation = geom_quat;
+
+        mTargetBBoxPub->publish(target_marker_msg);
     }
 }

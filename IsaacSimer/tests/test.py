@@ -106,7 +106,7 @@ class Test(Node):
             return msg
 
         cameras = ["fork_camera", "left_camera", "right_camera"]
-
+        is_logged = False
         while simulation_app.is_running():
             rgb_imgs, depth_imgs, semantics = list(), list(), list()
 
@@ -140,6 +140,25 @@ class Test(Node):
             self._fork_semantics_pub.publish(semantic_msg_list[0])
             self._left_semantics_pub.publish(semantic_msg_list[1])
             self._right_semantics_pub.publish(semantic_msg_list[2])
+
+            if not is_logged:
+                fork_semantics_info: dict = semantics[0]["info"]["idToLabels"]
+                left_semantics_info: dict = semantics[1]["info"]["idToLabels"]
+                right_semantics_info: dict = semantics[2]["info"]["idToLabels"]
+
+                for key, value in fork_semantics_info.items():
+                    if value == {"class" : "target_cage_post"} or value == {"class" : "target_cage_crossbeam"}:
+                        print(f"fork {value} : {key}")
+
+                for key, value in left_semantics_info.items():
+                    if value == {"class" : "target_cage_post"}  or value == {"class" : "target_cage_crossbeam"}:
+                        print(f"left {value} : {key}")
+
+                for key, value in right_semantics_info.items():
+                    if value == {"class" : "target_cage_post"}  or value == {"class" : "target_cage_crossbeam"}:
+                        print(f"right {value} : {key}")
+
+                is_logged = True
 
             await asyncio.sleep(0.01)
 

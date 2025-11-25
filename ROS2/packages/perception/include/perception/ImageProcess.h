@@ -9,6 +9,7 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <visualization_msgs/msg/marker.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
 #include "perception/OrthographicProjector.hpp"
 #include "perception/types/point_cloud.h"
 #include "perception/concurrentqueue.h"
@@ -53,6 +54,7 @@ public:
 private:
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr mTargetCloudPub;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr mTargetBBoxPub;
+    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr mTargetPosePub;
 
     /*** Synchronized Subsribers ***/
     using ImgMsg = sensor_msgs::msg::Image;

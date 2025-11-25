@@ -30,6 +30,7 @@ ImageProcess::ImageProcess() : rclcpp::Node("image_process"),
 
     mTargetCloudPub = create_publisher<sensor_msgs::msg::PointCloud2>("cloud", rclcpp::SensorDataQoS().best_effort());
     mTargetBBoxPub = create_publisher<visualization_msgs::msg::Marker>("target_bbox", rclcpp::SensorDataQoS().best_effort());
+    mTargetPosePub = create_publisher<geometry_msgs::msg::PoseStamped>("target_pose", rclcpp::SensorDataQoS().reliable());
 
     mForkCameraExtrinsics.rotate(Eigen::AngleAxisf(M_PIf * 5.0f / 18.0f, Eigen::Vector3f::UnitY()));
     mForkCameraExtrinsics.pretranslate(Eigen::Vector3f(0.5f, 0.0f, 0.7f));
@@ -210,6 +211,20 @@ void ImageProcess::targetPosePubLoop()
         pcl::compute3DCentroid(cage_posts_cloud, centroid);
         float angle = computeAngleByPCA(cage_posts_cloud);
 
+        tf2::Quaternion tf2_quat;
+        tf2_quat.setRPY(0.0, 0.0, angle);
+        geometry_msgs::msg::Quaternion geom_quat;
+        tf2::convert(tf2_quat, geom_quat);
+
+        geometry_msgs::msg::PoseStamped target_pose;
+        target_pose.header.frame_id = "map";
+        target_pose.header.stamp = this->now();
+        target_pose.pose.position.x = centroid[0];
+        target_pose.pose.position.y = centroid[1];
+        target_pose.pose.position.z = centroid[2];
+        target_pose.pose.orientation = geom_quat;
+        mTargetPosePub->publish(target_pose);
+
         const Eigen::Vector3f target_size = getCloudSize(cage_posts_cloud);
 
         Eigen::Isometry2f T_1(Eigen::Isometry2f::Identity()), T_2(Eigen::Isometry2f::Identity());
@@ -237,11 +252,6 @@ void ImageProcess::targetPosePubLoop()
         target_marker_msg.color.g = 1.0f;
         target_marker_msg.color.b = 0.0f;
         target_marker_msg.color.a = 0.8f; // alpha<1 表示半透明
-
-        tf2::Quaternion tf2_quat;
-        tf2_quat.setRPY(0.0, 0.0, angle);
-        geometry_msgs::msg::Quaternion geom_quat;
-        tf2::convert(tf2_quat, geom_quat);
 
         target_marker_msg.pose.position.x = mark_position[0];
         target_marker_msg.pose.position.y = mark_position[1];

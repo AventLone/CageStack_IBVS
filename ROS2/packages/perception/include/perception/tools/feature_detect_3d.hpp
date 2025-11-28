@@ -57,3 +57,12 @@ float computeAngleByPCA(const pcl::PointCloud<PointT>& cloud)
 
     return std::atan2(normal[1], normal[0]);
 }
+
+template<class PointT>
+Eigen::Vector3f computeCenter(const pcl::PointCloud<PointT>& cloud)
+{
+    Eigen::Vector4f min_point, max_point;
+    pcl::getMinMax3D(cloud, min_point, max_point);
+
+    return 0.5f * (min_point.head<3>() + max_point.head<3>());
+}

@@ -1,5 +1,5 @@
 #pragma once
-#include "perception/types/point_cloud.h"
+#include "../types/common.hpp"
 
 void getCloud(const SemanticCloud& semantic_cloud, const uint32_t label, pcl::PointCloud<pcl::PointXYZ>& target_cloud);
 

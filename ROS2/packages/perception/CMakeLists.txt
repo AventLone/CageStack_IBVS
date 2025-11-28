@@ -17,7 +17,7 @@ find_package(OpenCV REQUIRED)
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies() # Automaticly find all the packages mentioned in 'package.xml'
 
-file(GLOB SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/source/*.cpp)
+file(GLOB_RECURSE SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/source/*.cpp)
 ament_auto_add_executable(perception ${SOURCE_FILES})
 target_include_directories(perception PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

@@ -29,7 +29,7 @@ class SensorSet:
         for name in ["left_camera", "right_camera", "fork_camera"]:
             if name == "fork_camera":
                 self._cameras[name] = Camera(
-                    prim_path=f"/World/E_car_finish/whole_fork/center_camera/SG3S_ISX031C_GMSL2F_H190XA_01",
+                    prim_path=f"/World/E_car_finish/body/center_camera/SG3S_ISX031C_GMSL2F_H190XA_01",
                     name=name,resolution=(960, 786))
             else:
                 self._cameras[name] = Camera(
@@ -53,7 +53,7 @@ class SensorSet:
 
 import rclpy
 from rclpy.node import Node
-import sensor_msgs.msg
+import sensor_msgs.msg, std_msgs.msg
 
 
 class Test(Node):
@@ -88,6 +88,18 @@ class Test(Node):
         self._right_semantics_pub = self.create_publisher(msg_type=sensor_msgs.msg.Image,
                                                           topic="right_semantics",
                                                           qos_profile=2)
+        
+        self._cmd_sub = self.create_subscription(msg_type=std_msgs.msg.Float32MultiArray, 
+                                                  topic="control_cmd",
+                                                  callback=self._cmd_handler,
+                                                  qos_profile=2)
+        
+    def _cmd_handler(self, cmd_msg: std_msgs.msg.Float32MultiArray):
+        drive_velocity = cmd_msg.data[0]
+        steer_velocity = cmd_msg.data[1]
+
+        self._forklift.move(drive_velocity)
+        self._forklift.steer(steer_velocity)
 
     async def _pub_images(self):
 

@@ -27,7 +27,7 @@ void CloudPublisher::imgsHandler(const ImgMsg::ConstSharedPtr& fork_semantics_ms
 
     SemanticCloud semantic_cloud_from_fork, semantic_cloud_from_left, semantic_cloud_from_right;
     RawCloud cage_posts_cloud;
-    for (int v = 0; v < fork_depth.rows; v += 3)
+    for (int v = 0; v < fork_depth.rows; v += 6)
     {
         const auto* target_on_fork = fork_depth.ptr<uint16_t>(v);
         const auto* target_on_left = left_depth.ptr<uint16_t>(v);
@@ -37,7 +37,7 @@ void CloudPublisher::imgsHandler(const ImgMsg::ConstSharedPtr& fork_semantics_ms
         const auto* labels_on_left = left_semantics.ptr<uint8_t>(v);
         const auto* labels_on_right = right_semantics.ptr<uint8_t>(v);
 
-        for (int u = 0; u < fork_depth.cols; u += 1)
+        for (int u = 0; u < fork_depth.cols; u += 3)
         {
             if (target_on_fork[u] > 0)
             {

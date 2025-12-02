@@ -2,6 +2,7 @@
 #include <casadi/casadi.hpp>
 #include <cassert>
 #include <utility>
+#include <std_msgs/msg/float32_multi_array.hpp>
 
 namespace nmpc
 {
@@ -21,6 +22,18 @@ struct Params
     std::vector<double> weight_Q, weight_F, weight_R;
 };
 
+inline std::ostream& operator<<(std::ostream& os, const Params& p)
+{
+    return os << "---------------------- NMPC Params ----------------------\n" <<
+           "horizon: " << p.horizon << ", dt: " << p.dt
+           << "\ninput_len: " << p.input_len << ", state_len: " << p.state_len << ", output_len: " << p.output_len
+           << "\nwheel_base: " << p.wheel_base << ", wheel_radius: " << p.wheel_radius
+           << "\nmax_acc: " << p.max_acc << "\nmax_speed: " << p.max_speed
+           << "\nmax_steer_speed: " << p.max_steer_speed << ", max_steer_angle: " << p.max_steer_angle
+           << "\nWeight_Q: " << p.weight_Q << "\nWeight_F: " << p.weight_F << "\nWeight_R: " << p.weight_R
+           << "\n--------------------------------------------------------";
+}
+
 using Solution = std::vector<std::vector<double>>;
 
 template<class Kinematics>
@@ -37,6 +50,12 @@ public:
     {
         mNLP.set_value(mGoal, goal);
         mNLP.set_value(mX0, state);
+    }
+
+    void setGoal(const std::vector<double>& goal)
+    {
+        mNLP.set_value(mGoal, goal);
+        mNLP.set_value(mX0, {0.0, 0.0, 0.0});
     }
 
     bool solve(std::pair<Solution, Solution>& result);
@@ -88,7 +107,7 @@ private:
     casadi::MX mUs; // Control Policy: a sequence of control vectors 控制序列
     casadi::MX mXs; // A sequence of state vectors 状态轨迹
 
-    Kinematics kinematicFunc;
+    const Kinematics kinematicFunc;
 
     void buildModel();
 
@@ -160,7 +179,6 @@ void Solver<Kinematics>::buildModel()
     mNLP.subject_to(-mParams.max_speed <= v <= mParams.max_speed);
     mNLP.subject_to(-mParams.max_steer_speed <= w <= mParams.max_steer_speed);
     mNLP.subject_to(-mParams.max_steer_angle <= steer_angle <= mParams.max_steer_angle);
-    // mNLP.subject_to(p_x <= mGoal(0) + 0.1);
 
     /* Weights */
     const auto weight_Q = casadi::MX::diag(mQ);

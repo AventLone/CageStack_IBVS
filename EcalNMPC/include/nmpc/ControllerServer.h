@@ -13,7 +13,7 @@
 class ControllerServer
 {
 public:
-    explicit ControllerServer(nmpc::Params parmas);
+    explicit ControllerServer(nmpc::Params params);
 
     ~ControllerServer()
     {

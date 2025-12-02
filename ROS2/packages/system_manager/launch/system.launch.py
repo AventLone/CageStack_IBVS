@@ -4,16 +4,19 @@ from ament_index_python.packages import get_package_share_directory
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import PathJoinSubstitution
-import math
+import math, os
 
 
 def generate_launch_description():
     prefix = "system"
 
-    
+    this_package = get_package_share_directory("system_manager")
+    system_params_file = os.path.join(this_package, 'config/params', 'system.yaml')
 
-    perception_node = Node(package="perception", executable="perception", namespace=prefix, emulate_tty=True)
-    control_node = Node(package="control", executable="control", namespace=prefix, emulate_tty=True)
+    perception_node = Node(package="perception", executable="perception", namespace=prefix, 
+                           emulate_tty=True, parameters=[system_params_file])
+    control_node = Node(package="control", executable="control", namespace=prefix, 
+                        emulate_tty=True, parameters=[system_params_file])
 
     tf2_node = Node(package="tf2_ros",
                     executable="static_transform_publisher",
@@ -27,11 +30,8 @@ def generate_launch_description():
                         '--ros-args', '--log-level', 'warn'
                     ])
 
-    robot_description_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(PathJoinSubstitution([
-                get_package_share_directory('system_manager'), 'launch',
-                'rviz2.launch.py'
-            ])))
+    robot_description_launch = IncludeLaunchDescription(PythonLaunchDescriptionSource(
+        PathJoinSubstitution([this_package, 'launch','rviz2.launch.py'])))
 
     ld = LaunchDescription()
     ld.add_action(perception_node)

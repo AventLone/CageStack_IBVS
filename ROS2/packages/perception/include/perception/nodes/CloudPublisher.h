@@ -24,7 +24,7 @@ class CloudPublisher final : public rclcpp::Node
     const std::string global_frame_id = "map";
 
 public:
-    explicit CloudPublisher(const std::string& name = "Cloud_Publisher") : rclcpp::Node(name),
+    explicit CloudPublisher(const std::string& name = "cloud_publisher") : rclcpp::Node(name),
                                                                            mForkCameraExtrinsics(Eigen::Isometry3f::Identity()),
                                                                            mLeftCameraExtrinsics(Eigen::Isometry3f::Identity()),
                                                                            mRightCameraExtrinsics(Eigen::Isometry3f::Identity())

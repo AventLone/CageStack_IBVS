@@ -21,6 +21,7 @@ void ControlCmdPublisher::cmdPubLoop()
     std_msgs::msg::Float64MultiArray cmd_msg;
     cmd_msg.data.push_back(cmd[0]);
     cmd_msg.data.push_back(cmd[1]);
+    cmd_msg.data.push_back(0.0);
     mCmdPub->publish(cmd_msg);
 
     nav_msgs::msg::Path state_path;

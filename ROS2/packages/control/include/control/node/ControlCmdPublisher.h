@@ -39,16 +39,15 @@ public:
                                                std::bind(&ControlCmdPublisher::cmdPubLoop, this));
 
         RCLCPP_INFO(get_logger(), "The node has been activated.");
-        RCLCPP_INFO_STREAM(get_logger(), mControllerParams);
+        // RCLCPP_INFO_STREAM(get_logger(), mControllerParams);
+        std::cout << mControllerParams << std::endl;
     }
 
 private:
-    // std::vector<double> mGoal;
     std::queue<std::vector<double>> mGoalBuffer;
 
     BicycleController::Ptr mController;
     nmpc::Params mControllerParams{};
-
 
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr mGoalPoseSub;
 

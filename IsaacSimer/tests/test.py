@@ -97,12 +97,13 @@ class Test(Node):
     def _cmd_handler(self, cmd_msg: std_msgs.msg.Float32MultiArray):
         drive_velocity = cmd_msg.data[0]
         steer_velocity = cmd_msg.data[1]
+        lift_velocity = cmd_msg.data[2]
 
         self._forklift.move(drive_velocity)
         self._forklift.steer(steer_velocity)
+        self._forklift.moveFork([lift_velocity])
 
     async def _pub_images(self):
-
         def process_image(arr: np.ndarray, encoding="rgb8", scale=None):
             if scale is not None:
                 arr = np.clip(arr * scale, 0, 65535).astype(np.uint16)

@@ -9,6 +9,9 @@ meshs/
 *.obj
 *.mtl
 *.urdf
+*.pcd
+*.ply
 
 .idea/
 cmake-build-release/
+

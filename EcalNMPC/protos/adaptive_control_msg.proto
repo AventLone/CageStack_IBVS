@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package adaptive_control_msg;
+
+message Pose2D
+{
+    double x = 1;
+    double y = 2;
+    double yaw = 3;
+}
+
+message ForkPose
+{
+    double x = 1;
+    double y = 2;
+    double z = 3;
+    double roll = 4;
+    double pitch = 5;
+    double yaw = 6;
+    double cl = 7;
+    double cr = 8;
+}
+
+message ForkliftState
+{
+    uint64 timestamp = 1;
+    double drive_velocity = 2;
+    double steer_velocity = 3;
+    double steer_angle = 4;
+    Pose2D pose = 5;
+    ForkPose fork_pose = 6;
+}
+
+message ControlCmd
+{
+    bool finished = 1;
+    uint64 timestamp = 2;
+    double drive_velocity = 3;
+    double steer_velocity = 4;
+    double steer_angle = 5;
+    ForkPose fork_pose = 6;
+}
+
+message ControlRequest
+{
+    bool wake_up = 1;
+}
+
+message ControlResponse
+{
+    bool ok = 1;
+    bool run = 2;
+    double dt = 3;
+}
+
+

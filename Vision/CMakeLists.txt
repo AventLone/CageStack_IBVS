@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(nmpc VERSION 0.0.1 LANGUAGES CXX)
+project(vision VERSION 0.0.1 LANGUAGES CXX)
 
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
@@ -43,7 +43,7 @@ target_include_directories(my_proto_msgs PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 target_link_libraries(my_proto_msgs PUBLIC protobuf::libprotobuf)
 ######################################################
 
-find_package(casadi QUIET CONFIG)
+find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(eCAL REQUIRED)
@@ -55,9 +55,10 @@ target_compile_features(${PROJECT_NAME} PUBLIC c_std_99 cxx_std_17)  # Require C
 target_include_directories(${PROJECT_NAME} PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
+    ${OpenCV_INCLUDE_DIRS}
 )
 target_link_libraries(${PROJECT_NAME}
-    casadi::casadi
+    ${OpenCV_LIBS}
     Eigen3::Eigen
     yaml-cpp
     eCAL::core

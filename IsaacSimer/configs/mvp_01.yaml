@@ -1,0 +1,39 @@
+# 根目录配置
+asset_root: "/home/avent/assets/5.0 assets/"
+
+# 1 Simulation config
+simulation_app:
+  config: {"headless": False, "realtime_factor": 1.0}
+  stage_file_path: "/home/vn/Documents/IsaacSimAssets/Assets/Isaac/5.0/Isaac/VN(back_up)/Stages/MVP_01.usd"
+  controller_class: "ForkliftE"
+  actuators_config: "../configs/e/Actuators.config"
+  sensors_config: "../configs/e/Sencers.config"
+  physics_dt: 0.01
+  rendering_dt: 0.05
+
+AGVs:
+    P:
+        name: "ForkliftP"
+        prim_path: "/World/AGVs/P"
+        fork_joint_names: ["fork2"]   # Fork height, side-shift, mast tilt
+        door_joint_names: ["door_frame"]
+        drive_wheel_joint_names: ["back_wheel"]
+        steer_wheel_joint_names: ["steer_wheel"]
+        drive_wheel_radius: 0.5
+    E:
+        name: "ForkliftE"
+        prim_path: "/World/AGVs/E"
+        fork_joint_names: ["fork_z"]   # Fork height, side-shift, mast tilt
+        door_joint_names: ["door_frame"]
+        drive_wheel_joint_names: ["back_wheel"]
+        steer_wheel_joint_names: ["steer_wheel"]
+        drive_wheel_radius: 0.5
+
+    AMR:
+        name: "AMR"
+        prim_path: "/World/AMR"
+        fork_joint_names: ["lift_plane"]   # Fork height, side-shift, mast tilt
+        door_joint_names: ["lift_plane"]
+        drive_wheel_joint_names: ["left_wheel", "right_wheel"]
+        steer_wheel_joint_names: ["left_wheel"]
+        drive_wheel_radius: 0.5

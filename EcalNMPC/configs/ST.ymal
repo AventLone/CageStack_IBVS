@@ -1,0 +1,20 @@
+horizon: 25
+dt: 0.1
+
+input_len: 2
+state_len: 4
+output_len: 4
+
+max_acc: 3.1415
+max_speed: 1.2
+
+max_steer_speed: 0.5
+max_steer_angle: 1.14
+
+wheel_base: 1.37231
+wheel_radius: 0.11
+
+# Weights
+weight_Q: [360.0, 660.0, 370.0, 60.0]
+weight_F: [4000, 4000.0, 4000.0]
+weight_R: [0.01, 0.001]

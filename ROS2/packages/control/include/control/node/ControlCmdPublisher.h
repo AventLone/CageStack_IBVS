@@ -11,12 +11,15 @@
 class ControlCmdPublisher final : public rclcpp::Node
 {
 public:
-    explicit ControlCmdPublisher(const std::string& name = "ControlCmdPublisher") : rclcpp::Node(name)
+    explicit ControlCmdPublisher(const std::string& name = "controller") : rclcpp::Node(name)
     {
         initSolver();
 
+        this->declare_parameter("TargetTopic.Pose", "target_pose");
+        const std::string target_pose_topic = this->get_parameter("TargetTopic.Pose").as_string();
+
         mGoalPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>
-        ("target_pose", 10, [this](const geometry_msgs::msg::PoseStamped::ConstSharedPtr& pose_msg) -> void
+        (target_pose_topic, 10, [this](const geometry_msgs::msg::PoseStamped::ConstSharedPtr& pose_msg) -> void
              {
                  std::vector<double> goal(3, 0.0);
                  tf2::Quaternion tf2_quat;
@@ -39,7 +42,6 @@ public:
                                                std::bind(&ControlCmdPublisher::cmdPubLoop, this));
 
         RCLCPP_INFO(get_logger(), "The node has been activated.");
-        // RCLCPP_INFO_STREAM(get_logger(), mControllerParams);
         std::cout << mControllerParams << std::endl;
     }
 

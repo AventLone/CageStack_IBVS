@@ -3,7 +3,7 @@ asset_root: "/home/avent/assets/5.0 assets/"
 
 # 1 Simulation config
 simulation_app:
-  config: {"headless": True, "realtime_factor": 1.0}
+  config: {"headless": False, "realtime_factor": 1.0}
   stage_file_path: "/home/vn/Documents/IsaacSimAssets/Assets/Isaac/5.0/Isaac/VN(back_up)/Stages/ForkliftE_Container.usd"
   controller_class: "ForkliftE"
   actuators_config: "../configs/e/Actuators.config"

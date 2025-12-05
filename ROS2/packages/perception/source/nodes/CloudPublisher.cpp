@@ -48,7 +48,7 @@ void CloudPublisher::imgsHandler(const ImgMsg::ConstSharedPtr& fork_semantics_ms
                     const uint32_t label = labels_on_fork[u];
                     semantic_cloud_from_fork.emplace_back(depth, -X, -Y, label);
 
-                    if (label == 12)
+                    if (label == 20)
                     {
                         cage_posts_cloud.emplace_back(depth, -X, -Y);
                     }
@@ -129,7 +129,6 @@ void CloudPublisher::imgsHandler(const ImgMsg::ConstSharedPtr& fork_semantics_ms
         getCloud(semantic_cloud, semantic_cloud_with_clolor);
 
         sensor_msgs::msg::PointCloud2 semantic_cloud_msg, semantic_cloud_with_color_msg;
-        // pcl::toROSMsg(semantic_cloud, semantic_cloud_msg);
         pcl::toROSMsg(cage_posts_cloud, semantic_cloud_msg);
         pcl::toROSMsg(semantic_cloud_with_clolor, semantic_cloud_with_color_msg);
 

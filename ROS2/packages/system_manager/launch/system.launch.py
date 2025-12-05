@@ -8,19 +8,15 @@ import math, os
 
 
 def generate_launch_description():
-    prefix = "system"
-
     this_package = get_package_share_directory("system_manager")
-    system_params_file = os.path.join(this_package, 'config/params', 'system.yaml')
+    system_params_file = os.path.join(this_package, 'config/param', 'system.yaml')
 
-    perception_node = Node(package="perception", executable="perception", namespace=prefix, 
+    perception_node = Node(package="perception", executable="perception", namespace="perception", 
                            emulate_tty=True, parameters=[system_params_file])
-    control_node = Node(package="control", executable="control", namespace=prefix, 
-                        emulate_tty=True, parameters=[system_params_file])
+    control_node = Node(package="control", executable="control", emulate_tty=True, parameters=[system_params_file])
 
     tf2_node = Node(package="tf2_ros",
                     executable="static_transform_publisher",
-                    namespace=prefix,
                     output="screen",
                     emulate_tty=True,
                     arguments=[

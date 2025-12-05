@@ -5,25 +5,12 @@ from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
-    package_name = "forkliftE_description"
+    package_name = "system_manager"
     urdf_name = "ForkliftE.urdf"
 
     pkg_path = get_package_share_directory(package_name=package_name)
     urdf_model_path = os.path.join(pkg_path, f"urdf/{urdf_name}")
     rviz_config_path = os.path.join(pkg_path, "config/rviz/perception.rviz")
-
-    # robot_state_publisher_node = Node(
-    #     package="robot_state_publisher",
-    #     executable="robot_state_publisher", emulate_tty=True,
-
-    #     arguments=['--ros-args', '--log-level', 'warn']
-    # )
-
-    # joint_state_publisher_node = Node(
-    #     package="joint_state_publisher",
-    #     executable="joint_state_publisher", emulate_tty=True,
-    #     arguments=[urdf_model_path, '--ros-args', '--log-level', 'warn']
-    # )
 
     with open(urdf_model_path, "r") as f:
         robot_desc = f.read()

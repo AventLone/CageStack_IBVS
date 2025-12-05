@@ -87,7 +87,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Best Effort
-        Value: /colored_cloud
+        Value: /perception/colored_cloud
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
@@ -130,7 +130,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Best Effort
-        Value: /target_bbox
+        Value: /perception/target/bbox
       Value: true
     - Class: rviz_default_plugins/Image
       Enabled: true
@@ -164,7 +164,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Best Effort
-        Value: /target_pose
+        Value: /perception/target/pose
       Value: true
     - Alpha: 1
       Class: rviz_default_plugins/RobotModel
@@ -283,10 +283,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.5147941708564758
+      Pitch: 0.1297937035560608
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 3.1101279258728027
+      Yaw: 1.9401302337646484
     Saved: ~
 Window Geometry:
   Displays:

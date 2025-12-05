@@ -58,7 +58,7 @@ import sensor_msgs.msg, std_msgs.msg
 
 class Test(Node):
     def __init__(self) -> None:
-        super().__init__('test_node')
+        super().__init__('IsaacSim')
         config = loadConfig("configs/e_test_2.yaml")
         self._world: World = World()
         self._world.reset()
@@ -69,24 +69,24 @@ class Test(Node):
         self._simu_timer = SimTimer(self._world)
 
         self._fork_rgb_pub = self.create_publisher(msg_type=sensor_msgs.msg.Image, topic="fork_rgb", qos_profile=2)
-        self._fork_depth_pub = self.create_publisher(msg_type=sensor_msgs.msg.Image, topic="fork_depth", qos_profile=2)
+        self._fork_depth_pub = self.create_publisher(msg_type=sensor_msgs.msg.Image, 
+                                                     topic="sensors/camera/fork/depth", qos_profile=2)
         self._fork_semantics_pub = self.create_publisher(msg_type=sensor_msgs.msg.Image,
-                                                         topic="fork_semantics",
+                                                         topic="sensors/camera/fork/semantics",
                                                          qos_profile=2)
 
 
         self._left_rgb_pub = self.create_publisher(msg_type=sensor_msgs.msg.Image, topic="left_rgb", qos_profile=2)
-        self._left_depth_pub = self.create_publisher(msg_type=sensor_msgs.msg.Image, topic="left_depth", qos_profile=2)
+        self._left_depth_pub = self.create_publisher(msg_type=sensor_msgs.msg.Image, 
+                                                     topic="sensors/camera/left/depth", qos_profile=2)
         self._left_semantics_pub = self.create_publisher(msg_type=sensor_msgs.msg.Image,
-                                                         topic="left_semantics",
-                                                         qos_profile=2)
+                                                         topic="sensors/camera/left/semantics", qos_profile=2)
 
         self._right_rgb_pub = self.create_publisher(msg_type=sensor_msgs.msg.Image, topic="right_rgb", qos_profile=2)
         self._right_depth_pub = self.create_publisher(msg_type=sensor_msgs.msg.Image,
-                                                      topic="right_depth",
-                                                      qos_profile=2)
+                                                      topic="sensors/camera/right/depth", qos_profile=2)
         self._right_semantics_pub = self.create_publisher(msg_type=sensor_msgs.msg.Image,
-                                                          topic="right_semantics",
+                                                          topic="sensors/camera/right/semantics",
                                                           qos_profile=2)
         
         self._cmd_sub = self.create_subscription(msg_type=std_msgs.msg.Float32MultiArray, 

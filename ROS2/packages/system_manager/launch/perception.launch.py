@@ -9,12 +9,11 @@ import math
 
 
 def generate_launch_description():
-    package_name = "perception"
+    this_package = get_package_share_directory("system_manager")
+    system_params_file = os.path.join(this_package, 'config/param', 'system.yaml')
 
-    # pkg_path = get_package_share_directory(package_name=package_name)
-    # rviz_config_path = os.path.join(pkg_path, "config/perception.rviz")
-
-    perception_node = Node(package=package_name, executable="perception", emulate_tty=True)
+    perception_node = Node(package="perception", executable="perception", namespace="perception", 
+                           emulate_tty=True, parameters=[system_params_file])
 
     tf2_node = Node(package="tf2_ros",
                     executable="static_transform_publisher",
@@ -27,11 +26,8 @@ def generate_launch_description():
                         '--ros-args', '--log-level', 'warn'
                     ])
 
-    robot_description_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(PathJoinSubstitution([
-                get_package_share_directory('system_manager'), 'launch',
-                'rviz2.launch.py'
-            ])))
+    robot_description_launch = IncludeLaunchDescription(PythonLaunchDescriptionSource(
+        PathJoinSubstitution([this_package, 'launch','rviz2.launch.py'])))
 
     ld = LaunchDescription()
     ld.add_action(perception_node)

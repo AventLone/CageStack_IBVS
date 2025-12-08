@@ -6,10 +6,60 @@
 #include <Eigen/Geometry>
 #include "perception/tools/filter.h"
 
-void CloudPublisher::imgsHandler(const ImgMsg::ConstSharedPtr& fork_semantics_msg, const ImgMsg::ConstSharedPtr& left_semantics_msg,
-                                 const ImgMsg::ConstSharedPtr& right_semantics_msg, const ImgMsg::ConstSharedPtr& fork_depth_msg,
-                                 const ImgMsg::ConstSharedPtr& left_depth_msg,
-                                 const ImgMsg::ConstSharedPtr& right_depth_msg) const
+void CloudPublisher::initSubscritions()
+{
+    const std::string params_prefix = "TopicName.Sensor.Camera";
+    this->declare_parameters<std::string>(params_prefix, {{"Fork.Semantics", "/sensors/camera/fork/semantics"},
+                                                                      {"Fork.Depth", "/sensors/camera/fork/depth"},
+                                                                      {"Left.Semantics", "/sensors/camera/left/semantics"},
+                                                                      {"Left.Depth", "/sensors/camera/left/depth"},
+                                                                      {"Right.Semantics", "/sensors/camera/right/semantics"},
+                                                                      {"Right.Depth", "/sensors/camera/right/depth"}});
+
+    std::map<std::string, std::string> sensor_topics;
+    if (!this->get_parameters<std::string>(params_prefix, sensor_topics))
+    {
+        RCLCPP_FATAL(get_logger(), "Failed to get parameters, sensor topic names!");
+    }
+
+    mForkSemanticsSub.subscribe(this, sensor_topics["Fork.Semantics"]);
+    mLeftSemanticSub.subscribe(this, sensor_topics["Left.Semantics"]);
+    mRightSemanticSub.subscribe(this, sensor_topics["Right.Semantics"]);
+    mForkDepthSub.subscribe(this, sensor_topics["Fork.Depth"]);
+    mLeftDepthSub.subscribe(this, sensor_topics["Left.Depth"]);
+    mRightDepthSub.subscribe(this, sensor_topics["Right.Depth"]);
+
+    mSynchronizer = std::make_unique<message_filters::Synchronizer<SyncPolicy>>(SyncPolicy(2),
+                                                                                mForkSemanticsSub, mLeftSemanticSub,
+                                                                                mRightSemanticSub, mForkDepthSub, 
+                                                                                mLeftDepthSub, mRightDepthSub);
+
+    // 设置更小的时间容差（单位：秒）
+    mSynchronizer->setMaxIntervalDuration(rclcpp::Duration(0, 1000000)); // 10ms 容差
+    mSynchronizer->registerCallback(std::bind(&CloudPublisher::imgsHandler, this,
+                                              std::placeholders::_1, std::placeholders::_2, std::placeholders::_3,
+                                              std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
+}
+
+void CloudPublisher::initPublishers()
+{
+    const std::string params_prefix = "TopicName.Perception";
+    this->declare_parameters<std::string>(params_prefix, {{"SemanticCloud", "/perception/semantic_cloud"},
+                                                          {"ColoredCloud", "/perception/colored_cloud"}});
+
+    std::map<std::string, std::string> cloud_topics;
+    if (!this->get_parameters<std::string>(params_prefix, cloud_topics))
+    {
+        RCLCPP_FATAL(get_logger(), "Failed to get parameters, cloud topic names!");
+    }
+
+    mSemanticCloudPub = create_publisher<sensor_msgs::msg::PointCloud2>(cloud_topics["SemanticCloud"], rclcpp::SensorDataQoS().best_effort());
+    mColoredCloudPub = create_publisher<sensor_msgs::msg::PointCloud2>(cloud_topics["ColoredCloud"], rclcpp::SensorDataQoS().best_effort());
+}
+
+void CloudPublisher::imgsHandler(const ImgMsg::ConstSharedPtr &fork_semantics_msg, const ImgMsg::ConstSharedPtr &left_semantics_msg,
+                                 const ImgMsg::ConstSharedPtr &right_semantics_msg, const ImgMsg::ConstSharedPtr &fork_depth_msg,
+                                 const ImgMsg::ConstSharedPtr &left_depth_msg, const ImgMsg::ConstSharedPtr &right_depth_msg) const
 {
     const auto fork_semantics_ptr = cv_bridge::toCvShare(fork_semantics_msg, "mono8");
     const auto left_semantics_ptr = cv_bridge::toCvShare(left_semantics_msg, "mono8");

@@ -10,7 +10,7 @@ def generate_launch_description():
 
     pkg_path = get_package_share_directory(package_name=package_name)
     urdf_model_path = os.path.join(pkg_path, f"urdf/{urdf_name}")
-    rviz_config_path = os.path.join(pkg_path, "config/rviz/perception.rviz")
+    rviz_config_path = os.path.join(pkg_path, "config/rviz/system.rviz")
 
     with open(urdf_model_path, "r") as f:
         robot_desc = f.read()

@@ -7,22 +7,35 @@
 #include "perception/tools/feature_detect_3d.hpp"
 #include "perception/tools/filter.h"
 
-
-void TargetPosePublisher::cloudHandler(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& cloud_msg) const
+void TargetPosePublisher::initSubscriptions()
 {
-    // SemanticCloud semantic_cloud;
-    // pcl::fromROSMsg(*cloud_msg, semantic_cloud);
+    const std::string param_name = "TopicName.Perception.SemanticCloud";
+    this->declare_parameter(param_name, "semantic_cloud");
+    const std::string semantic_cloud_topic = this->get_parameter(param_name).as_string();
+    mCloudSub = create_subscription<sensor_msgs::msg::PointCloud2>(semantic_cloud_topic, rclcpp::SensorDataQoS().best_effort(),
+                                                                   std::bind(&TargetPosePublisher::cloudHandler, this, std::placeholders::_1));
+}
 
+void TargetPosePublisher::initPublishers()
+{
+    const std::string params_prefix = "TopicName.Perception.Target";
+    this->declare_parameters<std::string>(params_prefix, {{"Pose", "/perception/target/pose"},
+                                                                          {"BBox", "/perception/target/bbox"}});
+    std::map<std::string, std::string> target_topics;
+    if (!this->get_parameters<std::string>(params_prefix, target_topics))
+    {
+        RCLCPP_FATAL(get_logger(), "Failed to get parameters, target topic names!");
+    }
+    mTargetBBoxPub = create_publisher<visualization_msgs::msg::Marker>(target_topics["BBox"], rclcpp::SensorDataQoS().best_effort());
+    mTargetPosePub = create_publisher<geometry_msgs::msg::PoseStamped>(target_topics["Pose"], rclcpp::SensorDataQoS().reliable());
+}
+
+void TargetPosePublisher::cloudHandler(const sensor_msgs::msg::PointCloud2::ConstSharedPtr &cloud_msg) const
+{
     RawCloud cage_posts_cloud;
     pcl::fromROSMsg(*cloud_msg, cage_posts_cloud);
 
-    // RawCloud cage_posts_cloud;
-    // getCloud(semantic_cloud, 18, cage_posts_cloud);
-    //
-    // pcl::io::savePCDFile("cage_post.pcd", cage_posts_cloud);
-
     Eigen::Vector3f center = computeCenter(cage_posts_cloud);
-    // pcl::compute3DCentroid(cage_posts_cloud, center);
     const float angle = computeAngleByPCA(cage_posts_cloud);
 
     tf2::Quaternion tf2_quat;
@@ -49,23 +62,23 @@ void TargetPosePublisher::cloudHandler(const sensor_msgs::msg::PointCloud2::Cons
     const Eigen::Vector2f mark_position = T_3.translation();
 
     visualization_msgs::msg::Marker target_marker_msg;
-    target_marker_msg.header.frame_id = global_frame_id; // 或者 base_link/odom
+    target_marker_msg.header.frame_id = global_frame_id;
     target_marker_msg.header.stamp = this->now();
     target_marker_msg.ns = "bbox";
     target_marker_msg.id = 0;
     target_marker_msg.type = visualization_msgs::msg::Marker::CUBE;
     target_marker_msg.action = visualization_msgs::msg::Marker::ADD;
 
-    // Cube 尺寸（米）
+    /* The dimensions of the cube mark, uint: meter */
     target_marker_msg.scale.x = target_size[1];
     target_marker_msg.scale.y = target_size[1];
     target_marker_msg.scale.z = target_size[2];
 
-    // 半透明颜色 (r,g,b,a)
+    /* Semi-transparent color */
     target_marker_msg.color.r = 0.0f;
     target_marker_msg.color.g = 1.0f;
     target_marker_msg.color.b = 0.0f;
-    target_marker_msg.color.a = 0.8f; // alpha<1 表示半透明
+    target_marker_msg.color.a = 0.8f; // "alpha < 1" indicates semi-transparency
 
     target_marker_msg.pose.position.x = mark_position[0];
     target_marker_msg.pose.position.y = mark_position[1];

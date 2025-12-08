@@ -55,7 +55,7 @@ public:
     void setGoal(const std::vector<double>& goal)
     {
         mNLP.set_value(mGoal, goal);
-        mNLP.set_value(mX0, {0.0, 0.0, 0.0});
+        mNLP.set_value(mX0, {0.0, 0.0, 0.0, 0.0});
     }
 
     bool solve(std::pair<Solution, Solution>& result);

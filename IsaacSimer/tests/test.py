@@ -70,31 +70,31 @@ class Test(Node):
 
         self._fork_rgb_pub = self.create_publisher(msg_type=sensor_msgs.msg.Image, topic="fork_rgb", qos_profile=2)
         self._fork_depth_pub = self.create_publisher(msg_type=sensor_msgs.msg.Image, 
-                                                     topic="sensors/camera/fork/depth", qos_profile=2)
+                                                     topic="sensor/camera/fork/depth", qos_profile=2)
         self._fork_semantics_pub = self.create_publisher(msg_type=sensor_msgs.msg.Image,
-                                                         topic="sensors/camera/fork/semantics",
+                                                         topic="sensor/camera/fork/semantics",
                                                          qos_profile=2)
 
 
         self._left_rgb_pub = self.create_publisher(msg_type=sensor_msgs.msg.Image, topic="left_rgb", qos_profile=2)
         self._left_depth_pub = self.create_publisher(msg_type=sensor_msgs.msg.Image, 
-                                                     topic="sensors/camera/left/depth", qos_profile=2)
+                                                     topic="sensor/camera/left/depth", qos_profile=2)
         self._left_semantics_pub = self.create_publisher(msg_type=sensor_msgs.msg.Image,
-                                                         topic="sensors/camera/left/semantics", qos_profile=2)
+                                                         topic="sensor/camera/left/semantics", qos_profile=2)
 
         self._right_rgb_pub = self.create_publisher(msg_type=sensor_msgs.msg.Image, topic="right_rgb", qos_profile=2)
         self._right_depth_pub = self.create_publisher(msg_type=sensor_msgs.msg.Image,
-                                                      topic="sensors/camera/right/depth", qos_profile=2)
+                                                      topic="sensor/camera/right/depth", qos_profile=2)
         self._right_semantics_pub = self.create_publisher(msg_type=sensor_msgs.msg.Image,
-                                                          topic="sensors/camera/right/semantics",
+                                                          topic="sensor/camera/right/semantics",
                                                           qos_profile=2)
         
-        self._cmd_sub = self.create_subscription(msg_type=std_msgs.msg.Float32MultiArray, 
-                                                  topic="control_cmd",
+        self._cmd_sub = self.create_subscription(msg_type=std_msgs.msg.Float64MultiArray, 
+                                                  topic="/control/cmds",
                                                   callback=self._cmd_handler,
                                                   qos_profile=2)
         
-    def _cmd_handler(self, cmd_msg: std_msgs.msg.Float32MultiArray):
+    def _cmd_handler(self, cmd_msg: std_msgs.msg.Float64MultiArray):
         drive_velocity = cmd_msg.data[0]
         steer_velocity = cmd_msg.data[1]
         lift_velocity = cmd_msg.data[2]
@@ -180,6 +180,7 @@ class Test(Node):
         require_reset = False
         while simulation_app.is_running():
             self._world.step(render=True)
+            rclpy.spin_once(self, timeout_sec=0.01)
             if self._world.is_stopped() and not require_reset:
                 require_reset = True
             if self._world.is_playing() and require_reset:

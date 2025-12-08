@@ -31,8 +31,8 @@ def generate_launch_description():
 
     ld = LaunchDescription()
     ld.add_action(perception_node)
-    ld.add_action(control_node)
     ld.add_action(tf2_node)
     ld.add_action(robot_description_launch)
+    ld.add_action(control_node)
 
     return ld

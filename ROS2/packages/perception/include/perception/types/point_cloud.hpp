@@ -1,5 +1,4 @@
 #pragma once
-// includes
 #include <pcl/point_types.h>
 #include <pcl/register_point_struct.h>
 #include <pcl/point_cloud.h>

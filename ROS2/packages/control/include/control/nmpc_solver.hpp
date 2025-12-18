@@ -1,6 +1,5 @@
 #pragma once
 #include <casadi/casadi.hpp>
-#include <cassert>
 #include <utility>
 #include <std_msgs/msg/float32_multi_array.hpp>
 

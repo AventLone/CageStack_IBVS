@@ -18,7 +18,7 @@ ament_auto_add_executable(control ${SOURCE_FILES})
 target_include_directories(control PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include/${PROJECT_NAME}>)
-target_compile_features(control PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+target_compile_features(control PUBLIC c_std_99 cxx_std_23)  # Require C99 and C++23
 
 target_link_libraries(control
     casadi::casadi

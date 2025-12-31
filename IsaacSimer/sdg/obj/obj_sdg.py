@@ -7,7 +7,7 @@ from isaacsim.core.utils.stage import get_current_stage
 from pxr import Gf
 
 from .obj_random import ObjRandomizer
-import carb
+import carb.settings
 
 class ObjSDG:
     def __init__(self, config: dict) -> None:

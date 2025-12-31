@@ -1,14 +1,11 @@
-from utils.common import openSimuApp, loadConfig
-import asyncio, math, os
-import numpy as np
+from utils.common import openSimuApp, load_config
+import math, os
 
 
 class ContainerDataCollector:
     def __init__(self) -> None:
         self.simulation_app = openSimuApp("configs/e_test_2.yaml")
-        # self.simulation_app.close()
-        config = loadConfig("configs/e_test_2.yaml")
-        # simulate_config = config["simulation_app"]
+        config = load_config("configs/e_test_2.yaml")
 
         import carb.settings
         # Set DLSS to Quality mode (2) for best SDG results (Options: 0 (Performance), 1 (Balanced), 2 (Quality), 3 (Auto)
@@ -22,14 +19,13 @@ class ContainerDataCollector:
         self.world.reset()
 
         from devices.vehicles import Vehicle
-        self._forklift = Vehicle(world=self.world, cfg=config["vehicle"])
+        self._forklift = Vehicle(world=self.world, cfg=config["vehicle"])  # type: ignore
 
         from utils.common import SimTimer
         self._sim_timer = SimTimer(world=self.world)
 
         import omni.replicator.core as rep
         rep.orchestrator.set_capture_on_play(False)
-        # rep.orchestrator.
         trigger = rep.trigger.on_frame(interval=2, num_frames=2060, rt_subframes=8)  # 每10帧触发一次 randomization/写出
         self._body_left_camera_data = rep.create.render_product(
             "/World/E_car_finish/body/cameras/left_camera/SG3S_ISX031C_GMSL2F_H190XA_01",
@@ -82,7 +78,6 @@ class ContainerDataCollector:
                                          joint_indices=[self._forklift.get_dof_index("fork_z")])
         self._forklift.apply_action(fork_action)
 
-
         await self._sim_timer.sleep(1.0)
         fork_action = ArticulationAction(joint_velocities=[0.0],
                                          joint_indices=[self._forklift.get_dof_index("fork_z")])
@@ -109,10 +104,8 @@ class ContainerDataCollector:
         self._forklift.move(0.0)
 
     def run(self):
-        # self._forklift.move(-math.pi)
-        # asyncio.ensure_future(self._collect_data(duration=50.0, hz=10))
         from omni.kit.async_engine import run_coroutine
-        # asyncio.ensure_future(self._control_sequence())
+        run_coroutine(self._collect_data(duration=50.0, hz=10))
         run_coroutine(self._control_sequence())
         require_reset = False
         while self.simulation_app.is_running():

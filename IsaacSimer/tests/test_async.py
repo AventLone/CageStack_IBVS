@@ -1,4 +1,4 @@
-from utils.common import openSimuApp, loadConfig
+from utils.common import openSimuApp, load_config
 simulation_app = openSimuApp("configs/e_test_2.yaml")
 
 # Settings
@@ -60,7 +60,7 @@ import sensor_msgs.msg
 class Test(Node):
     def __init__(self) -> None:
         super().__init__('test_node')
-        config = loadConfig("configs/e_test_2.yaml")
+        config = load_config("configs/e_test_2.yaml")
         self._world: World = World()
         self._world.reset()
 

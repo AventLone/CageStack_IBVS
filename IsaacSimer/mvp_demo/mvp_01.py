@@ -1,4 +1,4 @@
-from utils.common import openSimuApp, loadConfig
+from utils.common import openSimuApp, load_config
 simulation_app = openSimuApp("configs/mvp_01.yaml")
 
 # Settings
@@ -169,6 +169,6 @@ class MVP():
 
 
 if __name__ == "__main__":
-    config = loadConfig("configs/mvp_01.yaml")
+    config = load_config("configs/mvp_01.yaml")
     mvp = MVP(config)
     mvp.run()

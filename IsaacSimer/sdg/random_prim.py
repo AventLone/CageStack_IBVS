@@ -89,7 +89,6 @@ class PrimRandomizer:
     def _create_random_pbr_materials(self, n=4, base_path="/World/VisualMaterials") -> None:
         # 生成 N 个唯一的材质 prim 路径
         for i in range(n):
-            # paths = [f"{base_path}/rand_pbr_{i}_{uuid.uuid4().hex[:6]}" for i in range(n)]
             path = f"{base_path}/rand_pbr_{i}_{uuid.uuid4().hex[:6]}"
             visual_material = OmniPbrMaterial(path)  # 会在 stage 上创建这些 OmniPBR 材质（若不存在）
             # 随机化基础参数（shape 要匹配 API 要求）
@@ -97,7 +96,7 @@ class PrimRandomizer:
             metallic = (np.random.rand(1, 1) * 1.0).tolist()                 # metallic_constant (N,1)
             roughness = (np.clip(np.random.rand(1, 1), 0.02, 0.9)).tolist()  # reflection_roughness_constant (N,1)
             emissive_flag = [False]                                          # enable_emission (N,1)
-            emissive_color = (np.zeros((1, 3))).tolist()                     # emissive_color (N,3) - all zero by default
+            emissive_color = np.zeros((1, 3)).tolist()                       # emissive_color (N,3) - all zero by default
 
             # 写入材质输入
             visual_material.set_input_values(name="diffuse_color_constant", values=colors)

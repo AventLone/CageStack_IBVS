@@ -1,10 +1,10 @@
-from utils.common import openSimuApp, load_config
+from utils.common import open_simu_app, load_config
 import math, os
 
 
 class ContainerDataCollector:
     def __init__(self) -> None:
-        self.simulation_app = openSimuApp("configs/e_test_2.yaml")
+        self.simulation_app = open_simu_app("configs/e_test_2.yaml")
         config = load_config("configs/e_test_2.yaml")
 
         import carb.settings

@@ -1,5 +1,5 @@
-from utils.common import openSimuApp, load_config
-simulation_app = openSimuApp("configs/mvp_01.yaml")
+from utils.common import open_simu_app, load_config
+simulation_app = open_simu_app("configs/mvp_01.yaml")
 
 # Settings
 import carb.settings

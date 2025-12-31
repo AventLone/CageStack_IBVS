@@ -1,1 +1,0 @@
-protoc --python_out=. Point3.proto

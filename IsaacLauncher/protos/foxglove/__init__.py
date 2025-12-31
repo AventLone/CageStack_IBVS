@@ -1,1 +1,0 @@
-from . import Point3_pb2

@@ -1,10 +1,11 @@
 import omni.replicator.core as rep
-import os
+import os, carb.settings
 from .obj_random import ObjRandomizer
-import carb.settings
+import numpy as np
 
 class ObjSDG:
-    def __init__(self, config: dict) -> None:
+    # def __init__(self, config: dict) -> None:
+    def __init__(self, obj_prim_path: str, frames_required: int, ) -> None:
         # Disable capture on play and async rendering
         carb.settings.get_settings().set("/omni/replicator/captureOnPlay", False)
         carb.settings.get_settings().set("/omni/replicator/asyncRendering", False)
@@ -16,20 +17,19 @@ class ObjSDG:
         rep.set_global_seed(66)
         rep.randomizer.register(self._randomize_camera_pose)
 
-        self._randomized_obj = ObjRandomizer(config["obj_prim_path"])
+        self._randomized_obj = ObjRandomizer(obj_prim_path)
         rep.randomizer.register(self._randomized_obj._randomize_obj)
         rep.randomizer.register(self._randomize_material)
         rep.randomizer.register(ObjSDG._random_light)
 
-        self._obj_trigger = rep.trigger.on_frame(max_execs=int(config["frames_required"] / 10), 
+        self._obj_trigger = rep.trigger.on_frame(max_execs=frames_required // 10, 
                                                  interval=10, rt_subframes=16)
-        self._camera_trigger = rep.trigger.on_frame(max_execs=config["frames_required"], interval=1, rt_subframes=16)
-        self._light_trigger = rep.trigger.on_frame(max_execs=int(config["frames_required"] / 20),
+        self._camera_trigger = rep.trigger.on_frame(max_execs=frames_required, interval=1, rt_subframes=16)
+        self._light_trigger = rep.trigger.on_frame(max_execs=frames_required // 20,
                                                    interval=20, rt_subframes=16)
 
-        self._frames_required = config["frames_required"]
-        self._camera_position_domain_lower = config["camera_position_domain_lower"]
-        self._camera_position_domain_upper = config["camera_position_domain_upper"]
+        self._camera_position_domain_lower = np.array([-5.0, -5.0, 0.0])
+        self._camera_position_domain_upper = np.array([5.0, 5.0, 3.0])
 
         self._camera = rep.create.camera(focus_distance=400.0, focal_length=15.0,
                                          clipping_range=(0.1, 1000000.0), name="DriverCam")

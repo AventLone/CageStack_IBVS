@@ -3,11 +3,9 @@ from isaacsim.core.utils import xforms
 import random
 
 class ObjRandomizer:
-    def __init__(self, obj_prim_path: dict) -> None:
+    def __init__(self, obj_prim_path) -> None:
         self._obj_prim_path = obj_prim_path
-
         self.rep_obj_prim = rep.get.prim_at_path(obj_prim_path)
-
         self._mat_pool = rep.create.material_omnipbr(diffuse=rep.distribution.uniform((0.2, 0.1, 0.3), (0.6, 0.6, 0.7)),
                                                      roughness=random.uniform(0.1, 0.9),
                                                      metallic=random.uniform(0.1, 0.9),

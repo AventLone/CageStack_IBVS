@@ -3,6 +3,7 @@ data/
 install/
 build/
 log/
+__pycache__/
 
 meshs/
 

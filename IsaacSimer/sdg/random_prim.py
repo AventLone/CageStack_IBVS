@@ -7,9 +7,10 @@ from isaacsim.core.experimental.objects import Mesh
 import uuid
 from typing import Dict, List
 
+
 class PrimRandomizer:
     def __init__(self) -> None:
-        self._prims_dict = dict()         # Prims which are used to change pose
+        self._prims_dict: dict[str, Usd.Prim] = dict()         # Prims which are used to change pose
         self._visual_prims_dict: Dict[str, Mesh] = dict()  # Prims which are used to chage apperance
         self._rect_lights = None
         self._visual_materials: List[OmniPbrMaterial] = list()
@@ -35,7 +36,7 @@ class PrimRandomizer:
     def add_mesh_prim(self, prim_path: str, name: str):
         self._visual_prims_dict[name] = Mesh(paths=[prim_path])
 
-    def randomize_position(self, name: str, position_range: tuple, z = 0.0):
+    def randomize_position(self, name: str, position_range: tuple, z=0.0):
         """
         position_range[0]: x range;
         position_range[1]: y range.
@@ -45,7 +46,7 @@ class PrimRandomizer:
             attr = self._prims_dict[name].CreateAttribute("xformOp:translate", Sdf.ValueTypeNames.Float3)
         attr.Set(Gf.Vec3d(np.random.uniform(*position_range[0]), np.random.uniform(*position_range[1]), z))
 
-    def randomize_position_relative_to(self, name: str, reference: str, position_range: tuple, z = 0.0):
+    def randomize_position_relative_to(self, name: str, reference: str, position_range: tuple, z=0.0):
         """
         position_range[0]: x range;
         position_range[1]: y range.
@@ -59,7 +60,7 @@ class PrimRandomizer:
             attr = self._prims_dict[name].CreateAttribute("xformOp:translate", Sdf.ValueTypeNames.Float3)
 
         attr.Set(Gf.Vec3d(reference_position[0] + np.random.uniform(*position_range[0]),
-                reference_position[1] +np.random.uniform(*position_range[1]), z))
+                          reference_position[1] + np.random.uniform(*position_range[1]), z))
 
     def randomize_orientation(self, name: str, yaw_range: tuple):
         """
@@ -67,7 +68,7 @@ class PrimRandomizer:
         """
         orient_attr = self._prims_dict[name].GetAttribute("xformOp:orient")
         if not orient_attr.GetTypeName():
-            orient_attr=self._prims_dict[name].CreateAttribute("xformOp:orient", Sdf.ValueTypeNames.Quatf)
+            orient_attr = self._prims_dict[name].CreateAttribute("xformOp:orient", Sdf.ValueTypeNames.Quatf)
 
         rz = Gf.Rotation(Gf.Vec3d(0, 0, 1), np.random.uniform(*yaw_range))
         qd = rz.GetQuat()
@@ -96,7 +97,8 @@ class PrimRandomizer:
             metallic = (np.random.rand(1, 1) * 1.0).tolist()                 # metallic_constant (N,1)
             roughness = (np.clip(np.random.rand(1, 1), 0.02, 0.9)).tolist()  # reflection_roughness_constant (N,1)
             emissive_flag = [False]                                          # enable_emission (N,1)
-            emissive_color = np.zeros((1, 3)).tolist()                       # emissive_color (N,3) - all zero by default
+            # emissive_color (N,3) - all zero by default
+            emissive_color = np.zeros((1, 3)).tolist()
 
             # 写入材质输入
             visual_material.set_input_values(name="diffuse_color_constant", values=colors)

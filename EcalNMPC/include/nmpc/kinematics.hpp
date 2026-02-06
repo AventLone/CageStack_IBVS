@@ -1,7 +1,7 @@
 #pragma once
 #include "nmpc/nmpc_solver.hpp"
 
-struct Bicycle
+struct
 {
     const nmpc::Params& mParams;
 

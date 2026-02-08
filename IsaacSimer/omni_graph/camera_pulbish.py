@@ -11,7 +11,7 @@ keys = og.Controller.Keys
 (camera_publish_graph, _, _, _) = og.Controller.edit(
     {
         "graph_path": ROS_CAMERA_GRAPH_PATH,
-        "evaluator_name": "push",
+        "evaluator_name": "execution",
         "pipeline_stage": og.GraphPipelineStage.GRAPH_PIPELINE_STAGE_ONDEMAND
     },
     {

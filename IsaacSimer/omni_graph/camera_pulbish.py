@@ -4,6 +4,7 @@ ROS_CAMERA_GRAPH_PATH = "/Camera_Publish"
 MID_CAMERA_PRIM_PATH = "/World/lola/side_shifter/camera/camera"
 LEFT_CAMERA_PRIM_PATH = "/World/lola/fork/cameras/camera_left/camera"
 RIGHT_CAMERA_PRIM_PATH = "/World/lola/fork/cameras/camera_right/camera"
+FORK_ROOT_CAMERA_PATH = "/LOLA/fork/camera/camera"
 CAMERA_RESOLUTION = (1920, 1200)
 
 # Creating an on-demand push graph with cameraHelper nodes to generate ROS image publishers
@@ -83,8 +84,8 @@ keys = og.Controller.Keys
             # ("CameraHelperDepth_sideshifter.inputs:topicName", "mid_camera/depth"),
             # ("CameraHelperDepth_sideshifter.inputs:type", "depth"),
             # ("CameraHelperInstance_sideshifter.inputs:frameId", "mid_camera"),
-            # ("CameraHelperInstance_sideshifter.inputs:topicName", "mid_camera/instance_segmentation"),
-            # ("CameraHelperInstance_sideshifter.inputs:type", "instance_segmentation"),
+            # ("CameraHelperInstance_sideshifter.inputs:topicName", "mid_camera/semantic_segmentation"),
+            # ("CameraHelperInstance_sideshifter.inputs:type", "semantic_segmentation"),
             # ("CameraHelperInstance_sideshifter.inputs:enableSemanticLabels", True),
             
             ("CameraHelperInfo_left.inputs:frameId", "left_camera"),
@@ -96,8 +97,8 @@ keys = og.Controller.Keys
             ("CameraHelperDepth_left.inputs:topicName", "left_camera/depth"),
             ("CameraHelperDepth_left.inputs:type", "depth"),
             ("CameraHelperInstance_left.inputs:frameId", "left_camera"),
-            ("CameraHelperInstance_left.inputs:topicName", "left_camera/instance_segmentation"),
-            ("CameraHelperInstance_left.inputs:type", "instance_segmentation"),
+            ("CameraHelperInstance_left.inputs:topicName", "left_camera/semantic_segmentation"),
+            ("CameraHelperInstance_left.inputs:type", "semantic_segmentation"),
             ("CameraHelperInstance_left.inputs:enableSemanticLabels", True),
 
             ("CameraHelperInfo_right.inputs:frameId", "right_camera"),
@@ -109,9 +110,9 @@ keys = og.Controller.Keys
             ("CameraHelperDepth_right.inputs:topicName", "right_camera/depth"),
             ("CameraHelperDepth_right.inputs:type", "depth"),
             ("CameraHelperInstance_right.inputs:frameId", "right_camera"),
-            ("CameraHelperInstance_right.inputs:topicName", "right_camera/instance_segmentation"),
-            ("CameraHelperInstance_right.inputs:type", "instance_segmentation"),
-            ("CameraHelperInstance_right.inputs:enableSemanticLabels", True),
+            ("CameraHelperInstance_right.inputs:topicName", "right_camera/semantic_segmentation"),
+            ("CameraHelperInstance_right.inputs:type", "semantic_segmentation"),
+            # ("CameraHelperInstance_right.inputs:enableSemanticLabels", True),
 
             # ("RenderProduct_sideshifter.inputs:cameraPrim", MID_CAMERA_PRIM_PATH),
             ("RenderProduct_left.inputs:cameraPrim", LEFT_CAMERA_PRIM_PATH),

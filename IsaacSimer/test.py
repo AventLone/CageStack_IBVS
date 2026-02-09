@@ -25,7 +25,7 @@ simulation_context.play()
 require_reset = False
 while simulation_app.is_running():
     simulation_context.step(render=True)   # Run with a fixed step size
-    if simulation_context.is_stopped() and not require_reset:   # 播放/暂停与重置逻辑
+    if simulation_context.is_stopped() and not require_reset:
         require_reset = True
     if simulation_context.is_playing():
         if require_reset:
@@ -34,3 +34,4 @@ while simulation_app.is_running():
 
 simulation_context.stop()
 simulation_app.close()
+

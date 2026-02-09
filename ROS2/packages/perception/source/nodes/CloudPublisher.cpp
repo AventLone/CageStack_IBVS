@@ -6,15 +6,83 @@
 #include <Eigen/Geometry>
 #include "perception/tools/filter.h"
 
-void CloudPublisher::initSubscritions()
+
+static std::unordered_map<std::string, int> parseSemanticLabels(const std_msgs::msg::String::ConstSharedPtr& msg)
+{
+    const std::string msg_string = msg->data;
+
+    std::unordered_map<std::string, int> out;
+    const size_t n = msg_string.size();
+    // find first '{'
+    const size_t pos = msg_string.find('{');
+    if (pos == std::string::npos)
+        return out;
+    size_t i = pos + 1;
+
+    while (i < n)
+    {
+        // find next quote for the id token (either " or ')
+        size_t q1 = msg_string.find_first_of("\"'", i);
+        if (q1 == std::string::npos)
+            break;
+        char quote = msg_string[q1];
+
+        // find closing quote for id
+        size_t q2 = msg_string.find(quote, q1 + 1);
+        if (q2 == std::string::npos)
+            break;
+        std::string idStr = msg_string.substr(q1 + 1, q2 - q1 - 1);
+
+        // try parse integer id
+        int id = 0;
+        try { id = std::stoi(idStr); }
+        catch (...)
+        {
+            i = q2 + 1;
+            continue;
+        }
+
+        // find `"class"` (allow single or double quoted)
+        size_t classKey = msg_string.find("\"class\"", q2);
+        if (classKey == std::string::npos)
+            classKey = msg_string.find("'class'", q2);
+        if (classKey == std::string::npos)
+            break;
+
+        // find colon after "class"
+        size_t colon = msg_string.find(':', classKey);
+        if (colon == std::string::npos)
+            break;
+
+        // find start quote of the class value
+        size_t vq1 = msg_string.find_first_of("\"'", colon + 1);
+        if (vq1 == std::string::npos)
+            break;
+        char vquote = msg_string[vq1];
+
+        // find end quote of the class value
+        size_t vq2 = msg_string.find(vquote, vq1 + 1);
+        if (vq2 == std::string::npos)
+            break;
+        std::string cls = msg_string.substr(vq1 + 1, vq2 - vq1 - 1);
+
+        // store mapping: class name -> id
+        out[cls] = id;
+
+        // advance i past this object
+        i = vq2 + 1;
+    }
+
+    return out;
+}
+
+void CloudBuild::initSubscritions()
 {
     const std::string params_prefix = "TopicName.Sensor.Camera";
-    this->declare_parameters<std::string>(params_prefix, {{"Fork.Semantics", "/sensors/camera/fork/semantics"},
-                                                                      {"Fork.Depth", "/sensors/camera/fork/depth"},
-                                                                      {"Left.Semantics", "/sensors/camera/left/semantics"},
-                                                                      {"Left.Depth", "/sensors/camera/left/depth"},
-                                                                      {"Right.Semantics", "/sensors/camera/right/semantics"},
-                                                                      {"Right.Depth", "/sensors/camera/right/depth"}});
+    // this->declare_parameters<std::string>(params_prefix, {{"Mid.Depth", "/sensors/camera/mid/depth"},
+    //                                                       {"Mid.Semantics", "/sensors/camera/mid/semantics"}});
+    this->declare_parameters<std::string>(params_prefix, {{"Mid.Depth", "/forkheel_camera/depth"},
+                                                          {"Mid.Semantics", "/forkheel_camera/semantic_segmentation"}});
 
     std::map<std::string, std::string> sensor_topics;
     if (!this->get_parameters<std::string>(params_prefix, sensor_topics))
@@ -22,26 +90,20 @@ void CloudPublisher::initSubscritions()
         RCLCPP_FATAL(get_logger(), "Failed to get parameters, sensor topic names!");
     }
 
-    mForkSemanticsSub.subscribe(this, sensor_topics["Fork.Semantics"]);
-    mLeftSemanticSub.subscribe(this, sensor_topics["Left.Semantics"]);
-    mRightSemanticSub.subscribe(this, sensor_topics["Right.Semantics"]);
-    mForkDepthSub.subscribe(this, sensor_topics["Fork.Depth"]);
-    mLeftDepthSub.subscribe(this, sensor_topics["Left.Depth"]);
-    mRightDepthSub.subscribe(this, sensor_topics["Right.Depth"]);
+    mDepthSub.subscribe(this, sensor_topics["Mid.Depth"]);
+    mSemanticSub.subscribe(this, sensor_topics["Mid.Semantics"]);
 
-    mSynchronizer = std::make_unique<message_filters::Synchronizer<SyncPolicy>>(SyncPolicy(2),
-                                                                                mForkSemanticsSub, mLeftSemanticSub,
-                                                                                mRightSemanticSub, mForkDepthSub, 
-                                                                                mLeftDepthSub, mRightDepthSub);
+    mSynchronizer = std::make_unique<message_filters::Synchronizer<SyncPolicy>>(SyncPolicy(2), mDepthSub, mSemanticSub);
 
     // 设置更小的时间容差（单位：秒）
     mSynchronizer->setMaxIntervalDuration(rclcpp::Duration(0, 1000000)); // 10ms 容差
-    mSynchronizer->registerCallback(std::bind(&CloudPublisher::imgsHandler, this,
-                                              std::placeholders::_1, std::placeholders::_2, std::placeholders::_3,
-                                              std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
+    mSynchronizer->registerCallback(std::bind(&CloudBuild::imgsHandler, this, std::placeholders::_1, std::placeholders::_2));
+
+    mSemanticLabelsSub = this->create_subscription<StrMsg>("semantic_labels", rclcpp::SensorDataQoS().best_effort(),
+                std::bind(&CloudBuild::semanticLabelsHandler, this, std::placeholders::_1));
 }
 
-void CloudPublisher::initPublishers()
+void CloudBuild::initPublishers()
 {
     const std::string params_prefix = "TopicName.Perception";
     this->declare_parameters<std::string>(params_prefix, {{"SemanticCloud", "/perception/semantic_cloud"},
@@ -57,103 +119,92 @@ void CloudPublisher::initPublishers()
     mColoredCloudPub = create_publisher<sensor_msgs::msg::PointCloud2>(cloud_topics["ColoredCloud"], rclcpp::SensorDataQoS().best_effort());
 }
 
-void CloudPublisher::imgsHandler(const ImgMsg::ConstSharedPtr &fork_semantics_msg, const ImgMsg::ConstSharedPtr &left_semantics_msg,
-                                 const ImgMsg::ConstSharedPtr &right_semantics_msg, const ImgMsg::ConstSharedPtr &fork_depth_msg,
-                                 const ImgMsg::ConstSharedPtr &left_depth_msg, const ImgMsg::ConstSharedPtr &right_depth_msg) const
+void CloudBuild::imgsHandler(const ImgMsg::ConstSharedPtr& depth_msg, const ImgMsg::ConstSharedPtr& semantics_msg) const
 {
-    const auto fork_semantics_ptr = cv_bridge::toCvShare(fork_semantics_msg, "mono8");
-    const auto left_semantics_ptr = cv_bridge::toCvShare(left_semantics_msg, "mono8");
-    const auto right_semantics_ptr = cv_bridge::toCvShare(right_semantics_msg, "mono8");
-    const auto fork_depth_ptr = cv_bridge::toCvShare(fork_depth_msg, "mono16");
-    const auto left_depth_ptr = cv_bridge::toCvShare(left_depth_msg, "mono16");
-    const auto right_depth_ptr = cv_bridge::toCvShare(right_depth_msg, "mono16");
+    const auto depth_ptr = cv_bridge::toCvShare(depth_msg, sensor_msgs::image_encodings::TYPE_32FC1);
+    const auto semantics_ptr = cv_bridge::toCvShare(semantics_msg, sensor_msgs::image_encodings::TYPE_32SC1);
 
-    const cv::Mat& fork_semantics = fork_semantics_ptr->image;
-    const cv::Mat& left_semantics = left_semantics_ptr->image;
-    const cv::Mat& right_semantics = right_semantics_ptr->image;
-    const cv::Mat& fork_depth = fork_depth_ptr->image;
-    const cv::Mat& left_depth = left_depth_ptr->image;
-    const cv::Mat& right_depth = right_depth_ptr->image;
+    const cv::Mat& semantic_image = semantics_ptr->image;
+    const cv::Mat& depth_image = depth_ptr->image;
 
-    SemanticCloud semantic_cloud_from_fork, semantic_cloud_from_left, semantic_cloud_from_right;
-    RawCloud cage_posts_cloud;
-    for (int v = 0; v < fork_depth.rows; v += 6)
+    int pallet_label{}, ramp_label{}, trailer_label{}, goods_label{};
+    auto it = mSemanticLabels.find("pallet");
+    if(it!=mSemanticLabels.end())
     {
-        const auto* target_on_fork = fork_depth.ptr<uint16_t>(v);
-        const auto* target_on_left = left_depth.ptr<uint16_t>(v);
-        const auto* target_on_right = right_depth.ptr<uint16_t>(v);
+        pallet_label = it->second;
+    }
+    it = mSemanticLabels.find("ramp");
+    if(it!=mSemanticLabels.end())
+    {
+        ramp_label = it->second;
+    }
+    it = mSemanticLabels.find("trailer");
+    if(it!=mSemanticLabels.end())
+    {
+        trailer_label = it->second;
+    }
+    it = mSemanticLabels.find("goods");
+    if(it!=mSemanticLabels.end())
+    {
+        goods_label = it->second;
+    }
 
-        const auto* labels_on_fork = fork_semantics.ptr<uint8_t>(v);
-        const auto* labels_on_left = left_semantics.ptr<uint8_t>(v);
-        const auto* labels_on_right = right_semantics.ptr<uint8_t>(v);
+    SemanticCloud semantic_cloud_camera;   // This is the semantic cloud in the camera coordinate system.
+    constexpr int skip_step = 3;
+    for (int v = 0; v < depth_image.rows; v += skip_step)
+    {
+        const auto* depth_ptr = depth_image.ptr<float>(v);
+        const auto* label_ptr = semantic_image.ptr<int>(v);
 
-        for (int u = 0; u < fork_depth.cols; u += 3)
+        for (int u = 0; u < depth_image.cols; u += skip_step)
         {
-            if (target_on_fork[u] > 0)
+            if (const float depth = depth_ptr[u]; depth > 0.1f && depth < depth_threshold)
             {
-                if (const float depth = static_cast<float>(target_on_fork[u]) * 1.0e-3f; depth < depth_threshold)
+                // if (const float depth = static_cast<float>(depth[u]) * 1.0e-3f; depth < depth_threshold)
+                int label{};
+                if (label_ptr[u] == pallet_label)
                 {
-                    const float X = (static_cast<float>(u) - cx) * depth * fx_inv;
-                    const float Y = (static_cast<float>(v) - cy) * depth * fy_inv;
-                    const uint32_t label = labels_on_fork[u];
-                    semantic_cloud_from_fork.emplace_back(depth, -X, -Y, label);
-
-                    if (label == 20)
-                    {
-                        cage_posts_cloud.emplace_back(depth, -X, -Y);
-                    }
+                    label = 1;
                 }
-            }
-
-            if (target_on_left[u] > 0)
-            {
-                if (const float depth = static_cast<float>(target_on_left[u]) * 1.0e-3f; depth < depth_threshold)
+                else if (label_ptr[u] == ramp_label)
                 {
-                    const float X = (static_cast<float>(u) - cx) * depth * fx_inv;
-                    const float Y = (static_cast<float>(v) - cy) * depth * fy_inv;
-                    const uint32_t label = labels_on_left[u];
-                    semantic_cloud_from_left.emplace_back(depth, -X, -Y, label);
+                    label = 2;
                 }
-            }
-
-            if (target_on_right[u] > 0)
-            {
-                if (const float depth = static_cast<float>(target_on_right[u]) * 1.0e-3f; depth < depth_threshold)
+                else if (label_ptr[u] == trailer_label)
                 {
-                    const float X = (static_cast<float>(u) - cx) * depth * fx_inv;
-                    const float Y = (static_cast<float>(v) - cy) * depth * fy_inv;
-                    const uint32_t label = labels_on_right[u];
-                    semantic_cloud_from_right.emplace_back(depth, -X, -Y, label);
+                    label = 3;
                 }
+                else if (label_ptr[u] == goods_label)
+                {
+                    label = 4;
+                }
+                else
+                {
+                    label = 0;
+                }
+
+                const float x = (static_cast<float>(u) - cx) * depth * fx_inv;
+                const float y = (static_cast<float>(v) - cy) * depth * fy_inv;
+                semantic_cloud_camera.emplace_back(depth_ptr, -x, -y, label);
             }
         }
     }
 
-    SemanticCloud semantic_cloud;
-
-    if (!semantic_cloud_from_fork.empty())
+    if (semantic_cloud_camera.size() < 10)
     {
-        SemanticCloud cloud_in_base;
-        pcl::transformPointCloud(semantic_cloud_from_fork, cloud_in_base, mForkCameraExtrinsics);
-        semantic_cloud = std::move(cloud_in_base);
-
-        pcl::transformPointCloud(cage_posts_cloud, cage_posts_cloud, mForkCameraExtrinsics);
+        
     }
 
-    //
-    // if (!target_cloud_on_left.empty())
-    // {
-    //     SemanticCloud cloud_in_base;
-    //     pcl::transformPointCloud(target_cloud_on_left, cloud_in_base, mLeftCameraExtrinsics);
-    //     semantic_cloud += cloud_in_base;
-    // }
-    //
-    // if (!target_cloud_on_right.empty())
-    // {
-    //     SemanticCloud cloud_in_base;
-    //     pcl::transformPointCloud(target_cloud_on_right, cloud_in_base, mRightCameraExtrinsics);
-    //     semantic_cloud += cloud_in_base;
-    // }
+    SemanticCloud semantic_cloud_base;   // This is the semantic cloud in the base link coordinate system.
+
+    if (!semantic_cloud_camera.empty())
+    {
+        SemanticCloud cloud_in_base;
+        // pcl::transformPointCloud(semantic_cloud_from_fork, cloud_in_base, mForkCameraExtrinsics);
+        semantic_cloud_camera = std::move(cloud_in_base);
+
+        // pcl::transformPointCloud(cage_posts_cloud, cage_posts_cloud, mForkCameraExtrinsics);
+    }
 
     // if (semantic_cloud.size() > 10)
     // {
@@ -173,21 +224,48 @@ void CloudPublisher::imgsHandler(const ImgMsg::ConstSharedPtr &fork_semantics_ms
     //     mColoredCloudPub->publish(colored_cloud_msg);
     // }
 
-    if (semantic_cloud.size() > 10)
+    // if (semantic_cloud_camera.size() > 10)
+    // {
+    //     ColoredCloud semantic_cloud_with_clolor;
+    //     getCloud(semantic_cloud_camera, semantic_cloud_with_clolor);
+
+    //     sensor_msgs::msg::PointCloud2 semantic_cloud_msg, semantic_cloud_with_color_msg;
+    //     pcl::toROSMsg(semantic_cloud_with_clolor, semantic_cloud_with_color_msg);
+
+    //     semantic_cloud_msg.header.stamp = this->now();
+    //     semantic_cloud_msg.header.frame_id = global_frame_id;
+    //     semantic_cloud_with_color_msg.header.stamp = this->now();
+    //     semantic_cloud_with_color_msg.header.frame_id = global_frame_id;
+
+    //     mSemanticCloudPub->publish(semantic_cloud_msg);
+    //     mColoredCloudPub->publish(semantic_cloud_with_color_msg);
+    // }
+}
+
+void CloudBuild::semanticLabelsHandler(const StrMsg::ConstSharedPtr& semantic_labels_msg)
+{
+    std::unordered_map<std::string, int> semantic_labels = parseSemanticLabels(semantic_labels_msg);
+    auto it = semantic_labels.find("pallet");
+    if(it != semantic_labels.end())
     {
-        ColoredCloud semantic_cloud_with_clolor;
-        getCloud(semantic_cloud, semantic_cloud_with_clolor);
+        const int pallet_label = it->second;
+        RCLCPP_INFO(get_logger(), "Label of pallet: %d", pallet_label);
+        mSemanticLabels["pallet"] = pallet_label;
+    }
 
-        sensor_msgs::msg::PointCloud2 semantic_cloud_msg, semantic_cloud_with_color_msg;
-        pcl::toROSMsg(cage_posts_cloud, semantic_cloud_msg);
-        pcl::toROSMsg(semantic_cloud_with_clolor, semantic_cloud_with_color_msg);
+    it = semantic_labels.find("ramp");
+    if(it != semantic_labels.end())
+    {
+        const int ramp_label = it->second;
+        RCLCPP_INFO(get_logger(), "Label of ramp: %d", ramp_label);
+        mSemanticLabels["ramp"] = ramp_label;
+    }
 
-        semantic_cloud_msg.header.stamp = this->now();
-        semantic_cloud_msg.header.frame_id = global_frame_id;
-        semantic_cloud_with_color_msg.header.stamp = this->now();
-        semantic_cloud_with_color_msg.header.frame_id = global_frame_id;
-
-        mSemanticCloudPub->publish(semantic_cloud_msg);
-        mColoredCloudPub->publish(semantic_cloud_with_color_msg);
+    it = semantic_labels.find("goods");
+    if(it != semantic_labels.end())
+    {
+        const int goods_label = it->second;
+        RCLCPP_INFO(get_logger(), "Label of goods: %d", goods_label);
+        mSemanticLabels["ramp"] = goods_label;
     }
 }

@@ -1,4 +1,4 @@
-#include "perception/nodes/TargetPosePublisher.h"
+#include "perception/nodes/PoseEstimation.h"
 #include "perception/nodes/CloudPublisher.h"
 #include <cv_bridge/cv_bridge.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
@@ -7,16 +7,16 @@
 #include "perception/tools/feature_detect_3d.hpp"
 #include "perception/tools/filter.h"
 
-void TargetPosePublisher::initSubscriptions()
+void PoseEstimation::initSubscriptions()
 {
     const std::string param_name = "TopicName.Perception.SemanticCloud";
     this->declare_parameter(param_name, "semantic_cloud");
     const std::string semantic_cloud_topic = this->get_parameter(param_name).as_string();
     mCloudSub = create_subscription<sensor_msgs::msg::PointCloud2>(semantic_cloud_topic, rclcpp::SensorDataQoS().best_effort(),
-                                                                   std::bind(&TargetPosePublisher::cloudHandler, this, std::placeholders::_1));
+                                                                   std::bind(&PoseEstimation::cloudHandler, this, std::placeholders::_1));
 }
 
-void TargetPosePublisher::initPublishers()
+void PoseEstimation::initPublishers()
 {
     const std::string params_prefix = "TopicName.Perception.Target";
     this->declare_parameters<std::string>(params_prefix, {{"Pose", "/perception/target/pose"},
@@ -30,7 +30,7 @@ void TargetPosePublisher::initPublishers()
     mTargetPosePub = create_publisher<geometry_msgs::msg::PoseStamped>(target_topics["Pose"], rclcpp::SensorDataQoS().reliable());
 }
 
-void TargetPosePublisher::cloudHandler(const sensor_msgs::msg::PointCloud2::ConstSharedPtr &cloud_msg) const
+void PoseEstimation::cloudHandler(const sensor_msgs::msg::PointCloud2::ConstSharedPtr &cloud_msg) const
 {
     RawCloud cage_posts_cloud;
     pcl::fromROSMsg(*cloud_msg, cage_posts_cloud);

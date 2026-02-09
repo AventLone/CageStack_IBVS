@@ -5,19 +5,19 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include "../types/common.hpp"
 
-class TargetPosePublisher final : public rclcpp::Node
+class PoseEstimation final : public rclcpp::Node
 {
     const std::string global_frame_id = "map";
 
 public:
-    explicit TargetPosePublisher(const std::string& name, const rclcpp::NodeOptions& options) : rclcpp::Node(name, options)
+    explicit PoseEstimation(const std::string& name, const rclcpp::NodeOptions& options) : rclcpp::Node(name, options)
     {
         initSubscriptions();
         initPublishers();
         RCLCPP_INFO(get_logger(), "The node has been activated.");
     }
 
-    ~TargetPosePublisher() override
+    ~PoseEstimation() override
     {
         RCLCPP_INFO(get_logger(), "The node has been shutdown.");
     }

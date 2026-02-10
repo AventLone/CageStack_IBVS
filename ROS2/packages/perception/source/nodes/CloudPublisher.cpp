@@ -4,6 +4,7 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <Eigen/Geometry>
+#include <tf2_eigen/tf2_eigen.hpp> // ROS 2 header
 #include "perception/tools/filter.h"
 
 
@@ -121,6 +122,20 @@ void CloudBuild::initPublishers()
 
 void CloudBuild::imgsHandler(const ImgMsg::ConstSharedPtr& depth_msg, const ImgMsg::ConstSharedPtr& semantics_msg) const
 {
+    // geometry_msgs::msg::TransformStamped T_body2fork;
+    Eigen::Isometry3f T_body2fork;
+    try
+    {
+        // This returns the pose of 'fork' in 'body' coordinates
+        geometry_msgs::msg::TransformStamped tf_body2fork = mTfBuffer->lookupTransform("LOLA", "fork", tf2::TimePointZero);
+        T_body2fork = tf2::transformToEigen(tf_body2fork).cast<float>();
+    }
+    catch (const tf2::TransformException& ex)
+    {
+        RCLCPP_ERROR(this->get_logger(), "Could not transform fork to body: %s", ex.what());
+        return;
+    }
+
     const auto depth_ptr = cv_bridge::toCvShare(depth_msg, sensor_msgs::image_encodings::TYPE_32FC1);
     const auto semantics_ptr = cv_bridge::toCvShare(semantics_msg, sensor_msgs::image_encodings::TYPE_32SC1);
 
@@ -160,9 +175,12 @@ void CloudBuild::imgsHandler(const ImgMsg::ConstSharedPtr& depth_msg, const ImgM
         {
             if (const float depth = depth_ptr[u]; depth > 0.1f && depth < depth_threshold)
             {
-                // if (const float depth = static_cast<float>(depth[u]) * 1.0e-3f; depth < depth_threshold)
                 int label{};
-                if (label_ptr[u] == pallet_label)
+                if (label_ptr[u] == 0)
+                {
+                    label = 0;
+                }
+                else if (label_ptr[u] == pallet_label)
                 {
                     label = 1;
                 }
@@ -185,61 +203,34 @@ void CloudBuild::imgsHandler(const ImgMsg::ConstSharedPtr& depth_msg, const ImgM
 
                 const float x = (static_cast<float>(u) - cx) * depth * fx_inv;
                 const float y = (static_cast<float>(v) - cy) * depth * fy_inv;
-                semantic_cloud_camera.emplace_back(depth_ptr, -x, -y, label);
+                semantic_cloud_camera.emplace_back(depth, -x, -y, label);
             }
         }
     }
 
     if (semantic_cloud_camera.size() < 10)
     {
-        
+        return;
     }
 
     SemanticCloud semantic_cloud_base;   // This is the semantic cloud in the base link coordinate system.
+    const Eigen::Isometry3f T_body2camera = T_body2fork * mT_fork2camera;
+    pcl::transformPointCloud(semantic_cloud_camera, semantic_cloud_base, T_body2camera);
 
-    if (!semantic_cloud_camera.empty())
-    {
-        SemanticCloud cloud_in_base;
-        // pcl::transformPointCloud(semantic_cloud_from_fork, cloud_in_base, mForkCameraExtrinsics);
-        semantic_cloud_camera = std::move(cloud_in_base);
+    ColoredCloud colored_cloud;
+    getCloud(semantic_cloud_base, colored_cloud);
 
-        // pcl::transformPointCloud(cage_posts_cloud, cage_posts_cloud, mForkCameraExtrinsics);
-    }
+    sensor_msgs::msg::PointCloud2 semantic_cloud_msg, colored_cloud_msg;
+    pcl::toROSMsg(semantic_cloud_base, semantic_cloud_msg);
+    pcl::toROSMsg(colored_cloud, colored_cloud_msg);
 
-    // if (semantic_cloud.size() > 10)
-    // {
-    //     ColoredCloud colored_cloud;
-    //     getCloud(semantic_cloud, colored_cloud);
-    //
-    //     sensor_msgs::msg::PointCloud2 semantic_cloud_msg, colored_cloud_msg;
-    //     pcl::toROSMsg(semantic_cloud, semantic_cloud_msg);
-    //     pcl::toROSMsg(colored_cloud, colored_cloud_msg);
-    //
-    //     semantic_cloud_msg.header.stamp = this->now();
-    //     semantic_cloud_msg.header.frame_id = "map";
-    //     colored_cloud_msg.header.stamp = this->now();
-    //     colored_cloud_msg.header.frame_id = "map";
-    //
-    //     mSemanticCloudPub->publish(semantic_cloud_msg);
-    //     mColoredCloudPub->publish(colored_cloud_msg);
-    // }
+    semantic_cloud_msg.header.stamp = this->now();
+    semantic_cloud_msg.header.frame_id = global_frame_id;
+    colored_cloud_msg.header.stamp = this->now();
+    colored_cloud_msg.header.frame_id = global_frame_id;
 
-    // if (semantic_cloud_camera.size() > 10)
-    // {
-    //     ColoredCloud semantic_cloud_with_clolor;
-    //     getCloud(semantic_cloud_camera, semantic_cloud_with_clolor);
-
-    //     sensor_msgs::msg::PointCloud2 semantic_cloud_msg, semantic_cloud_with_color_msg;
-    //     pcl::toROSMsg(semantic_cloud_with_clolor, semantic_cloud_with_color_msg);
-
-    //     semantic_cloud_msg.header.stamp = this->now();
-    //     semantic_cloud_msg.header.frame_id = global_frame_id;
-    //     semantic_cloud_with_color_msg.header.stamp = this->now();
-    //     semantic_cloud_with_color_msg.header.frame_id = global_frame_id;
-
-    //     mSemanticCloudPub->publish(semantic_cloud_msg);
-    //     mColoredCloudPub->publish(semantic_cloud_with_color_msg);
-    // }
+    mSemanticCloudPub->publish(semantic_cloud_msg);
+    mColoredCloudPub->publish(colored_cloud_msg);
 }
 
 void CloudBuild::semanticLabelsHandler(const StrMsg::ConstSharedPtr& semantic_labels_msg)
@@ -249,7 +240,6 @@ void CloudBuild::semanticLabelsHandler(const StrMsg::ConstSharedPtr& semantic_la
     if(it != semantic_labels.end())
     {
         const int pallet_label = it->second;
-        RCLCPP_INFO(get_logger(), "Label of pallet: %d", pallet_label);
         mSemanticLabels["pallet"] = pallet_label;
     }
 
@@ -257,7 +247,6 @@ void CloudBuild::semanticLabelsHandler(const StrMsg::ConstSharedPtr& semantic_la
     if(it != semantic_labels.end())
     {
         const int ramp_label = it->second;
-        RCLCPP_INFO(get_logger(), "Label of ramp: %d", ramp_label);
         mSemanticLabels["ramp"] = ramp_label;
     }
 
@@ -265,7 +254,13 @@ void CloudBuild::semanticLabelsHandler(const StrMsg::ConstSharedPtr& semantic_la
     if(it != semantic_labels.end())
     {
         const int goods_label = it->second;
-        RCLCPP_INFO(get_logger(), "Label of goods: %d", goods_label);
         mSemanticLabels["ramp"] = goods_label;
+    }
+
+    it = semantic_labels.find("trailer");
+    if(it != semantic_labels.end())
+    {
+        const int trailer_label = it->second;
+        mSemanticLabels["trailer"] = trailer_label;
     }
 }

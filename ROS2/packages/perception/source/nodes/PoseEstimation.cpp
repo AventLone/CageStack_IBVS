@@ -20,7 +20,7 @@ void PoseEstimation::initPublishers()
 {
     const std::string params_prefix = "TopicName.Perception.Target";
     this->declare_parameters<std::string>(params_prefix, {{"Pose", "/perception/target/pose"},
-                                                                          {"BBox", "/perception/target/bbox"}});
+                                                          {"BBox", "/perception/target/bbox"}});
     std::map<std::string, std::string> target_topics;
     if (!this->get_parameters<std::string>(params_prefix, target_topics))
     {

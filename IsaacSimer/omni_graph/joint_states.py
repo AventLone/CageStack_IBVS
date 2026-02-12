@@ -19,7 +19,7 @@ keys = og.Controller.Keys
             ("PublishClock", "isaacsim.ros2.bridge.ROS2PublishClock"),
             ("PublishJointState", "isaacsim.ros2.bridge.ROS2PublishJointState"),
             ("SubscribeJointState", "isaacsim.ros2.bridge.ROS2SubscribeJointState"),
-            ("ArticulationController", "isaacsim.core.nodes.IsaacArticulationController"),
+            ("ArticulationController", "isaacsim.core.nodes.IsaacArticulationController")
         ],
         keys.CONNECT: [
             ("OnPlaybackTick.outputs:tick", "PublishClock.inputs:execIn"),

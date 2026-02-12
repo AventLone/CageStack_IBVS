@@ -235,7 +235,7 @@ void CloudBuild::imgsHandler(const ImgMsg::ConstSharedPtr& depth_msg, const ImgM
 
 void CloudBuild::semanticLabelsHandler(const StrMsg::ConstSharedPtr& semantic_labels_msg)
 {
-    std::unordered_map<std::string, int> semantic_labels = parseSemanticLabels(semantic_labels_msg);
+    const std::unordered_map<std::string, int> semantic_labels = parseSemanticLabels(semantic_labels_msg);
     auto it = semantic_labels.find("pallet");
     if(it != semantic_labels.end())
     {

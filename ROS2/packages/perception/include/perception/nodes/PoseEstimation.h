@@ -23,8 +23,14 @@ public:
     }
 
 private:
+    /* Flag */
+    bool mHasGoal{false};
+    Eigen::Vector2f mGoal;   // The position of the goal
+    Eigen::Vector3f mGoodsDimensions;
+
     /** Subscribers **/
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr mCloudSub;
+    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr mGoalSub;
 
     /** Publishers **/
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr mTargetPosePub;

@@ -5,7 +5,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <Eigen/Geometry>
 #include <tf2_eigen/tf2_eigen.hpp> // ROS 2 header
-#include "perception/tools/filter.h"
+#include "perception/tools/filter_3d.h"
 
 
 static std::unordered_map<std::string, int> parseSemanticLabels(const std_msgs::msg::String::ConstSharedPtr& msg)

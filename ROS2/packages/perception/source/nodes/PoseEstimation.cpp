@@ -5,7 +5,7 @@
 #include <Eigen/Geometry>
 #include <pcl_conversions/pcl_conversions.h>
 #include "perception/tools/feature_detect_3d.hpp"
-#include "perception/tools/filter.h"
+#include "perception/tools/filter_3d.h"
 
 void PoseEstimation::initSubscriptions()
 {
@@ -14,6 +14,13 @@ void PoseEstimation::initSubscriptions()
     const std::string semantic_cloud_topic = this->get_parameter(param_name).as_string();
     mCloudSub = create_subscription<sensor_msgs::msg::PointCloud2>(semantic_cloud_topic, rclcpp::SensorDataQoS().best_effort(),
                                                                    std::bind(&PoseEstimation::cloudHandler, this, std::placeholders::_1));
+    mGoalSub = create_subscription<geometry_msgs::msg::PoseStamped>("goal_pose", rclcpp::ServicesQoS(), 
+                [this](const geometry_msgs::msg::PoseStamped::ConstSharedPtr& goal_msg) -> void
+                    {
+                        mGoal[0] = goal_msg->pose.position.x;
+                        mGoal[1] = goal_msg->pose.position.y;
+                        mHasGoal = true;
+                    });
 }
 
 void PoseEstimation::initPublishers()

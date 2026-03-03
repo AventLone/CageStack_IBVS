@@ -28,9 +28,7 @@ float calculateLineAngle(const pcl::PointCloud<PointT>& cloud)
     }
     cv::Vec4f line; // Fitting result: [vx, vy, x0, y0]; y = k*x + b; k = vy / vx, b = y0 - k*x0
     cv::fitLine(points, line, cv::DIST_L2, 0.0, 0.01, 0.01);
-    const float angle_rad = -std::atan2(line[1], line[0]);
-    const float angle_deg = angle_rad * 180.0f / M_PIf;
-    return angle_deg;
+    return -std::atan2(line[1], line[0]);
 }
 
 template<class PointT>
@@ -101,57 +99,6 @@ bool findInliers(const pcl::PointCloud<PointT>& cloud, pcl::PointCloud<PointT>& 
     return true;
 }
 
-// template<typename PointT>
-// std::vector<int> ransacVerticalPlaneInliers(
-//     const pcl::PointCloud<PointT>& cloud,
-//     int max_iters = 1000,
-//     double distance_threshold = 0.02,
-//     int min_inliers = 50)
-// {
-//     std::vector<int> best_inliers;
-//     const int N = cloud.size();
-//     if (N < 2) return best_inliers;
-
-//     std::mt19937 rng(std::random_device{}());
-//     std::uniform_int_distribution<int> uni(0, N - 1);
-
-//     for (int iter = 0; iter < max_iters; ++iter)
-//     {
-//         int i = uni(rng);
-//         int j = uni(rng);
-//         if (i == j) continue;
-
-//         const auto& p1 = cloud[i];
-//         const auto& p2 = cloud[j];
-
-//         // line in xy-plane: a*x + b*y + d = 0
-//         double a = p1.y - p2.y;
-//         double b = p2.x - p1.x;
-//         double d = p1.x * p2.y - p2.x * p1.y;
-
-//         double norm = std::hypot(a, b);
-//         if (norm < 1e-6) continue;
-
-//         std::vector<int> inliers;
-//         for (int k = 0; k < N; ++k)
-//         {
-//             const auto& p = cloud[k];
-//             double dist = std::abs(a * p.x + b * p.y + d) / norm;
-//             if (dist < distance_threshold)
-//                 inliers.push_back(k);
-//         }
-
-//         if (inliers.size() > best_inliers.size())
-//             best_inliers = std::move(inliers);
-//     }
-
-//     if (best_inliers.size() < (size_t)min_inliers)
-//         best_inliers.clear();
-
-//     return best_inliers;
-// }
-
-
 template<class PointT>
 Eigen::Vector4f fitPlaneByPCA(const pcl::PointCloud<PointT>& cloud, const int parallel_to = -1)
 {
@@ -203,64 +150,6 @@ float computeAngleByPCA(const pcl::PointCloud<PointT>& cloud)
     return std::atan2(normal[1], normal[0]);
 }
 
-/* Robust solution for angle calculation: RANSAC + the least squares */
-// template<class PointT>
-// float computeCloudAngle(const pcl::PointCloud<PointT>& cloud, const int parallel_to = -1)
-// {
-
-//     cv::fitLine()
-// }
-
-// Returns true if a robust line was found. `line` = (vx,vy,x0,y0) like cv::fitLine.
-// bool ransacFitLine(const std::vector<cv::Point2f>& pts,
-//                    cv::Vec4f &line,
-//                    int maxIters = 1000,
-//                    double distThresh = 2.0,
-//                    int minInliers = 30)
-// {
-//     if (pts.size() < 2) return false;
-//     cv::RNG rng(cv::getTickCount());
-//     std::vector<int> bestInliers;
-//     const int N = (int)pts.size();
-
-//     for (int it = 0; it < maxIters; ++it) {
-//         int i = rng.uniform(0, N);
-//         int j = rng.uniform(0, N-1);
-//         if (j >= i) ++j;               // ensure j != i
-
-//         const cv::Point2f &p1 = pts[i];
-//         const cv::Point2f &p2 = pts[j];
-//         // skip nearly identical
-//         if (cv::norm(p1 - p2) < 1e-6f) continue;
-
-//         // line ax + by + c = 0
-//         double a = p2.y - p1.y;
-//         double b = p1.x - p2.x;
-//         double c = p2.x * p1.y - p2.y * p1.x;
-//         double denom = std::sqrt(a*a + b*b);
-
-//         std::vector<int> inliers;
-//         inliers.reserve(N);
-//         for (int k = 0; k < N; ++k) {
-//             double d = std::abs(a*pts[k].x + b*pts[k].y + c) / denom;
-//             if (d <= distThresh) inliers.push_back(k);
-//         }
-
-//         if ((int)inliers.size() > (int)bestInliers.size())
-//             bestInliers.swap(inliers);
-//     }
-
-//     if ((int)bestInliers.size() < minInliers) return false;
-
-//     // Refit using all inliers with cv::fitLine
-//     std::vector<cv::Point2f> inlierPts;
-//     inlierPts.reserve(bestInliers.size());
-//     for (int idx : bestInliers) inlierPts.push_back(pts[idx]);
-
-//     cv::fitLine(inlierPts, line, cv::DIST_L2, 0, 1e-2, 1e-2);
-//     return true;
-// }
-
 template<class PointT>
 Eigen::Vector3f computeCenter(const pcl::PointCloud<PointT>& cloud)
 {
@@ -283,19 +172,19 @@ inline pcl::PointCloud<pcl::PointXYZ> createPalletCloud(const float angle)
     std::uniform_real_distribution<float> unifor(0.02, 0.2);
     std::cauchy_distribution<float> dist_chaos(0.0f, 0.001f);
 
-    for (float y = -0.5f; y < 0.5f; y += 0.01f)
+    for (float y = -0.5f; y < 0.5f; y += 0.02f)
     {
         std::normal_distribution<float> dist_normal(0.0, unifor(gen));
-        for (float z = 0.0f; z < 0.15f; z += 0.01f)
+        for (float z = 0.0f; z < 0.15f; z += 0.02f)
         {
             front_face.emplace_back((dist_normal(gen) + dist_chaos(gen)) * 0.5f, y, z);
         }
     }
 
-    for (float x = 0.0f; x > -1.2f; x -= 0.01f)
+    for (float x = 0.0f; x > -1.2f; x -= 0.02f)
     {
         std::normal_distribution<float> dist_normal(0.0, 0.02);
-        for (float z = 0.0f; z < 0.15f; z += 0.01f)
+        for (float z = 0.0f; z < 0.15f; z += 0.02f)
         {
             left_side_face.emplace_back(x, -0.5f + (dist_normal(gen) + dist_chaos(gen)) * 0.5f, z);
         }

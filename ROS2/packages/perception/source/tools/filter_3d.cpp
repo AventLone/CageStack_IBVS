@@ -1,7 +1,7 @@
 #include "perception/tools/filter_3d.h"
 #include <random>
 
-void getCloud(const SemanticCloud& semantic_cloud, const uint32_t label, pcl::PointCloud<pcl::PointXYZ>& target_cloud)
+void getCloud(const SemanticCloud& semantic_cloud, const int label, pcl::PointCloud<pcl::PointXYZ>& target_cloud)
 {
     for (const auto& point : semantic_cloud.points)
     {
@@ -22,7 +22,7 @@ void getCloud(const SemanticCloud& semantic_cloud, pcl::PointCloud<pcl::PointXYZ
     static std::mt19937 gen(rd());
     static std::uniform_int_distribution<int> dist(0, 255);
 
-    static std::unordered_map<uint32_t, std::tuple<uint8_t, uint8_t, uint8_t>> color_map; // map label -> (r,g,b)
+    static std::unordered_map<int, std::tuple<uint8_t, uint8_t, uint8_t>> color_map; // map label -> (r,g,b)
     for (const auto& p : semantic_cloud.points)
     {
         uint8_t r, g, b;
@@ -45,7 +45,7 @@ void getCloud(const SemanticCloud& semantic_cloud, pcl::PointCloud<pcl::PointXYZ
         q.r = r;
         q.g = g;
         q.b = b;
-        colored_cloud.points.push_back(std::move(q));
+        colored_cloud.points.push_back(q);
     }
 
     colored_cloud.width = static_cast<uint32_t>(colored_cloud.points.size());

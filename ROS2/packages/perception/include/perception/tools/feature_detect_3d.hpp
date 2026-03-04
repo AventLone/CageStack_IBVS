@@ -2,8 +2,12 @@
 #include <pcl/common/common.h>
 #include <pcl/common/eigen.h>
 #include <pcl/common/centroid.h>
+#include <pcl/common/transforms.h>
+#include <opencv2/opencv.hpp>
 #include <random>
 
+namespace feature3d
+{
 template<class PointT>
 Eigen::Vector3f getCloudSize(const pcl::PointCloud<PointT>& cloud)
 {
@@ -159,9 +163,6 @@ Eigen::Vector3f computeCenter(const pcl::PointCloud<PointT>& cloud)
     return 0.5f * (min_point.head<3>() + max_point.head<3>());
 }
 
-#include <random>
-#include <pcl/common/transforms.h>
-
 inline pcl::PointCloud<pcl::PointXYZ> createPalletCloud(const float angle)
 {
     pcl::PointCloud<pcl::PointXYZ> front_face, left_side_face, right_side_face, cloud, angel_cloud;
@@ -199,4 +200,5 @@ inline pcl::PointCloud<pcl::PointXYZ> createPalletCloud(const float angle)
     pcl::transformPointCloud(cloud, angel_cloud, T);
 
     return angel_cloud;
+}
 }

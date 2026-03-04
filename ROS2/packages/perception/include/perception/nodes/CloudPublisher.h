@@ -5,7 +5,6 @@
 #include <message_filters/subscriber.h>
 #include <message_filters/sync_policies/approximate_time.h>
 #include <message_filters/synchronizer.h>
-#include <opencv2/opencv.hpp>
 #include "../types/common.hpp"
 #include "../tools/OrthographicProjector.hpp"
 #include <tf2_ros/transform_listener.h>
@@ -27,42 +26,58 @@ class CloudBuild final : public rclcpp::Node
 
     std::unordered_map<std::string, int> mSemanticLabels;
 
+    struct ImgSet
+    {
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+        Eigen::Isometry3f T_body2fork;
+        cv::Mat depth_img, semantic_img;
+    };
+
 public:
-    explicit CloudBuild(const std::string& name, const rclcpp::NodeOptions& options) : 
-        rclcpp::Node(name, options),
-        mT_fork2camera(Eigen::Isometry3f::Identity())
+    explicit CloudBuild(const std::string& name, const rclcpp::NodeOptions& options) : rclcpp::Node(name, options),
+                                                                                       mT_fork2camera(Eigen::Isometry3f::Identity())
     {
         initSubscritions();
         initPublishers();
 
-        // mLeftCameraExtrinsics.rotate(Eigen::AngleAxisf(M_PIf / 18.0f, Eigen::Vector3f::UnitZ()));
-        // mLeftCameraExtrinsics.pretranslate(Eigen::Vector3f(-0.4f, 0.6f, 1.0f));
-
-        // mRightCameraExtrinsics.rotate(Eigen::AngleAxisf(-M_PIf / 18.0f, Eigen::Vector3f::UnitZ()));
-        // mRightCameraExtrinsics.pretranslate(Eigen::Vector3f(-0.4f, -0.6f, 1.0f));
         mTfBuffer = std::make_unique<tf2_ros::Buffer>(this->get_clock());
         mTfListener = std::make_shared<tf2_ros::TransformListener>(*mTfBuffer);
 
         mT_fork2camera.rotate(Eigen::AngleAxisf(M_PIf, Eigen::Vector3f::UnitZ()));
         mT_fork2camera.pretranslate(Eigen::Vector3f(-0.1f, 0.0f, -0.1f));
 
-
         // Force the node to use simulation time
         this->set_parameter(rclcpp::Parameter("use_sim_time", true));
         // Now, this->now() will return Isaac Sim's time
         RCLCPP_INFO(this->get_logger(), "Current Sim Time: %f", this->now().seconds());
+        mWorker = std::thread(&CloudBuild::workerLoop, this);
         RCLCPP_INFO(get_logger(), "The node has been activated.");
     }
 
     ~CloudBuild() override
     {
+        //
+        {
+            std::unique_lock<std::mutex> lock(mBufferMutex);
+            mIsShutdown = true;
+        }
+        mTriggerEvent.notify_one();
+        if (mWorker.joinable())
+        {
+            mWorker.join();
+        }
         RCLCPP_INFO(get_logger(), "The node has been shutdown.");
     }
 
 private:
+    /* Received Data Buffer */
+    bool mIsShutdown{false};
+    std::mutex mBufferMutex;
+    std::condition_variable mTriggerEvent;
+    std::thread mWorker;
+    std::queue<ImgSet> mImgsBuffer;
     std::shared_ptr<tf2_ros::TransformListener> mTfListener;
     std::unique_ptr<tf2_ros::Buffer> mTfBuffer;
-    // Eigen::Isometry3f mLeftCameraExtrinsics, mRightCameraExtrinsics;
     Eigen::Isometry3f mT_fork2camera;
 
     /*** Synchronized Subsribers ***/
@@ -83,7 +98,19 @@ private:
 
     void initPublishers();
 
-    void imgsHandler(const ImgMsg::ConstSharedPtr& depth_msg, const ImgMsg::ConstSharedPtr& semantics_msg) const;
+    void imgsHandler(const ImgMsg::ConstSharedPtr& depth_msg, const ImgMsg::ConstSharedPtr& semantics_msg);
 
     void semanticLabelsHandler(const StrMsg::ConstSharedPtr& semantic_labels_msg);
+
+    void pushInBuffer(ImgSet&& img_set)
+    {
+        std::lock_guard<std::mutex> lock(mBufferMutex);
+        while (!mImgsBuffer.empty())
+        {
+            mImgsBuffer.pop();
+        }
+        mImgsBuffer.push(std::move(img_set));
+    }
+
+    void workerLoop();
 };

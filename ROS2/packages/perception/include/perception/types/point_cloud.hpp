@@ -6,9 +6,9 @@
 // custom point type with semantic label
 struct SemanticPoint
 {
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW // ensure proper alignment
     PCL_ADD_POINT4D; // adds float x,y,z and padding (w)
     int label; // semantic label (choose uint8_t / uint32_t as needed)
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW // ensure proper alignment
     SemanticPoint() = default;
 
     explicit SemanticPoint(const float x, const float y, const float z, const int label)

@@ -13,37 +13,41 @@ void PoseEstimation::initSubscriptions()
     this->declare_parameter(param_name, "semantic_cloud");
     const std::string semantic_cloud_topic = this->get_parameter(param_name).as_string();
     mCloudSub = create_subscription<sensor_msgs::msg::PointCloud2>(semantic_cloud_topic, rclcpp::SensorDataQoS().best_effort(),
-                                                                   std::bind(&PoseEstimation::cloudHandler, this, std::placeholders::_1));
-    mGoalSub = create_subscription<geometry_msgs::msg::PoseStamped>("goal_pose", rclcpp::ServicesQoS(), 
-                [this](const geometry_msgs::msg::PoseStamped::ConstSharedPtr& goal_msg) -> void
-                    {
-                        mGoal[0] = goal_msg->pose.position.x;
-                        mGoal[1] = goal_msg->pose.position.y;
-                        mHasGoal = true;
-                    });
+                                                                   std::bind(&PoseEstimation::cloudHandler, this,
+                                                                             std::placeholders::_1));
+    mGoalSub = create_subscription<geometry_msgs::msg::PoseStamped>(
+        "goal_pose", rclcpp::ServicesQoS(),
+        [this](const geometry_msgs::msg::PoseStamped::ConstSharedPtr& goal_msg) -> void
+            {
+                mGoal[0] = static_cast<float>(goal_msg->pose.position.x);
+                mGoal[1] = static_cast<float>(goal_msg->pose.position.y);
+                mHasGoal = true;
+            });
 }
 
 void PoseEstimation::initPublishers()
 {
     const std::string params_prefix = "TopicName.Perception.Target";
-    this->declare_parameters<std::string>(params_prefix, {{"Pose", "/perception/target/pose"},
-                                                          {"BBox", "/perception/target/bbox"}});
+    this->declare_parameters<std::string>(params_prefix, {
+                                              {"Pose", "/perception/target/pose"},
+                                              {"BBox", "/perception/target/bbox"}
+                                          });
     std::map<std::string, std::string> target_topics;
     if (!this->get_parameters<std::string>(params_prefix, target_topics))
     {
-        RCLCPP_FATAL(get_logger(), "Failed to get parameters, target topic names!");
+        RCLCPP_ERROR(get_logger(), "Failed to get parameters, target topic names!");
     }
-    mTargetBBoxPub = create_publisher<visualization_msgs::msg::Marker>(target_topics["BBox"], rclcpp::SensorDataQoS().best_effort());
-    mTargetPosePub = create_publisher<geometry_msgs::msg::PoseStamped>(target_topics["Pose"], rclcpp::SensorDataQoS().reliable());
+    mTargetBBoxPub = create_publisher<visualization_msgs::msg::Marker>(target_topics["BBox"], rclcpp::SensorDataQoS());
+    mTargetPosePub = create_publisher<geometry_msgs::msg::PoseStamped>(target_topics["Pose"], rclcpp::ServicesQoS());
 }
 
-void PoseEstimation::cloudHandler(const sensor_msgs::msg::PointCloud2::ConstSharedPtr &cloud_msg) const
+void PoseEstimation::cloudHandler(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& cloud_msg) const
 {
     RawCloud cage_posts_cloud;
     pcl::fromROSMsg(*cloud_msg, cage_posts_cloud);
 
-    Eigen::Vector3f center = computeCenter(cage_posts_cloud);
-    const float angle = computeAngleByPCA(cage_posts_cloud);
+    Eigen::Vector3f center = feature3d::computeCenter(cage_posts_cloud);
+    const float angle = feature3d::computeAngleByPCA(cage_posts_cloud);
 
     tf2::Quaternion tf2_quat;
     tf2_quat.setRPY(0.0, 0.0, angle);
@@ -59,7 +63,7 @@ void PoseEstimation::cloudHandler(const sensor_msgs::msg::PointCloud2::ConstShar
     target_pose.pose.orientation = geom_quat;
     mTargetPosePub->publish(target_pose);
 
-    const Eigen::Vector3f target_size = getCloudSize(cage_posts_cloud);
+    const Eigen::Vector3f target_size = feature3d::getCloudSize(cage_posts_cloud);
 
     Eigen::Isometry2f T_1(Eigen::Isometry2f::Identity()), T_2(Eigen::Isometry2f::Identity());
     T_1.rotate(angle);

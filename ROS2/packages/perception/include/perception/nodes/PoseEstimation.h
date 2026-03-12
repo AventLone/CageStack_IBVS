@@ -4,13 +4,24 @@
 #include <visualization_msgs/msg/marker.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/pose2_d.hpp>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
 #include "../types/common.hpp"
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 class PoseEstimation final : public rclcpp::Node
 {
     const std::string global_frame_id = "map";
+
+    static geometry_msgs::msg::Quaternion toQuaternionMsg(const double yaw)
+    {
+        tf2::Quaternion tf2_quat;
+        tf2_quat.setRPY(0.0, 0.0, yaw);
+        geometry_msgs::msg::Quaternion geom_quat;
+        tf2::convert(tf2_quat, geom_quat);
+        return geom_quat;
+    }
 
 public:
     explicit PoseEstimation(const std::string& name, const rclcpp::NodeOptions& options) : rclcpp::Node(name, options)
@@ -36,6 +47,10 @@ public:
         {
             mWorker.join();
         }
+        if (mLoopCount > 0)
+        {
+            RCLCPP_INFO(get_logger(), "The average latency of perception is %f ms", mTotalConsumTime / static_cast<double>(mLoopCount));
+        }
         RCLCPP_INFO(get_logger(), "The node has been shutdown.");
     }
 
@@ -47,7 +62,10 @@ private:
     std::thread mWorker;
     std::queue<sensor_msgs::msg::PointCloud2> mCloudBuffer;
 
-    Eigen::Vector3f mGoal; // The position of the goal
+    double mTotalConsumTime{};
+    size_t mLoopCount{};
+
+    // Eigen::Vector3f mGoal; // The position of the goal
     geometry_msgs::msg::PoseStamped mGoalMsg;
     const Eigen::Vector3f mLoadDimensions{1.2f, 1.0f, 1.5f};
 
@@ -56,8 +74,9 @@ private:
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr mGoalSub;
 
     /** Publishers **/
-    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr mTargetPosePub;
+    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr mTargetPosePub, mLoadPosePub, mSlotPosePub;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr mVisualizationPub;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr mRoiCloudPub;
 
     /**/
     std::shared_ptr<tf2_ros::TransformListener> mTfListener;
@@ -66,8 +85,6 @@ private:
     void initSubscriptions();
 
     void initPublishers();
-
-    void cloudHandler(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& cloud_msg) const;
 
     void pushInBuffer(const sensor_msgs::msg::PointCloud2& msg)
     {
@@ -79,5 +96,42 @@ private:
         mCloudBuffer.push(msg);
     }
 
+    visualization_msgs::msg::Marker getCubeMarker(const char* frame_id, const char* ns, const int id,
+                                                  const double cube_size_x, const double cube_size_y, const double cube_size_z,
+                                                  const float color_r, const float color_g, const float color_b, const float color_a,
+                                                  const geometry_msgs::msg::Pose2D& pose) const
+    {
+        visualization_msgs::msg::Marker marker;
+        marker.header.frame_id = frame_id;
+        marker.header.stamp = this->now();
+        marker.ns = ns;
+        marker.id = id;
+        marker.type = visualization_msgs::msg::Marker::CUBE;
+        marker.action = visualization_msgs::msg::Marker::ADD;
+        marker.scale.x = cube_size_x;
+        marker.scale.y = cube_size_y;
+        marker.scale.z = cube_size_z;
+        marker.color.r = color_r;
+        marker.color.g = color_g;
+        marker.color.b = color_b;
+        marker.color.a = color_a;
+        Eigen::Isometry2f T_1(Eigen::Isometry2f::Identity()), T_2(Eigen::Isometry2f::Identity());
+        T_1.rotate(pose.theta);
+        T_1.pretranslate(Eigen::Vector2f(pose.x, pose.y));
+        T_2.translate(Eigen::Vector2f(-0.5f * cube_size_x, 0.0f));
+        Eigen::Isometry2f T_3 = T_1 * T_2;
+
+        marker.pose.position.x = T_3.translation()[0];
+        marker.pose.position.y = T_3.translation()[1];
+        marker.pose.orientation = toQuaternionMsg(pose.theta);
+
+        return marker;
+    }
+
     void workerLoop();
+
+    /* Sub detection modules */
+    bool estimateLoadPose(const RawCloud::Ptr& pallet_cloud, geometry_msgs::msg::Pose2D& load_pose) const;
+
+    Eigen::Isometry3f estimateSlotPose(const RawCloud& cloud) const;
 };

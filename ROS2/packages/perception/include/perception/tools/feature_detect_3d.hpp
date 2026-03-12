@@ -170,8 +170,8 @@ inline pcl::PointCloud<pcl::PointXYZ> createPalletCloud(const float angle)
     std::random_device rd; // Random device for seeding
     std::mt19937 gen(rd()); // Mersenne Twister engine
 
-    std::uniform_real_distribution<float> unifor(0.02, 0.2);
-    std::cauchy_distribution<float> dist_chaos(0.0f, 0.001f);
+    static std::uniform_real_distribution<float> unifor(0.02, 0.2);
+    static std::cauchy_distribution<float> dist_chaos(0.0f, 0.001f);
 
     for (float y = -0.5f; y < 0.5f; y += 0.02f)
     {

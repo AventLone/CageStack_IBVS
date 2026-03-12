@@ -1,6 +1,5 @@
-#include "perception/tools/features_detect_2d.h"
-
-#include <boost/fusion/algorithm/transformation/erase.hpp>
+#include "perception/tools/feature_detect_2d.h"
+// #include <boost/fusion/algorithm/transformation/erase.hpp>
 
 cv::RotatedRect feature2d::detectMinRect(const cv::Mat& src_img)
 {

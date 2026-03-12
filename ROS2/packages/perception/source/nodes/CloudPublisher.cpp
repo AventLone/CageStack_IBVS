@@ -6,6 +6,7 @@
 #include <Eigen/Geometry>
 #include <tf2_eigen/tf2_eigen.hpp> // ROS 2 header
 #include "perception/tools/filter_3d.h"
+#include <random>
 
 
 static std::unordered_map<std::string, int> parseSemanticLabels(const std_msgs::msg::String::ConstSharedPtr& msg)
@@ -102,7 +103,7 @@ void CloudBuild::initSubscritions()
     mSynchronizer->setMaxIntervalDuration(rclcpp::Duration(0, 1000000)); // 10ms 容差
     mSynchronizer->registerCallback(std::bind(&CloudBuild::imgsHandler, this, std::placeholders::_1, std::placeholders::_2));
 
-    mSemanticLabelsSub = this->create_subscription<StrMsg>("semantic_labels", rclcpp::SensorDataQoS().best_effort(),
+    mSemanticLabelsSub = this->create_subscription<StrMsg>("/semantic_labels", rclcpp::SensorDataQoS().best_effort(),
                                                            std::bind(&CloudBuild::semanticLabelsHandler, this, std::placeholders::_1));
 }
 
@@ -186,6 +187,16 @@ void CloudBuild::semanticLabelsHandler(const StrMsg::ConstSharedPtr& semantic_la
 
 void CloudBuild::workerLoop()
 {
+    std::random_device rd; // Random device for seeding
+    std::mt19937 gen(rd()); // Mersenne Twister engine
+    // std::uniform_real_distribution<float> unifor(0.02, 0.2);
+    std::cauchy_distribution<float> dist_chaos(0.0f, 0.0001f);
+    std::normal_distribution<float> dist_normal(0.0f, 0.03f);
+    const auto noise = [&]()-> float
+        {
+            return 0.3f * dist_chaos(gen) + 0.7f * dist_normal(gen);
+        };
+
     while (rclcpp::ok())
     {
         sensor_msgs::msg::PointCloud2 cloud_msg;
@@ -202,7 +213,7 @@ void CloudBuild::workerLoop()
             mImgsBuffer.pop();
         }
 
-        int pallet_label{}, ramp_label{}, trailer_label{}, goods_label{};
+        int pallet_label{}, ramp_label{}, goods_label{};
         auto it = mSemanticLabels.find("pallet");
         if (it != mSemanticLabels.end())
         {
@@ -213,11 +224,6 @@ void CloudBuild::workerLoop()
         {
             ramp_label = it->second;
         }
-        it = mSemanticLabels.find("trailer");
-        if (it != mSemanticLabels.end())
-        {
-            trailer_label = it->second;
-        }
         it = mSemanticLabels.find("goods");
         if (it != mSemanticLabels.end())
         {
@@ -225,7 +231,7 @@ void CloudBuild::workerLoop()
         }
 
         SemanticCloud semantic_cloud_camera; // This is the semantic cloud in the camera coordinate system.
-        constexpr int skip_step = 3;
+        constexpr int skip_step = 6;
         for (int v = 0; v < img_set.depth_img.rows; v += skip_step)
         {
             const auto* depth_ptr = img_set.depth_img.ptr<float>(v);
@@ -233,28 +239,21 @@ void CloudBuild::workerLoop()
 
             for (int u = 0; u < img_set.depth_img.cols; u += skip_step)
             {
-                if (const float depth = depth_ptr[u]; depth > 0.1f && depth < depth_threshold)
+                if (const float depth = depth_ptr[u] + noise(); depth > 0.1f && depth < depth_threshold)
                 {
                     int label{};
-                    if (label_ptr[u] == 0)
-                    {
-                        label = 0;
-                    }
-                    else if (label_ptr[u] == pallet_label)
+
+                    if (label_ptr[u] == pallet_label)
                     {
                         label = 1;
                     }
-                    else if (label_ptr[u] == ramp_label)
+                    else if (label_ptr[u] == goods_label)
                     {
                         label = 2;
                     }
-                    else if (label_ptr[u] == trailer_label)
+                    else if (label_ptr[u] == ramp_label)
                     {
                         label = 3;
-                    }
-                    else if (label_ptr[u] == goods_label)
-                    {
-                        label = 4;
                     }
                     else
                     {
@@ -270,7 +269,7 @@ void CloudBuild::workerLoop()
 
         if (semantic_cloud_camera.size() < 10)
         {
-            return;
+            continue;
         }
 
         SemanticCloud semantic_cloud_base; // This is the semantic cloud in the base link coordinate system.

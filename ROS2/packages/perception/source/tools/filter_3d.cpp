@@ -3,6 +3,7 @@
 
 void getCloud(const SemanticCloud& semantic_cloud, const int label, pcl::PointCloud<pcl::PointXYZ>& target_cloud)
 {
+    target_cloud.reserve(semantic_cloud.size());
     for (const auto& point : semantic_cloud.points)
     {
         if (point.label == label)
@@ -28,9 +29,18 @@ void getCloud(const SemanticCloud& semantic_cloud, pcl::PointCloud<pcl::PointXYZ
         uint8_t r, g, b;
         if (const auto it = color_map.find(p.label); it == color_map.end())
         {
-            r = static_cast<uint8_t>(dist(gen));
-            g = static_cast<uint8_t>(dist(gen));
-            b = static_cast<uint8_t>(dist(gen));
+            if (p.label == 0)
+            {
+                r = 255;
+                g = 255;
+                b = 255;
+            }
+            else
+            {
+                r = static_cast<uint8_t>(dist(gen));
+                g = static_cast<uint8_t>(dist(gen));
+                b = static_cast<uint8_t>(dist(gen));
+            }
             color_map.emplace(p.label, std::make_tuple(r, g, b));
         }
         else

@@ -1,6 +1,9 @@
 #include "perception/tools/feature_detect_2d.h"
+#include <random>
 
-cv::RotatedRect feature2d::detectMinRect(const cv::Mat& src_img)
+namespace feature2d
+{
+cv::RotatedRect detectMinRect(const cv::Mat& src_img)
 {
     std::vector<cv::Point> non_zero_points;
     cv::findNonZero(src_img, non_zero_points);
@@ -19,7 +22,7 @@ cv::RotatedRect feature2d::detectMinRect(const cv::Mat& src_img)
     return rr;
 }
 
-feature2d::Line feature2d::detectRectEdge(const cv::Mat& src_img, const EdgeType edge_type)
+Line detectRectEdge(const cv::Mat& src_img, const EdgeType edge_type)
 {
     std::vector<cv::Point> non_zero_points;
     cv::findNonZero(src_img, non_zero_points);
@@ -57,4 +60,69 @@ feature2d::Line feature2d::detectRectEdge(const cv::Mat& src_img, const EdgeType
             return feature2d::Line(corners[2], corners[3]);
         }
     }
+}
+
+bool findInliers(const cv::Mat& src_img, std::vector<cv::Point>& inliers, const float dist_thresh, const int iters)
+{
+    std::vector<cv::Point> points;
+    cv::findNonZero(src_img, points);
+
+    const int N = static_cast<int>(points.size());
+    if (N < 10)
+    {
+        return false;
+    }
+    std::vector<int> best_inliers_indices;
+
+    std::mt19937 rng(std::random_device{}());
+    std::uniform_int_distribution<int> uni(0, N - 1);
+
+    for (int iter = 0; iter < iters; ++iter)
+    {
+        const int i = uni(rng);
+        const int j = uni(rng);
+        if (i == j)
+        {
+            continue;
+        }
+        const auto& p1 = points[i];
+        const auto& p2 = points[j];
+
+        //line in xy-plane: a*x + b*y + d = 0
+        const float a = static_cast<float>(p1.y - p2.y);
+        const float b = static_cast<float>(p2.x - p1.x);
+        const float d = static_cast<float>(p1.x * p2.y - p2.x * p1.y);
+
+        const float norm = std::hypot(a, b);
+        if (norm < 1e-6f)
+        {
+            continue;
+        }
+
+        std::vector<int> inliers_indices;
+        for (int k = 0; k < N; ++k)
+        {
+            const auto& p = points[k];
+            if (const float dist = std::abs(a * static_cast<float>(p.x) + b * static_cast<float>(p.y) + d) / norm; dist < dist_thresh)
+            {
+                inliers_indices.push_back(k);
+            }
+        }
+
+        if (inliers_indices.size() > best_inliers_indices.size())
+        {
+            best_inliers_indices = std::move(inliers_indices);
+        }
+    }
+
+    inliers.clear();
+    inliers.reserve(N);
+
+    for (const auto idx : best_inliers_indices)
+    {
+        inliers.push_back(points[idx]);
+    }
+
+    return true;
+}
 }

@@ -368,16 +368,74 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud) const
         filter2d::removeIsolatedPoints(temp_img, closed_img);
     }
 
+    bool has_left_side{true}, has_right_side{true}; // Flags to check if there is left side or right side boundary
+
     /* Step 1. Locate the boundary on x direction */
-    cv::Mat vertical_edge_img;
-    feature2d::detectEdge(closed_img, vertical_edge_img, feature2d::EdgeType::RIGHT);
+    cv::Mat right_edge_img;
+    feature2d::detectEdge(closed_img(cv::Range::all(), cv::Range(0, closed_img.cols / 2)), right_edge_img,
+                          feature2d::EdgeType::RIGHT);
+    std::vector<cv::Point> edge_inliers;
+    if (!feature2d::findInliers(right_edge_img, edge_inliers, 3.0f))
+    {
+        RCLCPP_ERROR(get_logger(), "Can't find right edge inliers!");
+        return false;
+    }
+    auto edge_end_points = std::minmax_element(edge_inliers.begin(), edge_inliers.end(),
+                                               [](const cv::Point& a, const cv::Point& b) -> bool
+                                                   {
+                                                       return a.y < b.y;
+                                                   });
+    cv::Mat right_edge_mask = cv::Mat::zeros(closed_img.size(), CV_8UC1);
+    cv::line(right_edge_mask, *edge_end_points.first, *edge_end_points.second, cv::Scalar(255), 16);
 
-    uint8_t no_side_count{0};
+    cv::line(right_edge_mask, *edge_end_points.first, *edge_end_points.second, cv::Scalar(255), 26);
+    closed_img.setTo(0, right_edge_mask);
     /* Step 2. Locate the boundary on y direction, left side */
-
+    cv::Mat upper_edge_img;
+    feature2d::detectEdge(closed_img(cv::Range(0, closed_img.rows / 2), cv::Range::all()), upper_edge_img,
+                          feature2d::EdgeType::LOWER);
+    if (!feature2d::findInliers(upper_edge_img, edge_inliers, 3.0f))
+    {
+        RCLCPP_WARN(get_logger(), "Can't locate rigth side boundary!");
+        has_right_side = false;
+    }
+    else
+    {
+        edge_end_points = std::minmax_element(edge_inliers.begin(), edge_inliers.end(),
+                                              [](const cv::Point& a, const cv::Point& b) -> bool
+                                                  {
+                                                      return a.x < b.x;
+                                                  });
+        cv::Mat upper_edge_mask = cv::Mat::zeros(closed_img.size(), CV_8UC1);
+        cv::line(upper_edge_mask, *edge_end_points.first, *edge_end_points.second, cv::Scalar(255), 16);
+    }
     /* Step 3. Locate the boundary on y direction, rights side */
+    cv::Mat lower_edge_img;
+    feature2d::detectEdge(closed_img(cv::Range(closed_img.rows / 2, closed_img.rows), cv::Range::all()), lower_edge_img,
+                          feature2d::EdgeType::LOWER);
+    if (!feature2d::findInliers(lower_edge_img, edge_inliers, 3.0f))
+    {
+        RCLCPP_WARN(get_logger(), "Can't locate left side boundary!");
+        has_left_side = false;
+    }
+    else
+    {
+        edge_end_points = std::minmax_element(edge_inliers.begin(), edge_inliers.end(),
+                                              [](const cv::Point& a, const cv::Point& b) -> bool
+                                                  {
+                                                      return a.x < b.x;
+                                                  });
+        cv::Mat lower_edge_mask = cv::Mat::zeros(closed_img.size(), CV_8UC1);
+        cv::line(lower_edge_mask, *edge_end_points.first, *edge_end_points.second, cv::Scalar(255), 16);
+    }
 
-    if (no_side_count >= 2)
+    /* Deal with it on different situations */
+    /* Situation 1. There's only left side boundary */
+    if (has_left_side && !has_right_side)
+    {}
+    else if (!has_left_side && has_right_side)
+    {}
+    else
     {
         RCLCPP_ERROR(get_logger(), "Can't locate side boundary!");
         return false;

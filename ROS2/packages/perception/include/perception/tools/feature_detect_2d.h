@@ -70,4 +70,6 @@ inline void detectEdge(const cv::Mat& src, cv::Mat& dst, const EdgeType edge_typ
     // 4. (Optional) Convert back to 8-bit if needed for display
     dst.convertTo(dst, CV_8U);
 }
+
+bool findInliers(const cv::Mat& src_img, std::vector<cv::Point>& inliers, const float dist_thresh, const int iters = 300);
 }

@@ -49,7 +49,7 @@ public:
         }
         if (mLoopCount > 0)
         {
-            RCLCPP_INFO(get_logger(), "The average latency of perception is %f ms", mTotalConsumTime / static_cast<double>(mLoopCount));
+            RCLCPP_INFO(get_logger(), "The average latency of perception is %f ms", mTotalElapseTime / static_cast<double>(mLoopCount));
         }
         RCLCPP_INFO(get_logger(), "The node has been shutdown.");
     }
@@ -62,7 +62,7 @@ private:
     std::thread mWorker;
     std::queue<sensor_msgs::msg::PointCloud2> mCloudBuffer;
 
-    double mTotalConsumTime{};
+    double mTotalElapseTime{};
     size_t mLoopCount{};
 
     // Eigen::Vector3f mGoal; // The position of the goal
@@ -133,5 +133,5 @@ private:
     /* Sub detection modules */
     bool estimateLoadPose(const RawCloud::Ptr& pallet_cloud, geometry_msgs::msg::Pose2D& load_pose) const;
 
-    Eigen::Isometry3f estimateSlotPose(const RawCloud& cloud) const;
+    bool estimateSlotPose(const SemanticCloud::Ptr& cloud) const;
 };

@@ -102,7 +102,7 @@ void PoseEstimation::workerLoop()
         }
 
         constexpr ROI fork_roi{-1.5f, 0.1f, -0.66f, 0.66f, -0.3f, 1.5f};
-        constexpr ROI slot_space_roi{-1.2f - 0.4f, 0.3f, -0.5f - 0.5f, 0.5f + 0.5f, 0.0f, 1.5f};
+        constexpr ROI slot_space_roi{-1.2f - 0.6f, 0.3f, -0.5f - 0.5f, 0.5f + 0.5f, 0.0f, 1.5f};
         // constexpr ROI slot_space_roi{-3.2f - 0.3f, 0.3f, -0.5f - 1.4f, 0.5f + 1.4f, 0.0f, 1.5f};
 
         /* Visualize fork_roi */
@@ -179,6 +179,8 @@ void PoseEstimation::workerLoop()
         getCloud(*cloud_on_forks, pallet_label, *pallet_cloud);
         geometry_msgs::msg::Pose2D load_pose;
         // geometry_msgs::msg::Pose2D load_pose_2d;
+
+        /*------ Stage 1. Pose estimate for load on the forks ------*/
         if (!estimateLoadPose(pallet_cloud, load_pose))
         {
             RCLCPP_ERROR(get_logger(), "Failed to estimate pose of the load!");
@@ -197,23 +199,6 @@ void PoseEstimation::workerLoop()
                                                                       2, mLoadDimensions[0], mLoadDimensions[1], mLoadDimensions[2],
                                                                       0.6, 0.6, 0.8, 0.5, load_pose);
         load_cube_msg.pose.position.z = T_body2fork.translation()[2] + 0.5 * load_size_z - 0.1;
-        // visualization_msgs::msg::Marker load_on_fork_msg;
-        // load_on_fork_msg.header.frame_id = "LOLA";
-        // load_on_fork_msg.header.stamp = this->now();
-        // load_on_fork_msg.ns = ns;
-        // load_on_fork_msg.id = 2;
-        // load_on_fork_msg.type = visualization_msgs::msg::Marker::CUBE;
-        // load_on_fork_msg.action = visualization_msgs::msg::Marker::ADD;
-        // load_on_fork_msg.scale.x = load_size_x;
-        // load_on_fork_msg.scale.y = load_size_y;
-        // load_on_fork_msg.scale.z = load_size_z;
-        // load_on_fork_msg.color.r = 0.6;
-        // load_on_fork_msg.color.g = 0.6;
-        // load_on_fork_msg.color.b = 0.8;
-        // load_on_fork_msg.color.a = 0.5;
-        // load_on_fork_msg.pose.position.x = T_body2fork.translation()[0] - 0.5 * load_size_x - 0.25;
-        // load_on_fork_msg.pose.position.y = T_body2fork.translation()[1];
-        // load_on_fork_msg.pose.position.z = T_body2fork.translation()[2] + 0.5 * load_size_z - 0.1;
         visualization_msg.markers.push_back(load_cube_msg);
         mVisualizationPub->publish(visualization_msg);
 
@@ -224,7 +209,8 @@ void PoseEstimation::workerLoop()
             tf2::fromMsg(mGoalMsg.pose, temp);
             goal_pose = temp.cast<float>();
         }
-        /* Slot pose estimate */
+
+        /*------ Stage 2. Slot pose estimate ------*/
         SemanticCloud::Ptr slot_space_cloud = std::make_shared<SemanticCloud>();
         getCloud(*cloud_off_forks, slot_space_cloud, nullptr, goal_pose, slot_space_roi);
         if (slot_space_cloud->size() < 10)
@@ -233,9 +219,17 @@ void PoseEstimation::workerLoop()
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
             continue;
         }
-        SemanticCloud slot_space_cloud_without_ground = removeGround(*slot_space_cloud);
+        SemanticCloud::Ptr slot_space_cloud_without_ground = std::make_shared<SemanticCloud>();
+        removeGround(*slot_space_cloud, *slot_space_cloud_without_ground);
+        if (!estimateSlotPose(slot_space_cloud_without_ground))
+        {
+            RCLCPP_ERROR(get_logger(), "Failed to estimate pose of the slot!");
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            continue;
+        }
+
         ColoredCloud slot_space_cloud_colored;
-        pcl::copyPointCloud(slot_space_cloud_without_ground, slot_space_cloud_colored);
+        pcl::copyPointCloud(*slot_space_cloud_without_ground, slot_space_cloud_colored);
         std::for_each(std::execution::par_unseq, slot_space_cloud_colored.begin(), slot_space_cloud_colored.end(),
                       [](pcl::PointXYZRGB& point)
                           {
@@ -253,9 +247,10 @@ void PoseEstimation::workerLoop()
         cloud_in_roi_msg.header.stamp = this->now();
         mRoiCloudPub->publish(cloud_in_roi_msg);
 
+        /* Record the average elapsed time */
         const auto end = std::chrono::high_resolution_clock::now();
-        const auto lapse = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-        mTotalConsumTime += static_cast<double>(lapse);
+        const auto elapse = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+        mTotalElapseTime += static_cast<double>(elapse);
         ++mLoopCount;
 
         constexpr ROI load_roi{-1.2f, 0.0f, -0.5f, 0.5f, 0.0f, 1.5f};
@@ -355,4 +350,37 @@ bool PoseEstimation::estimateLoadPose(const RawCloud::Ptr& pallet_cloud, geometr
     return true;
 }
 
-Eigen::Isometry3f PoseEstimation::estimateSlotPose(const RawCloud& cloud) const {}
+bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud) const
+{
+    if (cloud->size() < 10)
+    {
+        return false;
+    }
+    static OrthographicProjector<SemanticPoint> projector(View::TOP, 0.01f);
+    projector.setCloud(cloud);
+    const cv::Mat projection = projector.projection();
+
+    cv::Mat closed_img;
+    //
+    {
+        cv::Mat temp_img;
+        filter2d::close(projection, temp_img);
+        filter2d::removeIsolatedPoints(temp_img, closed_img);
+    }
+
+    /* Step 1. Locate the boundary on x direction */
+    cv::Mat vertical_edge_img;
+    feature2d::detectEdge(closed_img, vertical_edge_img, feature2d::EdgeType::RIGHT);
+
+    uint8_t no_side_count{0};
+    /* Step 2. Locate the boundary on y direction, left side */
+
+    /* Step 3. Locate the boundary on y direction, rights side */
+
+    if (no_side_count >= 2)
+    {
+        RCLCPP_ERROR(get_logger(), "Can't locate side boundary!");
+        return false;
+    }
+    return true;
+}

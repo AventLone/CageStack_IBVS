@@ -1,5 +1,4 @@
 #include "perception/tools/feature_detect_2d.h"
-// #include <boost/fusion/algorithm/transformation/erase.hpp>
 
 cv::RotatedRect feature2d::detectMinRect(const cv::Mat& src_img)
 {
@@ -24,8 +23,7 @@ feature2d::Line feature2d::detectRectEdge(const cv::Mat& src_img, const EdgeType
 {
     std::vector<cv::Point> non_zero_points;
     cv::findNonZero(src_img, non_zero_points);
-    const cv::RotatedRect rr = cv::minAreaRect(non_zero_points); // 最小外接矩形
-    // cv::Point2f corners[4];
+    const cv::RotatedRect rr = cv::minAreaRect(non_zero_points);
     std::vector<cv::Point2f> corners(4);
     rr.points(corners.data());
 

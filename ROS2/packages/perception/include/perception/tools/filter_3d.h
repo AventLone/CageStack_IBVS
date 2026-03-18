@@ -123,19 +123,16 @@ void getCloud(const pcl::PointCloud<PointT>& src_cloud, typename pcl::PointCloud
 }
 
 template<class PointT>
-pcl::PointCloud<PointT> removeGround(const pcl::PointCloud<PointT>& cloud, const float threshold = 0.01f)
+void removeGround(const pcl::PointCloud<PointT>& cloud_in, pcl::PointCloud<PointT>& cloud_out, const float threshold = 0.01f)
 {
-    pcl::PointCloud<PointT> cloud_removed_ground;
-    cloud_removed_ground.reserve(cloud.size());
-    for (const auto& point : cloud)
+    cloud_out.reserve(cloud_in.size());
+    for (const auto& point : cloud_in)
     {
         if (point.z > threshold)
         {
-            cloud_removed_ground.push_back(point);
+            cloud_out.push_back(point);
         }
     }
-
-    return cloud_removed_ground;
 }
 
 /* Check for free space */

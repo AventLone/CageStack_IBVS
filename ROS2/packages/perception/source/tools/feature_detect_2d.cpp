@@ -38,11 +38,11 @@ Line detectRectEdge(const cv::Mat& src_img, const EdgeType edge_type)
                       });
         if (edge_type == EdgeType::LEFT)
         {
-            return feature2d::Line(corners[0], corners[1]);
+            return Line(corners[0], corners[1]);
         }
         else
         {
-            return feature2d::Line(corners[2], corners[3]);
+            return Line(corners[2], corners[3]);
         }
     }
     else
@@ -53,11 +53,11 @@ Line detectRectEdge(const cv::Mat& src_img, const EdgeType edge_type)
                       });
         if (edge_type == EdgeType::UPPER)
         {
-            return feature2d::Line(corners[0], corners[1]);
+            return Line(corners[0], corners[1]);
         }
         else
         {
-            return feature2d::Line(corners[2], corners[3]);
+            return Line(corners[2], corners[3]);
         }
     }
 }

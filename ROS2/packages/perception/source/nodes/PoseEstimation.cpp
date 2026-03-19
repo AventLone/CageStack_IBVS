@@ -17,7 +17,8 @@ void PoseEstimation::initSubscriptions()
     const std::string param_name = "TopicName.Perception.SemanticCloud";
     this->declare_parameter(param_name, "/perception/semantic_cloud");
     const std::string semantic_cloud_topic = this->get_parameter(param_name).as_string();
-    mCloudSub = create_subscription<sensor_msgs::msg::PointCloud2>(semantic_cloud_topic, rclcpp::SensorDataQoS(),
+    mCloudSub = create_subscription<sensor_msgs::msg::PointCloud2>(semantic_cloud_topic,
+                                                                   rclcpp::SensorDataQoS(),
                                                                    [this](const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg)
                                                                        {
                                                                            this->pushInBuffer(*msg);
@@ -49,11 +50,11 @@ void PoseEstimation::initPublishers()
     {
         RCLCPP_ERROR(this->get_logger(), "Failed to get parameters, target topic names!");
     }
-    mVisualizationPub = this->create_publisher<visualization_msgs::msg::MarkerArray>(target_topics["BBox"], rclcpp::SensorDataQoS());
-    mTargetPosePub = this->create_publisher<geometry_msgs::msg::PoseStamped>(target_topics["Pose"], rclcpp::ServicesQoS());
-    mLoadPosePub = this->create_publisher<geometry_msgs::msg::PoseStamped>("load_pose", rclcpp::ServicesQoS());
-    mSlotPosePub = this->create_publisher<geometry_msgs::msg::PoseStamped>("slot_pose", rclcpp::ServicesQoS());
-    mRoiCloudPub = this->create_publisher<sensor_msgs::msg::PointCloud2>("visualization/cloud_in_roi", rclcpp::SensorDataQoS());
+    mVisualizationPub = create_publisher<visualization_msgs::msg::MarkerArray>(target_topics["BBox"], rclcpp::SensorDataQoS());
+    mTargetPosePub = create_publisher<geometry_msgs::msg::PoseStamped>(target_topics["Pose"], rclcpp::ServicesQoS());
+    mLoadPosePub = create_publisher<geometry_msgs::msg::PoseStamped>("load_pose", rclcpp::ServicesQoS());
+    mSlotPosePub = create_publisher<geometry_msgs::msg::PoseStamped>("slot_pose", rclcpp::ServicesQoS());
+    mRoiCloudPub = create_publisher<sensor_msgs::msg::PointCloud2>("visualization/cloud_in_roi", rclcpp::SensorDataQoS());
 }
 
 void PoseEstimation::workerLoop()
@@ -91,7 +92,8 @@ void PoseEstimation::workerLoop()
         try
         {
             // This returns the pose of 'fork' in 'body' coordinates
-            const geometry_msgs::msg::TransformStamped tf_body2fork = mTfBuffer->lookupTransform("LOLA", "fork", tf2::TimePointZero);
+            const geometry_msgs::msg::TransformStamped tf_body2fork =
+                    mTfBuffer->lookupTransform("LOLA", "fork", tf2::TimePointZero);
             T_body2fork = tf2::transformToEigen(tf_body2fork).cast<float>();
         }
         catch (const tf2::TransformException& ex)
@@ -177,13 +179,13 @@ void PoseEstimation::workerLoop()
                           });
         RawCloud::Ptr pallet_cloud = std::make_shared<RawCloud>();
         getCloud(*cloud_on_forks, pallet_label, *pallet_cloud);
-        geometry_msgs::msg::Pose2D load_pose;
-        // geometry_msgs::msg::Pose2D load_pose_2d;
 
         /*------ Stage 1. Pose estimate for load on the forks ------*/
+        geometry_msgs::msg::Pose2D load_pose;
         if (!estimateLoadPose(pallet_cloud, load_pose))
         {
             RCLCPP_ERROR(get_logger(), "Failed to estimate pose of the load!");
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
             continue;
         }
         geometry_msgs::msg::PoseStamped load_pose_msg;
@@ -195,12 +197,13 @@ void PoseEstimation::workerLoop()
         load_pose_msg.header.stamp = now();
         mLoadPosePub->publish(load_pose_msg);
 
+        /*------ Visualize the load pose Cube ------*/
         visualization_msgs::msg::Marker load_cube_msg = getCubeMarker("LOLA", ns.data(),
-                                                                      2, mLoadDimensions[0], mLoadDimensions[1], mLoadDimensions[2],
+                                                                      2, mLoadDimensions[0],
+                                                                      mLoadDimensions[1], mLoadDimensions[2],
                                                                       0.6, 0.6, 0.8, 0.5, load_pose);
         load_cube_msg.pose.position.z = T_body2fork.translation()[2] + 0.5 * load_size_z - 0.1;
         visualization_msg.markers.push_back(load_cube_msg);
-        mVisualizationPub->publish(visualization_msg);
 
         Eigen::Isometry3f goal_pose{};
         //
@@ -221,16 +224,34 @@ void PoseEstimation::workerLoop()
         }
         SemanticCloud::Ptr slot_space_cloud_without_ground = std::make_shared<SemanticCloud>();
         removeGround(*slot_space_cloud, *slot_space_cloud_without_ground);
-        if (!estimateSlotPose(slot_space_cloud_without_ground))
+        geometry_msgs::msg::Pose2D slot_pose;
+        if (!estimateSlotPose(slot_space_cloud_without_ground, slot_pose))
         {
             RCLCPP_ERROR(get_logger(), "Failed to estimate pose of the slot!");
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
             continue;
         }
+        geometry_msgs::msg::PoseStamped slot_pose_msg;
+        slot_pose_msg.pose.position.x = slot_pose.x;
+        slot_pose_msg.pose.position.y = slot_pose.y;
+        slot_pose_msg.pose.orientation = toQuaternionMsg(slot_pose.theta);
+        slot_pose_msg.header.frame_id = "LOLA";
+        slot_pose_msg.header.stamp = now();
+        mSlotPosePub->publish(slot_pose_msg);
+
+        /*------ Visualize the slot pose Cube ------*/
+        visualization_msgs::msg::Marker slot_cube_msg = getCubeMarker("LOLA", ns.data(),
+                                                                      3, mLoadDimensions[0],
+                                                                      mLoadDimensions[1], mLoadDimensions[2],
+                                                                      0.6, 0.8, 0.6, 0.5, slot_pose);
+        slot_cube_msg.pose.position.z = 0.5 * load_size_z;
+        visualization_msg.markers.push_back(slot_cube_msg);
+        mVisualizationPub->publish(visualization_msg);
 
         ColoredCloud slot_space_cloud_colored;
         pcl::copyPointCloud(*slot_space_cloud_without_ground, slot_space_cloud_colored);
-        std::for_each(std::execution::par_unseq, slot_space_cloud_colored.begin(), slot_space_cloud_colored.end(),
+        std::for_each(std::execution::par_unseq,
+                      slot_space_cloud_colored.begin(), slot_space_cloud_colored.end(),
                       [](pcl::PointXYZRGB& point)
                           {
                               point.r = 200;
@@ -350,13 +371,13 @@ bool PoseEstimation::estimateLoadPose(const RawCloud::Ptr& pallet_cloud, geometr
     return true;
 }
 
-bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud) const
+bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_msgs::msg::Pose2D& slot_pose) const
 {
     if (cloud->size() < 10)
     {
         return false;
     }
-    static OrthographicProjector<SemanticPoint> projector(View::TOP, 0.01f);
+    static OrthographicProjector<SemanticPoint> projector(View::TOP, 0.02f);
     projector.setCloud(cloud);
     const cv::Mat projection = projector.projection();
 
@@ -369,13 +390,16 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud) const
     }
 
     bool has_left_side{true}, has_right_side{true}; // Flags to check if there is left side or right side boundary
-
+    /* The coefficients of 3 planes, assume they are all perpendicular to the ground,
+     * so Vector3 instead of Vector4 */
+    Eigen::Vector3f rear_plane_coefficients{}, left_plane_coefficients{}, right_plane_coefficients{};
+    float left_plane_angle{}, right_plane_angle{};
     /* Step 1. Locate the boundary on x direction */
     cv::Mat right_edge_img;
     feature2d::detectEdge(closed_img(cv::Range::all(), cv::Range(0, closed_img.cols / 2)), right_edge_img,
                           feature2d::EdgeType::RIGHT);
     std::vector<cv::Point> edge_inliers;
-    if (!feature2d::findInliers(right_edge_img, edge_inliers, 3.0f))
+    if (!feature2d::findInliers(right_edge_img, edge_inliers, 5.0f))
     {
         RCLCPP_ERROR(get_logger(), "Can't find right edge inliers!");
         return false;
@@ -387,14 +411,25 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud) const
                                                    });
     cv::Mat right_edge_mask = cv::Mat::zeros(closed_img.size(), CV_8UC1);
     cv::line(right_edge_mask, *edge_end_points.first, *edge_end_points.second, cv::Scalar(255), 16);
+    const auto raw_rear_edge_cloud = projector.extractCloud(right_edge_mask);
+    SemanticCloud refined_rear_edge_cloud;
+    feature3d::findInliers(raw_rear_edge_cloud, refined_rear_edge_cloud, 0.06f);
+    float rear_plane_angle{};
+    if (!feature3d::planeCoefficients(refined_rear_edge_cloud, rear_plane_coefficients, &rear_plane_angle))
+    {
+        RCLCPP_ERROR(get_logger(), "Failed to compute the coefficients of rear plane!");
+        return false;
+    }
+    rear_plane_coefficients[2] += mLoadDimensions[0] + 0.1f; // Move the plane from rear to the front
 
     cv::line(right_edge_mask, *edge_end_points.first, *edge_end_points.second, cv::Scalar(255), 26);
     closed_img.setTo(0, right_edge_mask);
-    /* Step 2. Locate the boundary on y direction, left side */
+
+    /* Step 2. Locate the boundary on y direction, right side */
     cv::Mat upper_edge_img;
-    feature2d::detectEdge(closed_img(cv::Range(0, closed_img.rows / 2), cv::Range::all()), upper_edge_img,
-                          feature2d::EdgeType::LOWER);
-    if (!feature2d::findInliers(upper_edge_img, edge_inliers, 3.0f))
+    feature2d::detectEdge(closed_img(cv::Range(0, closed_img.rows / 2), cv::Range::all()),
+                          upper_edge_img, feature2d::EdgeType::LOWER);
+    if (!feature2d::findInliers(upper_edge_img, edge_inliers, 5.0f))
     {
         RCLCPP_WARN(get_logger(), "Can't locate rigth side boundary!");
         has_right_side = false;
@@ -408,12 +443,22 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud) const
                                                   });
         cv::Mat upper_edge_mask = cv::Mat::zeros(closed_img.size(), CV_8UC1);
         cv::line(upper_edge_mask, *edge_end_points.first, *edge_end_points.second, cv::Scalar(255), 16);
+
+        const auto raw_right_edge_cloud = projector.extractCloud(upper_edge_mask);
+        SemanticCloud refined_right_edge_cloud;
+        feature3d::findInliers(raw_right_edge_cloud, refined_right_edge_cloud, 0.06f);
+        if (!feature3d::planeCoefficients(refined_right_edge_cloud, right_plane_coefficients, &right_plane_angle))
+        {
+            RCLCPP_WARN(get_logger(), "Failed to compute the coefficients of right plane!");
+            has_right_side = false;
+        }
     }
-    /* Step 3. Locate the boundary on y direction, rights side */
+
+    /* Step 3. Locate the boundary on y direction, left side */
     cv::Mat lower_edge_img;
-    feature2d::detectEdge(closed_img(cv::Range(closed_img.rows / 2, closed_img.rows), cv::Range::all()), lower_edge_img,
-                          feature2d::EdgeType::LOWER);
-    if (!feature2d::findInliers(lower_edge_img, edge_inliers, 3.0f))
+    feature2d::detectEdge(closed_img(cv::Range(closed_img.rows / 2, closed_img.rows), cv::Range::all()),
+                          lower_edge_img, feature2d::EdgeType::LOWER);
+    if (!feature2d::findInliers(lower_edge_img, edge_inliers, 5.0f))
     {
         RCLCPP_WARN(get_logger(), "Can't locate left side boundary!");
         has_left_side = false;
@@ -426,19 +471,63 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud) const
                                                       return a.x < b.x;
                                                   });
         cv::Mat lower_edge_mask = cv::Mat::zeros(closed_img.size(), CV_8UC1);
-        cv::line(lower_edge_mask, *edge_end_points.first, *edge_end_points.second, cv::Scalar(255), 16);
+        cv::Point lower_edge_endpoint_1(edge_end_points.first->x, edge_end_points.first->y + closed_img.rows / 2);
+        cv::Point lower_edge_endpoint_2(edge_end_points.second->x, edge_end_points.second->y + closed_img.rows / 2);
+        cv::line(lower_edge_mask, lower_edge_endpoint_1, lower_edge_endpoint_2, cv::Scalar(255), 16);
+
+        const auto raw_left_edge_cloud = projector.extractCloud(lower_edge_mask);
+        SemanticCloud refined_left_edge_cloud;
+        feature3d::findInliers(raw_left_edge_cloud, refined_left_edge_cloud, 0.06f);
+        if (!feature3d::planeCoefficients(refined_left_edge_cloud, left_plane_coefficients, &left_plane_angle))
+        {
+            RCLCPP_WARN(get_logger(), "Failed to compute the coefficients of left plane!");
+            has_left_side = false;
+        }
     }
 
     /* Deal with it on different situations */
+    Eigen::Vector2f slot_position{};
+    // float theta_normal = std::atan2(b, a);        // normal direction
+    // float theta_line   = std::atan2(-a, b);       // line direction
     /* Situation 1. There's only left side boundary */
     if (has_left_side && !has_right_side)
-    {}
+    {
+        left_plane_coefficients[2] -= 0.5f * mLoadDimensions[1] + 0.08f; //Move the side plane to center
+        if (!feature3d::intersectionPoint(rear_plane_coefficients, left_plane_coefficients, slot_position))
+        {
+            RCLCPP_ERROR(get_logger(), "Can't locate intersection of left and rear planes!");
+            return false;
+        }
+        slot_pose.theta = std::atan2(-left_plane_coefficients[0], left_plane_coefficients[1]);
+    }
     else if (!has_left_side && has_right_side)
-    {}
+    {
+        right_plane_coefficients[2] += 0.5f * mLoadDimensions[1] + 0.08f; //Move the side plane to center
+        if (!feature3d::intersectionPoint(rear_plane_coefficients, right_plane_coefficients, slot_position))
+        {
+            RCLCPP_ERROR(get_logger(), "Can't locate intersection of right and rear planes!");
+            return false;
+        }
+        slot_pose.theta = std::atan2(-right_plane_coefficients[0], right_plane_coefficients[1]);
+    }
+    else if (has_left_side && has_right_side)
+    {
+        const Eigen::Vector3f sides_center_plane_coefficients = 0.5f * (left_plane_coefficients + right_plane_coefficients);
+        if (!feature3d::intersectionPoint(rear_plane_coefficients, sides_center_plane_coefficients, slot_position))
+        {
+            RCLCPP_ERROR(get_logger(), "Can't locate intersection of center and rear planes!");
+            return false;
+        }
+        slot_pose.theta = std::atan2(-sides_center_plane_coefficients[0], sides_center_plane_coefficients[1]);
+    }
     else
     {
         RCLCPP_ERROR(get_logger(), "Can't locate side boundary!");
         return false;
     }
+
+    slot_pose.x = slot_position[0];
+    slot_pose.y = slot_position[1];
+
     return true;
 }

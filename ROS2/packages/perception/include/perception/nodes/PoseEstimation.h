@@ -133,5 +133,5 @@ private:
     /* Sub detection modules */
     bool estimateLoadPose(const RawCloud::Ptr& pallet_cloud, geometry_msgs::msg::Pose2D& load_pose) const;
 
-    bool estimateSlotPose(const SemanticCloud::Ptr& cloud) const;
+    bool estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_msgs::msg::Pose2D& slot_pose) const;
 };

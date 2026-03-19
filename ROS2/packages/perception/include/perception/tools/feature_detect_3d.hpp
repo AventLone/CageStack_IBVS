@@ -36,6 +36,101 @@ float calculateLineAngle(const pcl::PointCloud<PointT>& cloud)
 }
 
 template<class PointT>
+bool planeCoefficients(const pcl::PointCloud<PointT>& cloud,
+                       Eigen::Vector3f& coefficients, float* theta = nullptr)
+{
+    // // Validate the cloud
+    // if (cloud.size() < 10)
+    // {
+    //     return false;
+    // }
+    //
+    // std::vector<cv::Point2f> points;
+    // for (const auto& point : cloud.points)
+    // {
+    //     points.emplace_back(point.x, point.y);
+    // }
+    // cv::Vec4f line; // Fitting result: [vx, vy, x0, y0]; y = k*x + b; k = vy / vx, b = y0 - k*x0
+    // cv::fitLine(points, line, cv::DIST_L2, 0.0, 0.01, 0.01);
+    // const float k = line[1] / line[0];
+    // const float b = line[3] - k * line[2];
+    //
+    // const float temp = 1.0f / std::hypot(k, 1);
+    // coefficients[0] = k / temp;
+    // coefficients[1] = -temp;
+    // coefficients[2] = b * temp;
+    // const auto test = coefficients.head<2>().norm();
+    //
+    // if (theta != nullptr)
+    // {
+    //     *theta = std::atan2(line[1], line[0]);
+    // }
+
+    const size_t N = cloud.size();
+
+    if (N < 10)
+    {
+        return false;
+    }
+
+    // 1. Compute centroid
+    Eigen::Vector2f centroid(0.0f, 0.0f);
+    for (const auto& p : cloud)
+    {
+        centroid.x() += p.x;
+        centroid.y() += p.y;
+    }
+    centroid /= static_cast<float>(N);
+
+    // 2. Compute covariance matrix
+    Eigen::Matrix2f cov{Eigen::Matrix2f::Zero()};
+    for (const auto& p : cloud)
+    {
+        Eigen::Vector2f d(p.x - centroid.x(), p.y - centroid.y());
+        cov += d * d.transpose();
+    }
+
+    // 3. Eigen decomposition
+    const Eigen::SelfAdjointEigenSolver<Eigen::Matrix2f> solver(cov);
+    if (solver.info() != Eigen::Success)
+    {
+        return false;
+    }
+
+    // Smallest eigenvalue → normal direction
+    Eigen::Vector2f normal = solver.eigenvectors().col(0);
+
+    // 4. Normalize (just in case, though Eigen already gives unit vectors)
+    normal.normalize();
+
+    const float a = normal.x();
+    const float b = normal.y();
+
+    // 5. Compute c using centroid
+    const float c = -a * centroid.x() - b * centroid.y();
+
+    coefficients << a, b, c;
+
+    return true;
+}
+
+inline bool intersectionPoint(const Eigen::Vector3f& line1, const Eigen::Vector3f& line2,
+                              Eigen::Vector2f& intersection)
+{
+    const float D = line1[0] * line2[1] - line2[0] * line1[1];
+
+    if (std::abs(D) < 1e-6f)
+    {
+        return false;
+    }
+
+    intersection[0] = (line1[1] * line2[2] - line2[1] * line1[2]) / D;
+    intersection[1] = (line1[2] * line2[0] - line2[2] * line1[0]) / D;
+
+    return true;
+}
+
+template<class PointT>
 void getCloud(const pcl::PointCloud<PointT>& src, pcl::PointCloud<PointT>& dst, const std::vector<int>& indices)
 {
     dst.reserve(indices.size());

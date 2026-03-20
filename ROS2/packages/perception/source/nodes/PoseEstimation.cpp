@@ -429,7 +429,7 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_
     cv::Mat upper_edge_img;
     feature2d::detectEdge(closed_img(cv::Range(0, closed_img.rows / 2), cv::Range::all()),
                           upper_edge_img, feature2d::EdgeType::LOWER);
-    if (!feature2d::findInliers(upper_edge_img, edge_inliers, 5.0f))
+    if (!feature2d::findInliers(upper_edge_img, edge_inliers, 3.0f))
     {
         RCLCPP_WARN(get_logger(), "Can't locate rigth side boundary!");
         has_right_side = false;
@@ -442,11 +442,11 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_
                                                       return a.x < b.x;
                                                   });
         cv::Mat upper_edge_mask = cv::Mat::zeros(closed_img.size(), CV_8UC1);
-        cv::line(upper_edge_mask, *edge_end_points.first, *edge_end_points.second, cv::Scalar(255), 16);
+        cv::line(upper_edge_mask, *edge_end_points.first, *edge_end_points.second, cv::Scalar(255), 10);
 
         const auto raw_right_edge_cloud = projector.extractCloud(upper_edge_mask);
         SemanticCloud refined_right_edge_cloud;
-        feature3d::findInliers(raw_right_edge_cloud, refined_right_edge_cloud, 0.06f);
+        feature3d::findInliers(raw_right_edge_cloud, refined_right_edge_cloud, 0.05f);
         if (!feature3d::planeCoefficients(refined_right_edge_cloud, right_plane_coefficients, &right_plane_angle))
         {
             RCLCPP_WARN(get_logger(), "Failed to compute the coefficients of right plane!");
@@ -458,7 +458,7 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_
     cv::Mat lower_edge_img;
     feature2d::detectEdge(closed_img(cv::Range(closed_img.rows / 2, closed_img.rows), cv::Range::all()),
                           lower_edge_img, feature2d::EdgeType::LOWER);
-    if (!feature2d::findInliers(lower_edge_img, edge_inliers, 5.0f))
+    if (!feature2d::findInliers(lower_edge_img, edge_inliers, 3.0f))
     {
         RCLCPP_WARN(get_logger(), "Can't locate left side boundary!");
         has_left_side = false;
@@ -473,11 +473,11 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_
         cv::Mat lower_edge_mask = cv::Mat::zeros(closed_img.size(), CV_8UC1);
         cv::Point lower_edge_endpoint_1(edge_end_points.first->x, edge_end_points.first->y + closed_img.rows / 2);
         cv::Point lower_edge_endpoint_2(edge_end_points.second->x, edge_end_points.second->y + closed_img.rows / 2);
-        cv::line(lower_edge_mask, lower_edge_endpoint_1, lower_edge_endpoint_2, cv::Scalar(255), 16);
+        cv::line(lower_edge_mask, lower_edge_endpoint_1, lower_edge_endpoint_2, cv::Scalar(255), 10);
 
         const auto raw_left_edge_cloud = projector.extractCloud(lower_edge_mask);
         SemanticCloud refined_left_edge_cloud;
-        feature3d::findInliers(raw_left_edge_cloud, refined_left_edge_cloud, 0.06f);
+        feature3d::findInliers(raw_left_edge_cloud, refined_left_edge_cloud, 0.05f);
         if (!feature3d::planeCoefficients(refined_left_edge_cloud, left_plane_coefficients, &left_plane_angle))
         {
             RCLCPP_WARN(get_logger(), "Failed to compute the coefficients of left plane!");
@@ -513,7 +513,8 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_
     else if (has_left_side && has_right_side)
     {
         const Eigen::Vector3f sides_center_plane_coefficients = 0.5f * (left_plane_coefficients + right_plane_coefficients);
-        if (!feature3d::intersectionPoint(rear_plane_coefficients, sides_center_plane_coefficients, slot_position))
+        left_plane_coefficients[2] -= 0.5f * mLoadDimensions[1] + 0.08f; //Move the side plane to center
+        if (!feature3d::intersectionPoint(rear_plane_coefficients, left_plane_coefficients, slot_position))
         {
             RCLCPP_ERROR(get_logger(), "Can't locate intersection of center and rear planes!");
             return false;

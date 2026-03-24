@@ -96,9 +96,9 @@ void PoseEstimation::workerLoop()
                     mTfBuffer->lookupTransform("LOLA", "fork", tf2::TimePointZero);
             T_body2fork = tf2::transformToEigen(tf_body2fork).cast<float>();
         }
-        catch (const tf2::TransformException& ex)
+        catch (const tf2::TransformException& e)
         {
-            RCLCPP_ERROR(this->get_logger(), "Could not transform fork to body: %s", ex.what());
+            RCLCPP_ERROR(this->get_logger(), "Could not transform fork to body: %s", e.what());
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
             continue;
         }
@@ -181,29 +181,30 @@ void PoseEstimation::workerLoop()
         getCloud(*cloud_on_forks, pallet_label, *pallet_cloud);
 
         /*------ Stage 1. Pose estimate for load on the forks ------*/
-        geometry_msgs::msg::Pose2D load_pose;
-        if (!estimateLoadPose(pallet_cloud, load_pose))
-        {
-            RCLCPP_ERROR(get_logger(), "Failed to estimate pose of the load!");
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            continue;
-        }
-        geometry_msgs::msg::PoseStamped load_pose_msg;
-        load_pose_msg.pose.position.x = load_pose.x;
-        load_pose_msg.pose.position.y = load_pose.y;
-        load_pose_msg.pose.position.z = T_body2fork.translation()[2] - 0.1;
-        load_pose_msg.pose.orientation = toQuaternionMsg(load_pose.theta);
-        load_pose_msg.header.frame_id = "LOLA";
-        load_pose_msg.header.stamp = now();
-        mLoadPosePub->publish(load_pose_msg);
+        // geometry_msgs::msg::Pose2D load_pose;
+        // if (!estimateLoadPose(pallet_cloud, load_pose))
+        // {
+        //     RCLCPP_ERROR(get_logger(), "Failed to estimate pose of the load!");
+        //     std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        //     continue;
+        // }
+        // geometry_msgs::msg::PoseStamped load_pose_msg;
+        // load_pose_msg.pose.position.x = load_pose.x;
+        // load_pose_msg.pose.position.y = load_pose.y;
+        // load_pose_msg.pose.position.z = T_body2fork.translation()[2] - 0.1;
+        // load_pose_msg.pose.orientation = toQuaternionMsg(load_pose.theta);
+        // load_pose_msg.header.frame_id = "LOLA";
+        // load_pose_msg.header.stamp = now();
+        // mLoadPosePub->publish(load_pose_msg);
 
         /*------ Visualize the load pose Cube ------*/
-        visualization_msgs::msg::Marker load_cube_msg = getCubeMarker("LOLA", ns.data(),
-                                                                      2, mLoadDimensions[0],
-                                                                      mLoadDimensions[1], mLoadDimensions[2],
-                                                                      0.6, 0.6, 0.8, 0.5, load_pose);
-        load_cube_msg.pose.position.z = T_body2fork.translation()[2] + 0.5 * load_size_z - 0.1;
-        visualization_msg.markers.push_back(load_cube_msg);
+        // visualization_msgs::msg::Marker load_cube_msg = getCubeMarker("LOLA", ns.data(),
+        //                                                               2, mLoadDimensions[0],
+        //                                                               mLoadDimensions[1], mLoadDimensions[2],
+        //                                                               0.6, 0.6, 0.8, 0.5, load_pose);
+        // load_cube_msg.pose.position.z = T_body2fork.translation()[2] + 0.5 * load_size_z - 0.1;
+        // visualization_msg.markers.push_back(load_cube_msg);
+        // mVisualizationPub->publish(visualization_msg);
 
         Eigen::Isometry3f goal_pose{};
         //
@@ -218,7 +219,7 @@ void PoseEstimation::workerLoop()
         getCloud(*cloud_off_forks, slot_space_cloud, nullptr, goal_pose, slot_space_roi);
         if (slot_space_cloud->size() < 10)
         {
-            RCLCPP_ERROR(get_logger(), "slot_space_cloud has too less points!");
+            RCLCPP_ERROR(get_logger(), "slot_space_cloud has too few points!");
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
             continue;
         }
@@ -238,15 +239,6 @@ void PoseEstimation::workerLoop()
         slot_pose_msg.header.frame_id = "LOLA";
         slot_pose_msg.header.stamp = now();
         mSlotPosePub->publish(slot_pose_msg);
-
-        /*------ Visualize the slot pose Cube ------*/
-        visualization_msgs::msg::Marker slot_cube_msg = getCubeMarker("LOLA", ns.data(),
-                                                                      3, mLoadDimensions[0],
-                                                                      mLoadDimensions[1], mLoadDimensions[2],
-                                                                      0.6, 0.8, 0.6, 0.5, slot_pose);
-        slot_cube_msg.pose.position.z = 0.5 * load_size_z;
-        visualization_msg.markers.push_back(slot_cube_msg);
-        mVisualizationPub->publish(visualization_msg);
 
         ColoredCloud slot_space_cloud_colored;
         pcl::copyPointCloud(*slot_space_cloud_without_ground, slot_space_cloud_colored);
@@ -268,18 +260,36 @@ void PoseEstimation::workerLoop()
         cloud_in_roi_msg.header.stamp = this->now();
         mRoiCloudPub->publish(cloud_in_roi_msg);
 
+        // mGoalMsg.pose = slot_pose_msg.pose;
+
+        /*------ Visualize the slot pose Cube ------*/
+        visualization_msgs::msg::Marker slot_cube_msg = getCubeMarker("LOLA", ns.data(),
+                                                                      3, mLoadDimensions[0],
+                                                                      mLoadDimensions[1], mLoadDimensions[2],
+                                                                      0.2, 0.2, 0.2, 0.86, slot_pose);
+        slot_cube_msg.pose.position.z = 0.5 * load_size_z;
+        constexpr ROI load_roi{-1.2f, 0.0f, -0.5f, 0.5f, 0.0f, 1.5f};
+        Eigen::Isometry3d slot_pose_eigen;
+        tf2::convert(slot_pose_msg.pose, slot_pose_eigen);
+        if (checkSpace(*slot_space_cloud_without_ground, slot_pose_eigen.cast<float>(), load_roi))
+        {
+            RCLCPP_INFO(get_logger(), "There is free space in the slot.");
+            slot_cube_msg.color.g = 1.0;
+        }
+        else
+        {
+            RCLCPP_WARN(get_logger(), "There is not enough space or there might be obstacles in the slot!");
+            slot_cube_msg.color.r = 1.0;
+        }
+
+        visualization_msg.markers.push_back(slot_cube_msg);
+        mVisualizationPub->publish(visualization_msg);
+
         /* Record the average elapsed time */
         const auto end = std::chrono::high_resolution_clock::now();
         const auto elapse = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
         mTotalElapseTime += static_cast<double>(elapse);
         ++mLoopCount;
-
-        constexpr ROI load_roi{-1.2f, 0.0f, -0.5f, 0.5f, 0.0f, 1.5f};
-        // if (checkSpace(slot_space_cloud_without_ground, goal_pose, load_roi))
-        // {
-        //     RCLCPP_WARN(get_logger(), "Didn't detect anything!");
-        //     continue;
-        // }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
@@ -297,21 +307,13 @@ bool PoseEstimation::estimateLoadPose(const RawCloud::Ptr& pallet_cloud, geometr
         }
     }
 
-    static const auto narrow_down = [](const float angle) -> float
-        {
-            if (angle > M_PI_2f)
-            {
-                return angle - M_PIf;
-            }
-
-            if (angle < -M_PI_2f)
-            {
-                return angle + M_PIf;
-            }
-            return angle;
-        };
-
-    const float yaw = narrow_down(feature3d::calculateLineAngle(*mid_block_cloud) - M_PI_2f);
+    Eigen::Vector3f line_coefficients{};
+    if (!feature3d::planeCoefficients(*mid_block_cloud, line_coefficients))
+    {
+        RCLCPP_WARN(get_logger(), "Failed to compute the coefficients of pallet middle block!");
+        return false;
+    }
+    const float yaw = std::atan2(-line_coefficients[0], line_coefficients[1]);
 
     /* Get the rear end of the mid block */
     pcl::PointXYZ min_point, max_point;
@@ -393,7 +395,6 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_
     /* The coefficients of 3 planes, assume they are all perpendicular to the ground,
      * so Vector3 instead of Vector4 */
     Eigen::Vector3f rear_plane_coefficients{}, left_plane_coefficients{}, right_plane_coefficients{};
-    float left_plane_angle{}, right_plane_angle{};
     /* Step 1. Locate the boundary on x direction */
     cv::Mat right_edge_img;
     feature2d::detectEdge(closed_img(cv::Range::all(), cv::Range(0, closed_img.cols / 2)), right_edge_img,
@@ -414,13 +415,21 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_
     const auto raw_rear_edge_cloud = projector.extractCloud(right_edge_mask);
     SemanticCloud refined_rear_edge_cloud;
     feature3d::findInliers(raw_rear_edge_cloud, refined_rear_edge_cloud, 0.06f);
-    float rear_plane_angle{};
-    if (!feature3d::planeCoefficients(refined_rear_edge_cloud, rear_plane_coefficients, &rear_plane_angle))
+    if (!feature3d::planeCoefficients(refined_rear_edge_cloud, rear_plane_coefficients))
     {
         RCLCPP_ERROR(get_logger(), "Failed to compute the coefficients of rear plane!");
         return false;
     }
-    rear_plane_coefficients[2] += mLoadDimensions[0] + 0.1f; // Move the plane from rear to the front
+    if (rear_plane_coefficients[0] < 0.0f)
+    {
+        rear_plane_coefficients *= -1.0f;
+    }
+    /* Locate the outer surface of the point cloud */
+    const auto [dist_front, _] = feature3d::farthestDistanceFromLine(refined_rear_edge_cloud, rear_plane_coefficients);
+
+    // rear_plane_coefficients[2] -= mLoadDimensions[0] + 0.1f; // Move the plane from rear to the front
+    // rear_plane_coefficients[2] -= mLoadDimensions[0]; // Move the plane from rear to the front
+    rear_plane_coefficients[2] += dist_front - mLoadDimensions[0]; // Move the plane from rear to the front
 
     cv::line(right_edge_mask, *edge_end_points.first, *edge_end_points.second, cv::Scalar(255), 26);
     closed_img.setTo(0, right_edge_mask);
@@ -447,10 +456,14 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_
         const auto raw_right_edge_cloud = projector.extractCloud(upper_edge_mask);
         SemanticCloud refined_right_edge_cloud;
         feature3d::findInliers(raw_right_edge_cloud, refined_right_edge_cloud, 0.05f);
-        if (!feature3d::planeCoefficients(refined_right_edge_cloud, right_plane_coefficients, &right_plane_angle))
+        if (!feature3d::planeCoefficients(refined_right_edge_cloud, right_plane_coefficients))
         {
             RCLCPP_WARN(get_logger(), "Failed to compute the coefficients of right plane!");
             has_right_side = false;
+        }
+        if (right_plane_coefficients[1] < 0.0f)
+        {
+            right_plane_coefficients *= -1.0f;
         }
     }
 
@@ -478,10 +491,14 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_
         const auto raw_left_edge_cloud = projector.extractCloud(lower_edge_mask);
         SemanticCloud refined_left_edge_cloud;
         feature3d::findInliers(raw_left_edge_cloud, refined_left_edge_cloud, 0.05f);
-        if (!feature3d::planeCoefficients(refined_left_edge_cloud, left_plane_coefficients, &left_plane_angle))
+        if (!feature3d::planeCoefficients(refined_left_edge_cloud, left_plane_coefficients))
         {
             RCLCPP_WARN(get_logger(), "Failed to compute the coefficients of left plane!");
             has_left_side = false;
+        }
+        if (left_plane_coefficients[1] < 0.0f)
+        {
+            left_plane_coefficients *= -1.0f;
         }
     }
 
@@ -490,7 +507,7 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_
     // float theta_normal = std::atan2(b, a);        // normal direction
     // float theta_line   = std::atan2(-a, b);       // line direction
     /* Situation 1. There's only left side boundary */
-    if (has_left_side && !has_right_side)
+    if (has_left_side)
     {
         left_plane_coefficients[2] -= 0.5f * mLoadDimensions[1] + 0.08f; //Move the side plane to center
         if (!feature3d::intersectionPoint(rear_plane_coefficients, left_plane_coefficients, slot_position))
@@ -500,7 +517,7 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_
         }
         slot_pose.theta = std::atan2(-left_plane_coefficients[0], left_plane_coefficients[1]);
     }
-    else if (!has_left_side && has_right_side)
+    else if (has_right_side)
     {
         right_plane_coefficients[2] += 0.5f * mLoadDimensions[1] + 0.08f; //Move the side plane to center
         if (!feature3d::intersectionPoint(rear_plane_coefficients, right_plane_coefficients, slot_position))
@@ -510,17 +527,17 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_
         }
         slot_pose.theta = std::atan2(-right_plane_coefficients[0], right_plane_coefficients[1]);
     }
-    else if (has_left_side && has_right_side)
-    {
-        const Eigen::Vector3f sides_center_plane_coefficients = 0.5f * (left_plane_coefficients + right_plane_coefficients);
-        left_plane_coefficients[2] -= 0.5f * mLoadDimensions[1] + 0.08f; //Move the side plane to center
-        if (!feature3d::intersectionPoint(rear_plane_coefficients, left_plane_coefficients, slot_position))
-        {
-            RCLCPP_ERROR(get_logger(), "Can't locate intersection of center and rear planes!");
-            return false;
-        }
-        slot_pose.theta = std::atan2(-sides_center_plane_coefficients[0], sides_center_plane_coefficients[1]);
-    }
+    // else if (has_left_side && has_right_side)
+    // {
+    //     const Eigen::Vector3f sides_center_plane_coefficients = 0.5f * (left_plane_coefficients + right_plane_coefficients);
+    //     left_plane_coefficients[2] -= 0.5f * mLoadDimensions[1] + 0.08f; //Move the side plane to center
+    //     if (!feature3d::intersectionPoint(rear_plane_coefficients, left_plane_coefficients, slot_position))
+    //     {
+    //         RCLCPP_ERROR(get_logger(), "Can't locate intersection of center and rear planes!");
+    //         return false;
+    //     }
+    //     slot_pose.theta = std::atan2(-sides_center_plane_coefficients[0], sides_center_plane_coefficients[1]);
+    // }
     else
     {
         RCLCPP_ERROR(get_logger(), "Can't locate side boundary!");

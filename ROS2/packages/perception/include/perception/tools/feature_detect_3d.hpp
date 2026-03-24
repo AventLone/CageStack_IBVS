@@ -35,37 +35,10 @@ float calculateLineAngle(const pcl::PointCloud<PointT>& cloud)
     return -std::atan2(line[1], line[0]);
 }
 
+/* Fit a line via PCA, the cloud is thought to be perpendicular to the ground */
 template<class PointT>
-bool planeCoefficients(const pcl::PointCloud<PointT>& cloud,
-                       Eigen::Vector3f& coefficients, float* theta = nullptr)
+bool planeCoefficients(const pcl::PointCloud<PointT>& cloud, Eigen::Vector3f& coefficients)
 {
-    // // Validate the cloud
-    // if (cloud.size() < 10)
-    // {
-    //     return false;
-    // }
-    //
-    // std::vector<cv::Point2f> points;
-    // for (const auto& point : cloud.points)
-    // {
-    //     points.emplace_back(point.x, point.y);
-    // }
-    // cv::Vec4f line; // Fitting result: [vx, vy, x0, y0]; y = k*x + b; k = vy / vx, b = y0 - k*x0
-    // cv::fitLine(points, line, cv::DIST_L2, 0.0, 0.01, 0.01);
-    // const float k = line[1] / line[0];
-    // const float b = line[3] - k * line[2];
-    //
-    // const float temp = 1.0f / std::hypot(k, 1);
-    // coefficients[0] = k / temp;
-    // coefficients[1] = -temp;
-    // coefficients[2] = b * temp;
-    // const auto test = coefficients.head<2>().norm();
-    //
-    // if (theta != nullptr)
-    // {
-    //     *theta = std::atan2(line[1], line[0]);
-    // }
-
     const size_t N = cloud.size();
 
     if (N < 10)
@@ -112,6 +85,29 @@ bool planeCoefficients(const pcl::PointCloud<PointT>& cloud,
     coefficients << a, b, c;
 
     return true;
+}
+
+template<class PointT>
+void outerBoundary(const pcl::PointCloud<PointT>& cloud, const Eigen::Vector3f& cloud_plane,
+                   Eigen::Vector3f& outer_boundary, const float direction, const float resolution = 0.005f)
+{
+    const float step = direction * resolution;
+}
+
+template<class PointT>
+std::pair<float, float> farthestDistanceFromLine(const pcl::PointCloud<PointT>& cloud,
+                                                 const Eigen::Vector3f& line_coefficients)
+{
+    /* Negtive is positive x direction */
+    float distance_front{std::numeric_limits<float>::max()}, distance_rear{std::numeric_limits<float>::min()};
+    for (const auto& point : cloud)
+    {
+        const float distance = line_coefficients[0] * point.x +
+                               line_coefficients[1] * point.y + line_coefficients[2];
+        distance_front = std::min(distance_front, distance);
+        distance_rear = std::max(distance_rear, distance);
+    }
+    return std::pair<float, float>{distance_front, distance_rear};
 }
 
 inline bool intersectionPoint(const Eigen::Vector3f& line1, const Eigen::Vector3f& line2,

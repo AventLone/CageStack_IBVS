@@ -151,7 +151,7 @@ bool checkSpace(const pcl::PointCloud<PointT>& cloud, const Eigen::Isometry3f& p
         }
     }
 
-    if (points_count > 6)
+    if (points_count > 9)
     {
         return false;
     }

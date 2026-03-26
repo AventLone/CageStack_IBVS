@@ -231,6 +231,7 @@ void CloudBuild::workerLoop()
         }
 
         SemanticCloud semantic_cloud_camera; // This is the semantic cloud in the camera coordinate system.
+        semantic_cloud_camera.reserve(img_set.depth_img.total());
         constexpr int skip_step = 6;
         for (int v = 0; v < img_set.depth_img.rows; v += skip_step)
         {

@@ -1,0 +1,51 @@
+/**:
+    ros__parameters:
+        TopicName:
+            Sensor:
+                Camera:
+                    Fork: 
+                        Semantics: "/sensor/camera/fork/semantics"
+                        Depth: "/sensor/camera/fork/depth"
+                    Left:
+                        Semantics: "/sensor/camera/left/semantics"
+                        Depth: "/sensor/camera/left/depth"
+                    Right:
+                        Semantics: "/sensor/camera/right/semantics"
+                        Depth: "/sensor/camera/right/depth"
+
+            Perception:
+                SemanticCloud: "/perception/semantic_cloud"
+                ColoredCloud: "/perception/colored_cloud"
+
+                Target:
+                    BBox: "/perception/target/bbox"
+                    Pose: "/perception/target/pose"
+            
+            Control:
+                Command: "/control/cmds"
+                Path: "/control/path"
+
+#--------------------------- Control ---------------------------#
+        NMPC:
+            Horizon: 20
+            Dt: 0.1
+
+            InputLen: 2
+            StateLen: 4
+            OutputLen: 4
+
+            MaxAcc: 3.0
+            MaxSpeed: 6.0
+
+            MaxSteerSpeed: 0.5
+            MaxSteerAngle: 1.14
+
+            WheelBase: 1.37
+            WheelRadius: 0.11
+
+            WeightQ: [360.0, 660.0, 370.0, 60.0]
+            WeightF: [4000.0, 4000.0, 4000.0]
+            WeightR: [0.01, 0.001]
+
+
+        

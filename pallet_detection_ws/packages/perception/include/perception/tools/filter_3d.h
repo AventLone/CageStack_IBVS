@@ -126,9 +126,17 @@ template<class PointT>
 void removeGround(const pcl::PointCloud<PointT>& cloud_in, pcl::PointCloud<PointT>& cloud_out, const float threshold = 0.01f)
 {
     cloud_out.reserve(cloud_in.size());
+    float min_z{std::numeric_limits<float>::max()};
     for (const auto& point : cloud_in)
     {
-        if (point.z > threshold)
+        min_z = std::min(min_z, point.z);
+    }
+
+    min_z += threshold;
+
+    for (const auto& point : cloud_in)
+    {
+        if (point.z > min_z)
         {
             cloud_out.push_back(point);
         }

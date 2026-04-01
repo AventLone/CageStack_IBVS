@@ -1,9 +1,13 @@
 import omni.graph.core as og
 
 ROS_CAMERA_GRAPH_PATH = "/Camera_Publish"
-FORK_HEEL_CAMERA_PATH = "/World/lola/fork/camera/camera"
-CAMERA_RESOLUTION = (1920, 1200)
+# FORK_HEEL_CAMERA_PATH = "/World/lola/fork/camera/camera"
+FORK_CAMERA_LEFT_PATH = "/World/lola/fork/cameras/camera_left/camera"
+FORK_CAMERA_RIGHT_PATH = "/World/lola/fork/cameras/camera_right/camera"
+CAMERA_RESOLUTION = (960, 600)
 FORKHEEL_CAMERA_NAME = "forkheel_camera"
+FORK_CAMERA_LEFT_NAME = "fork_camera_left"
+FORK_CAEMRA_RIGHT_NAME = "fork_camera_right"
 
 # Creating an on-demand push graph with cameraHelper nodes to generate ROS image publishers
 keys = og.Controller.Keys
@@ -47,7 +51,7 @@ keys = og.Controller.Keys
             ("CameraHelperSemantic.inputs:type", "semantic_segmentation"),
             ("CameraHelperSemantic.inputs:enableSemanticLabels", True),
 
-            ("RenderProduct.inputs:cameraPrim", FORK_HEEL_CAMERA_PATH),
+            ("RenderProduct.inputs:cameraPrim", FORK_CAMERA_LEFT_PATH),
             ("RenderProduct.inputs:width", CAMERA_RESOLUTION[0]),
             ("RenderProduct.inputs:height", CAMERA_RESOLUTION[1])
         ]

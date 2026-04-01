@@ -13,14 +13,14 @@
 
 class CloudBuild final : public rclcpp::Node
 {
-    static constexpr float cx = 960.0f;
-    static constexpr float cy = 600.0f;
-    static constexpr float fx = 1920.0f;
+    static constexpr float cx = 480.0f;
+    static constexpr float cy = 300.0f;
+    static constexpr float fx = 960.0f;
     static constexpr float fy = fx;
     static constexpr float fx_inv = 1.0 / fx;
     static constexpr float fy_inv = 1.0 / fy;
 
-    static constexpr float depth_threshold = 8.0f;
+    static constexpr float depth_threshold = 6.0f;
 
     const std::string global_frame_id = "LOLA";
 
@@ -30,12 +30,14 @@ class CloudBuild final : public rclcpp::Node
     {
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
         Eigen::Isometry3f T_body2fork;
-        cv::Mat depth_img, semantic_img;
+        cv::Mat left_depth_img, right_depth_img;
     };
 
 public:
-    explicit CloudBuild(const std::string& name, const rclcpp::NodeOptions& options) : rclcpp::Node(name, options),
-                                                                                       mT_fork2camera(Eigen::Isometry3f::Identity())
+    explicit CloudBuild(const std::string& name, const rclcpp::NodeOptions& options)
+        : rclcpp::Node(name, options),
+          mT_fork2leftcamera(Eigen::Isometry3f::Identity()),
+          mT_fork2rightcamera(Eigen::Isometry3f::Identity())
     {
         initSubscritions();
         initPublishers();
@@ -43,8 +45,13 @@ public:
         mTfBuffer = std::make_unique<tf2_ros::Buffer>(this->get_clock());
         mTfListener = std::make_shared<tf2_ros::TransformListener>(*mTfBuffer);
 
-        mT_fork2camera.rotate(Eigen::AngleAxisf(M_PIf, Eigen::Vector3f::UnitZ()));
-        mT_fork2camera.pretranslate(Eigen::Vector3f(-0.1f, 0.0f, -0.1f));
+        mT_fork2leftcamera.rotate(Eigen::AngleAxisf(M_PIf, Eigen::Vector3f::UnitZ()));
+        mT_fork2leftcamera.prerotate(Eigen::AngleAxisf(-M_PIf * 5.0f / 180.0f, Eigen::Vector3f::UnitY()));
+        mT_fork2leftcamera.pretranslate(Eigen::Vector3f(-1.0f, -0.2f, -0.06f));
+
+        mT_fork2rightcamera.rotate(Eigen::AngleAxisf(M_PIf, Eigen::Vector3f::UnitZ()));
+        mT_fork2rightcamera.prerotate(Eigen::AngleAxisf(-M_PIf * 5.0f / 180.0f, Eigen::Vector3f::UnitY()));
+        mT_fork2rightcamera.pretranslate(Eigen::Vector3f(-1.0f, 0.2f, -0.06f));
 
         // Force the node to use simulation time
         this->set_parameter(rclcpp::Parameter("use_sim_time", true));
@@ -78,7 +85,7 @@ private:
     std::queue<ImgSet> mImgsBuffer;
     std::shared_ptr<tf2_ros::TransformListener> mTfListener;
     std::unique_ptr<tf2_ros::Buffer> mTfBuffer;
-    Eigen::Isometry3f mT_fork2camera;
+    Eigen::Isometry3f mT_fork2leftcamera, mT_fork2rightcamera; // Extrinsic Parameters for 2 cameras
 
     /*** Synchronized Subsribers ***/
     using ImgMsg = sensor_msgs::msg::Image;
@@ -92,13 +99,14 @@ private:
     rclcpp::Subscription<StrMsg>::SharedPtr mSemanticLabelsSub;
 
     /* Publishers */
-    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr mSemanticCloudPub, mColoredCloudPub;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr mCloudPub, mColoredCloudPub;
 
     void initSubscritions();
 
     void initPublishers();
 
-    void imgsHandler(const ImgMsg::ConstSharedPtr& depth_msg, const ImgMsg::ConstSharedPtr& semantics_msg);
+    void imgsHandler(const ImgMsg::ConstSharedPtr& left_depth_msg,
+                     const ImgMsg::ConstSharedPtr& right_depth_msg);
 
     void semanticLabelsHandler(const StrMsg::ConstSharedPtr& semantic_labels_msg);
 

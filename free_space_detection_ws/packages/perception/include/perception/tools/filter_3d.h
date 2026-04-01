@@ -3,6 +3,7 @@
 #include <pcl/common/transforms.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/features/normal_3d.h>   // Core normal estimation header
+#include <pcl/search/impl/kdtree.hpp>
 #include <pcl/kdtree/kdtree_flann.h>
 
 #include "../types/common.hpp"
@@ -165,7 +166,7 @@ bool normalFilter(const typename pcl::PointCloud<PointT>::Ptr& src_cloud,
                   typename pcl::PointCloud<PointT>::Ptr cloud_out = nullptr,
                   const int direction = 0)
 {
-    const size_t N = src_cloud.size();
+    const size_t N = src_cloud->size();
     if (N < 10)
     {
         return false;

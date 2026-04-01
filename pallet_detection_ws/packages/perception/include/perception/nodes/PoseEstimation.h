@@ -99,7 +99,7 @@ private:
     visualization_msgs::msg::Marker getCubeMarker(const char* frame_id, const char* ns, const int id,
                                                   const double cube_size_x, const double cube_size_y, const double cube_size_z,
                                                   const float color_r, const float color_g, const float color_b, const float color_a,
-                                                  const geometry_msgs::msg::Pose2D& pose) const
+                                                  const Eigen::Vector3f& pose) const
     {
         visualization_msgs::msg::Marker marker;
         marker.header.frame_id = frame_id;
@@ -116,14 +116,14 @@ private:
         marker.color.b = color_b;
         marker.color.a = color_a;
         Eigen::Isometry2f T_1(Eigen::Isometry2f::Identity()), T_2(Eigen::Isometry2f::Identity());
-        T_1.rotate(pose.theta);
-        T_1.pretranslate(Eigen::Vector2f(pose.x, pose.y));
+        T_1.rotate(pose[2]);
+        T_1.pretranslate(Eigen::Vector2f(pose.x(), pose.y()));
         T_2.translate(Eigen::Vector2f(-0.5f * cube_size_x, 0.0f));
         Eigen::Isometry2f T_3 = T_1 * T_2;
 
         marker.pose.position.x = T_3.translation()[0];
         marker.pose.position.y = T_3.translation()[1];
-        marker.pose.orientation = toQuaternionMsg(pose.theta);
+        marker.pose.orientation = toQuaternionMsg(pose[2]);
 
         return marker;
     }
@@ -131,7 +131,5 @@ private:
     void workerLoop();
 
     /* Sub detection modules */
-    bool estimateLoadPose(const RawCloud::Ptr& pallet_cloud, geometry_msgs::msg::Pose2D& load_pose) const;
-
-    bool estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_msgs::msg::Pose2D& slot_pose) const;
+    bool estimateLoadPose(const RawCloud::Ptr& cloud, Eigen::Vector3f& load_pose) const;
 };

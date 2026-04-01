@@ -1,6 +1,7 @@
 #include "perception/nodes/PoseEstimation.h"
 #include "perception/nodes/CloudPublisher.h"
 #include <cv_bridge/cv_bridge.hpp>
+#include <memory>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <Eigen/Geometry>
 #include <pcl_conversions/pcl_conversions.h>
@@ -10,6 +11,8 @@
 #include "perception/tools/filter_3d.h"
 #include "perception/tools/feature_detect_2d.h"
 #include "perception/tools/feature_detect_3d.hpp"
+#include "perception/kalman_filter/UKF.hpp"
+#include "perception/kalman_filter/system_model.hpp"
 
 
 void PoseEstimation::initSubscriptions()
@@ -66,6 +69,7 @@ void PoseEstimation::workerLoop()
     static constexpr float load_size_z = 1.5f;
 
     static constexpr int pallet_label = 1;
+    UKF<SystemModel, MeasureModel, StateT> ukf;
     while (rclcpp::ok())
     {
         sensor_msgs::msg::PointCloud2 cloud_msg;
@@ -83,49 +87,49 @@ void PoseEstimation::workerLoop()
         }
 
         const auto start = std::chrono::high_resolution_clock::now();
-        SemanticCloud::Ptr cloud = std::make_shared<SemanticCloud>();
+        auto cloud = std::make_shared<RawCloud>();
         pcl::fromROSMsg(cloud_msg, *cloud);
 
         /* Stage 1. Detect the pose of the load on the forks */
         /* Step 1. Get the pose of the forks */
-        Eigen::Isometry3f T_body2fork;
-        try
-        {
-            // This returns the pose of 'fork' in 'body' coordinates
-            const geometry_msgs::msg::TransformStamped tf_body2fork =
-                    mTfBuffer->lookupTransform("LOLA", "fork", tf2::TimePointZero);
-            T_body2fork = tf2::transformToEigen(tf_body2fork).cast<float>();
-        }
-        catch (const tf2::TransformException& e)
-        {
-            RCLCPP_ERROR(this->get_logger(), "Could not transform fork to body: %s", e.what());
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            continue;
-        }
+        // Eigen::Isometry3f T_body2fork;
+        // try
+        // {
+        //     // This returns the pose of 'fork' in 'body' coordinates
+        //     const geometry_msgs::msg::TransformStamped tf_body2fork =
+        //             mTfBuffer->lookupTransform("LOLA", "fork", tf2::TimePointZero);
+        //     T_body2fork = tf2::transformToEigen(tf_body2fork).cast<float>();
+        // }
+        // catch (const tf2::TransformException& e)
+        // {
+        //     RCLCPP_ERROR(this->get_logger(), "Could not transform fork to body: %s", e.what());
+        //     std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        //     continue;
+        // }
 
-        constexpr ROI fork_roi{-1.5f, 0.1f, -0.66f, 0.66f, -0.3f, 1.5f};
+        // constexpr ROI fork_roi{-1.5f, 0.1f, -0.66f, 0.66f, -0.3f, 1.5f};
         constexpr ROI slot_space_roi{-1.2f - 0.6f, 0.3f, -0.5f - 0.5f, 0.5f + 0.5f, 0.0f, 1.5f};
         // constexpr ROI slot_space_roi{-3.2f - 0.3f, 0.3f, -0.5f - 1.4f, 0.5f + 1.4f, 0.0f, 1.5f};
 
         /* Visualize fork_roi */
-        visualization_msgs::msg::Marker fork_roi_msg;
-        fork_roi_msg.header.frame_id = "LOLA";
-        fork_roi_msg.header.stamp = this->now();
-        fork_roi_msg.ns = ns;
-        fork_roi_msg.id = 0;
-        fork_roi_msg.type = visualization_msgs::msg::Marker::CUBE;
-        fork_roi_msg.action = visualization_msgs::msg::Marker::ADD;
-        fork_roi_msg.scale.x = static_cast<double>(fork_roi.max_x - fork_roi.min_x);
-        fork_roi_msg.scale.y = static_cast<double>(fork_roi.max_y - fork_roi.min_y);
-        fork_roi_msg.scale.z = static_cast<double>(fork_roi.max_z - fork_roi.min_z);
-        fork_roi_msg.color.r = 0.8;
-        fork_roi_msg.color.g = 0.8;
-        fork_roi_msg.color.b = 1.0;
-        fork_roi_msg.color.a = 0.2;
-        fork_roi_msg.pose.position.x = T_body2fork.translation()[0] - 0.5 * fork_roi_msg.scale.x;
-        fork_roi_msg.pose.position.y = T_body2fork.translation()[1];
-        fork_roi_msg.pose.position.z = T_body2fork.translation()[2] + 0.5 * fork_roi_msg.scale.z - 0.3;
-        visualization_msg.markers.push_back(fork_roi_msg);
+        // visualization_msgs::msg::Marker fork_roi_msg;
+        // fork_roi_msg.header.frame_id = "LOLA";
+        // fork_roi_msg.header.stamp = this->now();
+        // fork_roi_msg.ns = ns;
+        // fork_roi_msg.id = 0;
+        // fork_roi_msg.type = visualization_msgs::msg::Marker::CUBE;
+        // fork_roi_msg.action = visualization_msgs::msg::Marker::ADD;
+        // fork_roi_msg.scale.x = static_cast<double>(fork_roi.max_x - fork_roi.min_x);
+        // fork_roi_msg.scale.y = static_cast<double>(fork_roi.max_y - fork_roi.min_y);
+        // fork_roi_msg.scale.z = static_cast<double>(fork_roi.max_z - fork_roi.min_z);
+        // fork_roi_msg.color.r = 0.8;
+        // fork_roi_msg.color.g = 0.8;
+        // fork_roi_msg.color.b = 1.0;
+        // fork_roi_msg.color.a = 0.2;
+        // fork_roi_msg.pose.position.x = T_body2fork.translation()[0] - 0.5 * fork_roi_msg.scale.x;
+        // fork_roi_msg.pose.position.y = T_body2fork.translation()[1];
+        // fork_roi_msg.pose.position.z = T_body2fork.translation()[2] + 0.5 * fork_roi_msg.scale.z - 0.3;
+        // visualization_msg.markers.push_back(fork_roi_msg);
 
         /* Visualize slot_space_roi */
         tf2::Quaternion tf_q;
@@ -159,26 +163,26 @@ void PoseEstimation::workerLoop()
         slot_roi_msg.pose.position.z = 0.5 * slot_roi_msg.scale.z;
         visualization_msg.markers.push_back(slot_roi_msg);
 
-        SemanticCloud::Ptr cloud_on_forks = std::make_shared<SemanticCloud>();
-        SemanticCloud::Ptr cloud_off_forks = std::make_shared<SemanticCloud>();
-        getCloud(*cloud, cloud_on_forks, cloud_off_forks, T_body2fork.translation(), fork_roi);
-        if (cloud_on_forks->size() < 10 || cloud_off_forks->size() < 10)
-        {
-            RCLCPP_ERROR(get_logger(), "cloud_on_forks or cloud_off_forks has too less points!");
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            continue;
-        }
-        ColoredCloud cloud_on_forks_colored;
-        pcl::copyPointCloud(*cloud_on_forks, cloud_on_forks_colored);
-        std::for_each(std::execution::par_unseq, cloud_on_forks_colored.begin(), cloud_on_forks_colored.end(),
-                      [](pcl::PointXYZRGB& point)
-                          {
-                              point.r = 200;
-                              point.g = 200;
-                              point.b = 250;
-                          });
-        RawCloud::Ptr pallet_cloud = std::make_shared<RawCloud>();
-        getCloud(*cloud_on_forks, pallet_label, *pallet_cloud);
+        // auto cloud_on_forks = std::make_shared<RawCloud>();
+        // auto cloud_off_forks = std::make_shared<RawCloud>();
+        // getCloud(*cloud, cloud_on_forks, cloud_off_forks, T_body2fork.translation(), fork_roi);
+        // if (cloud_on_forks->size() < 10 || cloud_off_forks->size() < 10)
+        // {
+        //     RCLCPP_ERROR(get_logger(), "cloud_on_forks or cloud_off_forks has too less points!");
+        //     std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        //     continue;
+        // }
+        // ColoredCloud cloud_on_forks_colored;
+        // pcl::copyPointCloud(*cloud_on_forks, cloud_on_forks_colored);
+        // std::for_each(std::execution::par_unseq, cloud_on_forks_colored.begin(), cloud_on_forks_colored.end(),
+        //               [](pcl::PointXYZRGB& point)
+        //                   {
+        //                       point.r = 200;
+        //                       point.g = 200;
+        //                       point.b = 250;
+        //                   });
+        // RawCloud::Ptr pallet_cloud = std::make_shared<RawCloud>();
+        // getCloud(*cloud_on_forks, pallet_label, *pallet_cloud);
 
         /*------ Stage 1. Pose estimate for load on the forks ------*/
         // geometry_msgs::msg::Pose2D load_pose;
@@ -215,17 +219,18 @@ void PoseEstimation::workerLoop()
         }
 
         /*------ Stage 2. Slot pose estimate ------*/
-        SemanticCloud::Ptr slot_space_cloud = std::make_shared<SemanticCloud>();
-        getCloud(*cloud_off_forks, slot_space_cloud, nullptr, goal_pose, slot_space_roi);
+        auto slot_space_cloud = std::make_shared<RawCloud>();
+        getCloud(*cloud, slot_space_cloud, nullptr, goal_pose, slot_space_roi);
+
         if (slot_space_cloud->size() < 10)
         {
             RCLCPP_ERROR(get_logger(), "slot_space_cloud has too few points!");
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
             continue;
         }
-        SemanticCloud::Ptr slot_space_cloud_without_ground = std::make_shared<SemanticCloud>();
+        auto slot_space_cloud_without_ground = std::make_shared<RawCloud>();
         removeGround(*slot_space_cloud, *slot_space_cloud_without_ground);
-        geometry_msgs::msg::Pose2D slot_pose;
+        Eigen::Vector3f slot_pose;
         if (!estimateSlotPose(slot_space_cloud_without_ground, slot_pose))
         {
             RCLCPP_ERROR(get_logger(), "Failed to estimate pose of the slot!");
@@ -233,9 +238,9 @@ void PoseEstimation::workerLoop()
             continue;
         }
         geometry_msgs::msg::PoseStamped slot_pose_msg;
-        slot_pose_msg.pose.position.x = slot_pose.x;
-        slot_pose_msg.pose.position.y = slot_pose.y;
-        slot_pose_msg.pose.orientation = toQuaternionMsg(slot_pose.theta);
+        slot_pose_msg.pose.position.x = slot_pose.x();
+        slot_pose_msg.pose.position.y = slot_pose.y();
+        slot_pose_msg.pose.orientation = toQuaternionMsg(slot_pose[2]);
         slot_pose_msg.header.frame_id = "LOLA";
         slot_pose_msg.header.stamp = now();
         mSlotPosePub->publish(slot_pose_msg);
@@ -251,11 +256,8 @@ void PoseEstimation::workerLoop()
                               point.b = 200;
                           });
 
-        ColoredCloud cloud_in_roi = slot_space_cloud_colored + cloud_on_forks_colored;
-        cloud_in_roi.width = cloud_in_roi.size();
-        cloud_in_roi.height = 1;
         sensor_msgs::msg::PointCloud2 cloud_in_roi_msg;
-        pcl::toROSMsg(cloud_in_roi, cloud_in_roi_msg);
+        pcl::toROSMsg(slot_space_cloud_colored, cloud_in_roi_msg);
         cloud_in_roi_msg.header.frame_id = "LOLA";
         cloud_in_roi_msg.header.stamp = this->now();
         mRoiCloudPub->publish(cloud_in_roi_msg);
@@ -271,15 +273,14 @@ void PoseEstimation::workerLoop()
         constexpr ROI load_roi{-1.2f, 0.0f, -0.5f, 0.5f, 0.0f, 1.5f};
         Eigen::Isometry3d slot_pose_eigen;
         tf2::convert(slot_pose_msg.pose, slot_pose_eigen);
-        if (checkSpace(*slot_space_cloud_without_ground, slot_pose_eigen.cast<float>(), load_roi))
-        {
-            RCLCPP_INFO(get_logger(), "There is free space in the slot.");
-            slot_cube_msg.color.g = 1.0;
-        }
-        else
+        if (!checkSpace(*slot_space_cloud_without_ground, slot_pose_eigen.cast<float>(), load_roi))
         {
             RCLCPP_WARN(get_logger(), "There is not enough space or there might be obstacles in the slot!");
             slot_cube_msg.color.r = 1.0;
+        }
+        else
+        {
+            slot_cube_msg.color.g = 1.0;
         }
 
         visualization_msg.markers.push_back(slot_cube_msg);
@@ -373,13 +374,19 @@ bool PoseEstimation::estimateLoadPose(const RawCloud::Ptr& pallet_cloud, geometr
     return true;
 }
 
-bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_msgs::msg::Pose2D& slot_pose) const
+bool PoseEstimation::estimateSlotPose(const RawCloud::Ptr& cloud, Eigen::Vector3f& slot_pose) const
 {
     if (cloud->size() < 10)
     {
         return false;
     }
-    static OrthographicProjector<SemanticPoint> projector(View::TOP, 0.02f);
+
+    // auto transverse_cloud = std::make_shared<RawCloud>();
+    // auto longitudinal_cloud = std::make_shared<RawCloud>();
+    //
+    // normalFilter<pcl::PointXYZ>(cloud, transverse_cloud, longitudinal_cloud);
+
+    static OrthographicProjector<pcl::PointXYZ> projector(View::TOP, 0.02f);
     projector.setCloud(cloud);
     const cv::Mat projection = projector.projection();
 
@@ -390,6 +397,7 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_
         filter2d::close(projection, temp_img);
         filter2d::removeIsolatedPoints(temp_img, closed_img);
     }
+
 
     bool has_left_side{true}, has_right_side{true}; // Flags to check if there is left side or right side boundary
     /* The coefficients of 3 planes, assume they are all perpendicular to the ground,
@@ -413,7 +421,7 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_
     cv::Mat right_edge_mask = cv::Mat::zeros(closed_img.size(), CV_8UC1);
     cv::line(right_edge_mask, *edge_end_points.first, *edge_end_points.second, cv::Scalar(255), 16);
     const auto raw_rear_edge_cloud = projector.extractCloud(right_edge_mask);
-    SemanticCloud refined_rear_edge_cloud;
+    RawCloud refined_rear_edge_cloud;
     feature3d::findInliers(raw_rear_edge_cloud, refined_rear_edge_cloud, 0.06f);
     if (!feature3d::planeCoefficients(refined_rear_edge_cloud, rear_plane_coefficients))
     {
@@ -429,14 +437,25 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_
 
     // rear_plane_coefficients[2] -= mLoadDimensions[0] + 0.1f; // Move the plane from rear to the front
     // rear_plane_coefficients[2] -= mLoadDimensions[0]; // Move the plane from rear to the front
-    rear_plane_coefficients[2] += dist_front - mLoadDimensions[0]; // Move the plane from rear to the front
+    rear_plane_coefficients[2] += dist_front - mLoadDimensions[0] - 0.1f; // Move the plane from rear to the front
 
-    cv::line(right_edge_mask, *edge_end_points.first, *edge_end_points.second, cv::Scalar(255), 26);
-    closed_img.setTo(0, right_edge_mask);
+    // cv::line(right_edge_mask, *edge_end_points.first, *edge_end_points.second, cv::Scalar(255), 26);
+    // closed_img.setTo(0, right_edge_mask);
+    //
+    // projector.setCloud(longitudinal_cloud);
+    // const cv::Mat projection = projector.projection();
+
+    //
+    // {
+    //     cv::Mat temp_img;
+    //     filter2d::close(projection, temp_img);
+    //     filter2d::removeIsolatedPoints(temp_img, closed_img);
+    // }
 
     /* Step 2. Locate the boundary on y direction, right side */
     cv::Mat upper_edge_img;
-    feature2d::detectEdge(closed_img(cv::Range(0, closed_img.rows / 2), cv::Range::all()),
+    feature2d::detectEdge(closed_img(cv::Range(0, closed_img.rows / 2),
+                                     cv::Range(0, static_cast<int>(closed_img.cols * 0.8))),
                           upper_edge_img, feature2d::EdgeType::LOWER);
     if (!feature2d::findInliers(upper_edge_img, edge_inliers, 3.0f))
     {
@@ -454,7 +473,7 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_
         cv::line(upper_edge_mask, *edge_end_points.first, *edge_end_points.second, cv::Scalar(255), 10);
 
         const auto raw_right_edge_cloud = projector.extractCloud(upper_edge_mask);
-        SemanticCloud refined_right_edge_cloud;
+        RawCloud refined_right_edge_cloud;
         feature3d::findInliers(raw_right_edge_cloud, refined_right_edge_cloud, 0.05f);
         if (!feature3d::planeCoefficients(refined_right_edge_cloud, right_plane_coefficients))
         {
@@ -469,7 +488,8 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_
 
     /* Step 3. Locate the boundary on y direction, left side */
     cv::Mat lower_edge_img;
-    feature2d::detectEdge(closed_img(cv::Range(closed_img.rows / 2, closed_img.rows), cv::Range::all()),
+    feature2d::detectEdge(closed_img(cv::Range(closed_img.rows / 2, closed_img.rows),
+                                     cv::Range(0, static_cast<int>(closed_img.cols * 0.8))),
                           lower_edge_img, feature2d::EdgeType::LOWER);
     if (!feature2d::findInliers(lower_edge_img, edge_inliers, 3.0f))
     {
@@ -489,7 +509,7 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_
         cv::line(lower_edge_mask, lower_edge_endpoint_1, lower_edge_endpoint_2, cv::Scalar(255), 10);
 
         const auto raw_left_edge_cloud = projector.extractCloud(lower_edge_mask);
-        SemanticCloud refined_left_edge_cloud;
+        RawCloud refined_left_edge_cloud;
         feature3d::findInliers(raw_left_edge_cloud, refined_left_edge_cloud, 0.05f);
         if (!feature3d::planeCoefficients(refined_left_edge_cloud, left_plane_coefficients))
         {
@@ -515,7 +535,7 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_
             RCLCPP_ERROR(get_logger(), "Can't locate intersection of left and rear planes!");
             return false;
         }
-        slot_pose.theta = std::atan2(-left_plane_coefficients[0], left_plane_coefficients[1]);
+        slot_pose[2] = std::atan2(-left_plane_coefficients[0], left_plane_coefficients[1]);
     }
     else if (has_right_side)
     {
@@ -525,7 +545,7 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_
             RCLCPP_ERROR(get_logger(), "Can't locate intersection of right and rear planes!");
             return false;
         }
-        slot_pose.theta = std::atan2(-right_plane_coefficients[0], right_plane_coefficients[1]);
+        slot_pose[2] = std::atan2(-right_plane_coefficients[0], right_plane_coefficients[1]);
     }
     // else if (has_left_side && has_right_side)
     // {
@@ -544,8 +564,8 @@ bool PoseEstimation::estimateSlotPose(const SemanticCloud::Ptr& cloud, geometry_
         return false;
     }
 
-    slot_pose.x = slot_position[0];
-    slot_pose.y = slot_position[1];
+    slot_pose.x() = slot_position[0];
+    slot_pose.y() = slot_position[1];
 
     return true;
 }

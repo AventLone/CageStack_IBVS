@@ -57,7 +57,7 @@ public:
 
         mT_fork2camera.rotate(Eigen::AngleAxisf(M_PIf, Eigen::Vector3f::UnitZ()));
         mT_fork2camera.prerotate(Eigen::AngleAxisf(-M_PIf / 7.0f, Eigen::Vector3f::UnitY()));
-        mT_fork2camera.pretranslate(Eigen::Vector3f(-0.35f, -0.03f, 0.6f));
+        mT_fork2camera.pretranslate(Eigen::Vector3f(-0.35f, -0.03f, 0.56f));
 
         // Force the node to use simulation time
         this->set_parameter(rclcpp::Parameter("use_sim_time", true));

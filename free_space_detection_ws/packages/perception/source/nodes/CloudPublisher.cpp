@@ -5,6 +5,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <Eigen/Geometry>
 #include <tf2_eigen/tf2_eigen.hpp> // ROS 2 header
+#include <pcl/filters/voxel_grid.h>
 #include "perception/tools/filter_3d.h"
 #include <random>
 
@@ -84,8 +85,8 @@ void CloudBuild::initSubscritions()
     // this->declare_parameters<std::string>(params_prefix, {{"Mid.Depth", "/sensors/camera/mid/depth"},
     //                                                       {"Mid.Semantics", "/sensors/camera/mid/semantics"}});
     this->declare_parameters<std::string>(params_prefix, {
-                                              {"Mid.Depth", "/forkheel_camera/depth"},
-                                              {"Mid.Semantics", "/forkheel_camera/semantic_segmentation"}
+                                              {"Mid.Depth", "/fork_camera_left/depth"},
+                                              {"Mid.Semantics", "/fork_camera_right/depth"}
                                           });
 
     std::map<std::string, std::string> sensor_topics;
@@ -97,14 +98,18 @@ void CloudBuild::initSubscritions()
     mDepthSub.subscribe(this, sensor_topics["Mid.Depth"]);
     mSemanticSub.subscribe(this, sensor_topics["Mid.Semantics"]);
 
-    mSynchronizer = std::make_unique<message_filters::Synchronizer<SyncPolicy>>(SyncPolicy(2), mDepthSub, mSemanticSub);
+    mSynchronizer = std::make_unique<message_filters::Synchronizer<SyncPolicy>>(SyncPolicy(2),
+                                                                                mDepthSub, mSemanticSub);
 
     // 设置更小的时间容差（单位：秒）
     mSynchronizer->setMaxIntervalDuration(rclcpp::Duration(0, 1000000)); // 10ms 容差
-    mSynchronizer->registerCallback(std::bind(&CloudBuild::imgsHandler, this, std::placeholders::_1, std::placeholders::_2));
+    mSynchronizer->registerCallback(std::bind(&CloudBuild::imgsHandler,
+                                              this, std::placeholders::_1, std::placeholders::_2));
 
-    mSemanticLabelsSub = this->create_subscription<StrMsg>("/semantic_labels", rclcpp::SensorDataQoS().best_effort(),
-                                                           std::bind(&CloudBuild::semanticLabelsHandler, this, std::placeholders::_1));
+    mSemanticLabelsSub = this->create_subscription<StrMsg>("/semantic_labels",
+                                                           rclcpp::SensorDataQoS(),
+                                                           std::bind(&CloudBuild::semanticLabelsHandler,
+                                                                     this, std::placeholders::_1));
 }
 
 void CloudBuild::initPublishers()
@@ -121,18 +126,22 @@ void CloudBuild::initPublishers()
         RCLCPP_FATAL(get_logger(), "Failed to get parameters, cloud topic names!");
     }
 
-    mSemanticCloudPub = create_publisher<sensor_msgs::msg::PointCloud2>(cloud_topics["SemanticCloud"], rclcpp::SensorDataQoS());
-    mColoredCloudPub = create_publisher<sensor_msgs::msg::PointCloud2>(cloud_topics["ColoredCloud"], rclcpp::SensorDataQoS());
+    mCloudPub = create_publisher<sensor_msgs::msg::PointCloud2>(cloud_topics["SemanticCloud"],
+                                                                rclcpp::SensorDataQoS());
+    mColoredCloudPub = create_publisher<sensor_msgs::msg::PointCloud2>(cloud_topics["ColoredCloud"],
+                                                                       rclcpp::SensorDataQoS());
 }
 
-void CloudBuild::imgsHandler(const ImgMsg::ConstSharedPtr& depth_msg, const ImgMsg::ConstSharedPtr& semantics_msg)
+void CloudBuild::imgsHandler(const ImgMsg::ConstSharedPtr& left_depth_msg,
+                             const ImgMsg::ConstSharedPtr& right_depth_msg)
 {
     /* Get the pose of the forks */
     Eigen::Isometry3f T_body2fork;
     try
     {
         // This returns the pose of 'fork' in 'body' coordinates
-        const geometry_msgs::msg::TransformStamped tf_body2fork = mTfBuffer->lookupTransform("LOLA", "fork", tf2::TimePointZero);
+        const geometry_msgs::msg::TransformStamped tf_body2fork =
+                mTfBuffer->lookupTransform("LOLA", "fork", tf2::TimePointZero);
         T_body2fork = tf2::transformToEigen(tf_body2fork).cast<float>();
     }
     catch (const tf2::TransformException& ex)
@@ -141,13 +150,13 @@ void CloudBuild::imgsHandler(const ImgMsg::ConstSharedPtr& depth_msg, const ImgM
         return;
     }
 
-    const auto depth_ptr = cv_bridge::toCvShare(depth_msg, sensor_msgs::image_encodings::TYPE_32FC1);
-    const auto semantics_ptr = cv_bridge::toCvShare(semantics_msg, sensor_msgs::image_encodings::TYPE_32SC1);
+    const auto left_depth_ptr = cv_bridge::toCvShare(left_depth_msg, sensor_msgs::image_encodings::TYPE_32FC1);
+    const auto right_depth_ptr = cv_bridge::toCvShare(right_depth_msg, sensor_msgs::image_encodings::TYPE_32FC1);
 
     ImgSet img_set{};
     img_set.T_body2fork = T_body2fork;
-    img_set.depth_img = depth_ptr->image.clone();
-    img_set.semantic_img = semantics_ptr->image.clone();
+    img_set.left_depth_img = left_depth_ptr->image.clone();
+    img_set.right_depth_img = right_depth_ptr->image.clone();
 
     pushInBuffer(std::move(img_set));
     mTriggerEvent.notify_one();
@@ -189,7 +198,6 @@ void CloudBuild::workerLoop()
 {
     std::random_device rd; // Random device for seeding
     std::mt19937 gen(rd()); // Mersenne Twister engine
-    // std::uniform_real_distribution<float> unifor(0.02, 0.2);
     std::cauchy_distribution<float> dist_chaos(0.0f, 0.0001f);
     std::normal_distribution<float> dist_normal(0.0f, 0.03f);
     const auto noise = [&]()-> float
@@ -199,7 +207,6 @@ void CloudBuild::workerLoop()
 
     while (rclcpp::ok())
     {
-        sensor_msgs::msg::PointCloud2 cloud_msg;
         ImgSet img_set;
         //
         {
@@ -213,85 +220,111 @@ void CloudBuild::workerLoop()
             mImgsBuffer.pop();
         }
 
-        int pallet_label{}, ramp_label{}, goods_label{};
-        auto it = mSemanticLabels.find("pallet");
-        if (it != mSemanticLabels.end())
-        {
-            pallet_label = it->second;
-        }
-        it = mSemanticLabels.find("ramp");
-        if (it != mSemanticLabels.end())
-        {
-            ramp_label = it->second;
-        }
-        it = mSemanticLabels.find("goods");
-        if (it != mSemanticLabels.end())
-        {
-            goods_label = it->second;
-        }
+        // int pallet_label{}, ramp_label{}, goods_label{};
+        // auto it = mSemanticLabels.find("pallet");
+        // if (it != mSemanticLabels.end())
+        // {
+        //     pallet_label = it->second;
+        // }
+        // it = mSemanticLabels.find("ramp");
+        // if (it != mSemanticLabels.end())
+        // {
+        //     ramp_label = it->second;
+        // }
+        // it = mSemanticLabels.find("goods");
+        // if (it != mSemanticLabels.end())
+        // {
+        //     goods_label = it->second;
+        // }
 
-        SemanticCloud semantic_cloud_camera; // This is the semantic cloud in the camera coordinate system.
-        semantic_cloud_camera.reserve(img_set.depth_img.total());
+        RawCloud left_camera_cloud, right_camera_cloud; // This is the semantic cloud in the camera coordinate system.
+        left_camera_cloud.reserve(img_set.left_depth_img.total() / 6);
+        right_camera_cloud.reserve(img_set.right_depth_img.total() / 6);
+
         constexpr int skip_step = 6;
-        for (int v = 0; v < img_set.depth_img.rows; v += skip_step)
+        const int half_cols = img_set.right_depth_img.cols / 2;
+        for (int v = 0; v < img_set.left_depth_img.rows; v += skip_step)
         {
-            const auto* depth_ptr = img_set.depth_img.ptr<float>(v);
-            const auto* label_ptr = img_set.semantic_img.ptr<int>(v);
+            const auto* left_depth_ptr = img_set.left_depth_img.ptr<float>(v);
+            const auto* right_depth_ptr = img_set.right_depth_img.ptr<float>(v);
 
-            for (int u = 0; u < img_set.depth_img.cols; u += skip_step)
+            for (int u = 0; u < img_set.left_depth_img.cols; u += skip_step)
             {
-                if (const float depth = depth_ptr[u] + noise(); depth > 0.1f && depth < depth_threshold)
+                if (const float depth = left_depth_ptr[u] + noise(); depth > 0.1f && depth < depth_threshold)
                 {
-                    int label{};
+                    // int label{};
 
-                    if (label_ptr[u] == pallet_label)
-                    {
-                        label = 1;
-                    }
-                    else if (label_ptr[u] == goods_label)
-                    {
-                        label = 2;
-                    }
-                    else if (label_ptr[u] == ramp_label)
-                    {
-                        label = 3;
-                    }
-                    else
-                    {
-                        label = 0;
-                    }
+                    // if (label_ptr[u] == pallet_label)
+                    // {
+                    //     label = 1;
+                    // }
+                    // else if (label_ptr[u] == goods_label)
+                    // {
+                    //     label = 2;
+                    // }
+                    // else if (label_ptr[u] == ramp_label)
+                    // {
+                    //     label = 3;
+                    // }
+                    // else
+                    // {
+                    //     label = 0;
+                    // }
 
                     const float x = (static_cast<float>(u) - cx) * depth * fx_inv;
                     const float y = (static_cast<float>(v) - cy) * depth * fy_inv;
-                    semantic_cloud_camera.emplace_back(depth, -x, -y, label);
+                    left_camera_cloud.emplace_back(depth, -x, -y);
+                }
+
+                if (u < half_cols)
+                {
+                    continue;
+                }
+                if (const float depth = right_depth_ptr[u] + noise(); depth > 0.1f && depth < depth_threshold)
+                {
+                    const float x = (static_cast<float>(u) - cx) * depth * fx_inv;
+                    const float y = (static_cast<float>(v) - cy) * depth * fy_inv;
+                    right_camera_cloud.emplace_back(depth, -x, -y);
                 }
             }
         }
 
-        if (semantic_cloud_camera.size() < 10)
+        if (left_camera_cloud.size() < 10 || right_camera_cloud.size() < 10)
         {
+            RCLCPP_ERROR(get_logger(), "left_camera_cloud or  right_camera_cloud has too few points!");
             continue;
         }
 
-        SemanticCloud semantic_cloud_base; // This is the semantic cloud in the base link coordinate system.
-        const Eigen::Isometry3f T_body2camera = img_set.T_body2fork * mT_fork2camera;
-        pcl::transformPointCloud(semantic_cloud_camera, semantic_cloud_base, T_body2camera);
+        RawCloud left_cloud_truck, right_cloud_truck; // This is the semantic cloud in the base link coordinate system.
+        const Eigen::Isometry3f T_body2leftcamera = img_set.T_body2fork * mT_fork2leftcamera;
+        const Eigen::Isometry3f T_body2rightcamera = img_set.T_body2fork * mT_fork2rightcamera;
+        pcl::transformPointCloud(left_camera_cloud, left_cloud_truck, T_body2leftcamera);
+        pcl::transformPointCloud(right_camera_cloud, right_cloud_truck, T_body2rightcamera);
 
-        ColoredCloud colored_cloud;
-        getCloud(semantic_cloud_base, colored_cloud);
+        RawCloud::Ptr cloud_truck = std::make_shared<RawCloud>();
+        *cloud_truck = left_cloud_truck + right_cloud_truck;
+        // *cloud_truck = right_cloud_truck;
+        // RCLCPP_INFO(get_logger(), "cloud_truck size is %lu.", cloud_truck->size());
+        // pcl::VoxelGrid<pcl::PointXYZ> vg;
+        // vg.setInputCloud(cloud_truck);
+        // vg.setLeafSize(0.02f, 0.02f, 0.02f);
+        //
+        // RawCloud downsampled_cloud_truck;
+        // vg.filter(downsampled_cloud_truck);
 
-        sensor_msgs::msg::PointCloud2 semantic_cloud_msg, colored_cloud_msg;
-        pcl::toROSMsg(semantic_cloud_base, semantic_cloud_msg);
-        pcl::toROSMsg(colored_cloud, colored_cloud_msg);
+        // RCLCPP_INFO(get_logger(), "downsampled_cloudo_truck size is %lu.", downsampled_cloud_truck.size());
 
-        semantic_cloud_msg.header.stamp = this->now();
-        semantic_cloud_msg.header.frame_id = global_frame_id;
-        colored_cloud_msg.header.stamp = this->now();
-        colored_cloud_msg.header.frame_id = global_frame_id;
+        // ColoredCloud colored_cloud;
+        // getCloud(left_cloud_truck, colored_cloud);
 
-        mSemanticCloudPub->publish(semantic_cloud_msg);
-        mColoredCloudPub->publish(colored_cloud_msg);
+        sensor_msgs::msg::PointCloud2 cloud_msg;
+        pcl::toROSMsg(*cloud_truck, cloud_msg);
+        // pcl::toROSMsg(colored_cloud, colored_cloud_msg);
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        cloud_msg.header.stamp = this->now();
+        cloud_msg.header.frame_id = global_frame_id;
+
+        mCloudPub->publish(cloud_msg);
+        // std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }

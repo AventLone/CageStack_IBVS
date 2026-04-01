@@ -105,7 +105,8 @@ void CloudBuild::workerLoop()
             mImgsBuffer.pop();
         }
         cv::Mat mask = cv::Mat::zeros(img_set.depth_img.size(), CV_8UC1);
-        mask.setTo(255, img_set.depth_img > 3.6f);
+        mask.setTo(255);
+        // mask.setTo(255, img_set.depth_img > 3.6f);
 
         ColoredCloud rgb_cloud_camera; // This is the semantic cloud in the camera coordinate system.
         rgb_cloud_camera.reserve(img_set.depth_img.total() / 2);
@@ -114,6 +115,7 @@ void CloudBuild::workerLoop()
         {
             const auto* depth_ptr = img_set.depth_img.ptr<float>(v);
             const auto* rgb_ptr = img_set.semantic_img.ptr<cv::Vec3b>(v);
+            auto* mask_ptr = mask.ptr<uchar>(v);
 
             for (int u = 0; u < img_set.depth_img.cols; u += skip_step)
             {
@@ -124,27 +126,27 @@ void CloudBuild::workerLoop()
                 }
 
                 const float x = (static_cast<float>(u) - cx) * depth * fx_inv;
-                if (constexpr float y_thresh = 2.0f; std::abs(x) > y_thresh)
-                {
-                    continue;
-                }
+                // if (constexpr float y_thresh = 2.0f; std::abs(x) > y_thresh)
+                // {
+                //     continue;
+                // }
                 const float y = (static_cast<float>(v) - cy) * depth * fy_inv;
 
+
                 const cv::Vec3b& rgb_pixel = rgb_ptr[u];
-                rgb_cloud_camera.emplace_back(rgb_pixel[0], rgb_pixel[1], rgb_pixel[2],
-                                              depth, -x, -y);
+                // rgb_cloud_camera.emplace_back(rgb_pixel[0], rgb_pixel[1], rgb_pixel[2],
+                //                               depth, -x, -y);
+                pcl::PointXYZRGB point;
+                point.x = depth;
+                point.y = -x;
+                point.z = -y;
+                point.r = rgb_pixel[0];
+                point.g = rgb_pixel[1];
+                point.b = rgb_pixel[2];
+                // rgb_cloud_camera.emplace_back(depth, -x, -y);
+                rgb_cloud_camera.push_back(point);
             }
         }
-
-        img_set.semantic_img.setTo(cv::Vec3b(0, 0, 0), mask);
-        cv_bridge::CvImage cv_image;
-        cv_image.header.stamp = this->now(); // ROS timestamp (now)
-        cv_image.header.frame_id = "LOLA"; // ROS frame ID
-        cv_image.encoding = sensor_msgs::image_encodings::RGB8; // Explicit RGB encoding
-        cv_image.image = img_set.semantic_img; // Bind OpenCV mat
-
-        // 2. Convert to ROS Image message (efficient copy/memory management)
-        mFilteredImagePub->publish(*cv_image.toImageMsg());
 
         if (rgb_cloud_camera.size() < 10)
         {
@@ -155,7 +157,6 @@ void CloudBuild::workerLoop()
         // const Eigen::Isometry3f T_body2camera = img_set.T_body2fork * mT_fork2camera;
         static const Eigen::Isometry3f T_body2camera = mT_fork2camera;
         pcl::transformPointCloud(rgb_cloud_camera, rgb_cloud_base, T_body2camera);
-
         sensor_msgs::msg::PointCloud2 rgb_cloud_msg;
         pcl::toROSMsg(rgb_cloud_base, rgb_cloud_msg);
 
@@ -163,7 +164,5 @@ void CloudBuild::workerLoop()
         rgb_cloud_msg.header.frame_id = global_frame_id;
 
         mColoredCloudPub->publish(rgb_cloud_msg);
-
-        // std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }

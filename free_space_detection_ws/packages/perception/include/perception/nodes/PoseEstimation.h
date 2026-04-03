@@ -1,6 +1,7 @@
 #pragma once
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
@@ -9,6 +10,9 @@
 #include <tf2_ros/buffer.h>
 #include "../types/common.hpp"
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <message_filters/subscriber.h>
+#include <message_filters/sync_policies/approximate_time.h>
+#include <message_filters/synchronizer.h>
 
 class PoseEstimation final : public rclcpp::Node
 {
@@ -22,6 +26,13 @@ class PoseEstimation final : public rclcpp::Node
         tf2::convert(tf2_quat, geom_quat);
         return geom_quat;
     }
+
+    struct BufferElement
+    {
+        sensor_msgs::msg::PointCloud2 cloud;
+        /* Control input */
+        float v, delta;
+    };
 
 public:
     explicit PoseEstimation(const std::string& name, const rclcpp::NodeOptions& options) : rclcpp::Node(name, options)
@@ -56,11 +67,11 @@ public:
 
 private:
     /* Received Data Buffer */
-    bool mHasGoal{false}, mIsShutdown{false};
+    bool mHasGoal{false}, mIsShutdown{false}, mUkfInit{false};
     std::mutex mBufferMutex;
     std::condition_variable mTriggerEvent;
     std::thread mWorker;
-    std::queue<sensor_msgs::msg::PointCloud2> mCloudBuffer;
+    std::queue<BufferElement> mDataBuffer;
 
     double mTotalElapseTime{};
     size_t mLoopCount{};
@@ -70,8 +81,16 @@ private:
     const Eigen::Vector3f mLoadDimensions{1.2f, 1.0f, 1.5f};
 
     /** Subscribers **/
-    rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr mCloudSub;
+    // rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr mCloudSub;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr mGoalSub;
+
+    /*** Synchronized Subsribers ***/
+    using CloudMsg = sensor_msgs::msg::PointCloud2;
+    using JointStatesMsg = sensor_msgs::msg::JointState;
+    using SyncPolicy = message_filters::sync_policies::ApproximateTime<CloudMsg, JointStatesMsg>;
+    message_filters::Subscriber<CloudMsg> mCloudSub;
+    message_filters::Subscriber<JointStatesMsg> mJointStateSub;
+    std::unique_ptr<message_filters::Synchronizer<SyncPolicy>> mSynchronizer;
 
     /** Publishers **/
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr mTargetPosePub, mLoadPosePub, mSlotPosePub;
@@ -86,14 +105,20 @@ private:
 
     void initPublishers();
 
-    void pushInBuffer(const sensor_msgs::msg::PointCloud2& msg)
+    void dataHandler(const CloudMsg::ConstSharedPtr& cloud_msg,
+                     const JointStatesMsg::ConstSharedPtr& joint_state_msg)
     {
         std::lock_guard<std::mutex> lock(mBufferMutex);
-        while (!mCloudBuffer.empty())
+        while (!mDataBuffer.empty())
         {
-            mCloudBuffer.pop();
+            mDataBuffer.pop();
         }
-        mCloudBuffer.push(msg);
+        const auto v = static_cast<float>(joint_state_msg->velocity[3]);
+        const auto delta = static_cast<float>(joint_state_msg->position[2]);
+        BufferElement data{*cloud_msg, v, delta};
+        mDataBuffer.push(std::move(data));
+
+        this->mTriggerEvent.notify_one();
     }
 
     visualization_msgs::msg::Marker getCubeMarker(const char* frame_id, const char* ns, const int id,
@@ -131,7 +156,5 @@ private:
     void workerLoop();
 
     /* Sub detection modules */
-    bool estimateLoadPose(const RawCloud::Ptr& pallet_cloud, geometry_msgs::msg::Pose2D& load_pose) const;
-
     bool estimateSlotPose(const RawCloud::Ptr& cloud, Eigen::Vector3f& slot_pose) const;
 };

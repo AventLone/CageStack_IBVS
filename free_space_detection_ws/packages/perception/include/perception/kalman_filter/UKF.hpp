@@ -38,7 +38,7 @@ public:
         mMeasurementSigmaPoints.setZero();
     }
 
-    UKF(const UKF&) = default;
+    UKF(const UKF&) = delete;
 
     UKF operator=(const UKF&) = delete;
 
@@ -50,10 +50,17 @@ public:
 
     /* 在const成员函数中调用非const成员函数会报错 */
     /* Simultaneous prediction and correction  */
-    void update(const ControlT& vecU, const MeasurementT& vecZ) noexcept
+    // void update(const ControlT& vecU, const MeasurementT& vecZ)
+    // {
+    //     predict(vecU);
+    //     correct(vecZ);
+    // }
+
+    const StateT& update(const ControlT& vecU, const MeasurementT& vecZ)
     {
         predict(vecU);
         correct(vecZ);
+        return mVecX;
     }
 
     const StateT& getState()
@@ -147,8 +154,8 @@ void UKF<SystemModel, MeasureModel, StateT>::correct(const MeasurementT& vecZ)
     CovXZ.setZero();
     for (int i = 0; i <= 2 * N; ++i)
     {
-        CovXZ +=
-                mWeightsC[i] * (mStateSigmaPoints.col(i) - mVecX) * (mMeasurementSigmaPoints.col(i) - meanZ).transpose();
+        CovXZ += mWeightsC[i] *
+                (mStateSigmaPoints.col(i) - mVecX) * (mMeasurementSigmaPoints.col(i) - meanZ).transpose();
     }
 
     auto matK = CovXZ * CovZ.inverse();

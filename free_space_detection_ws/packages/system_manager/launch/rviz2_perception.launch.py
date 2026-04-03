@@ -20,7 +20,7 @@ def generate_launch_description():
         package="robot_state_publisher",
         executable="robot_state_publisher",
         emulate_tty=True,
-        parameters=[{"robot_description": robot_desc}],
+        parameters=[{"robot_description": robot_desc, 'use_sim_time': True}],
         arguments=['--ros-args', '--log-level', 'warn']
     )
 
@@ -28,7 +28,7 @@ def generate_launch_description():
         package="joint_state_publisher",
         executable="joint_state_publisher",
         emulate_tty=True,
-        parameters=[{"source_list": ["/lola/joint_states"], "robot_description": robot_desc}],
+        parameters=[{"source_list": ["/lola/joint_states"], "robot_description": robot_desc, 'use_sim_time': True}],
         arguments=['--ros-args', '--log-level', 'warn']
     )
 
@@ -46,6 +46,6 @@ def generate_launch_description():
     ld.add_action(robot_state_publisher_node)
     ld.add_action(joint_state_publisher_node)
     ld.add_action(rviz2_node)
-    ld.add_action(TimerAction(period=1.2, actions=[perception_node]))
+    ld.add_action(TimerAction(period=1.6, actions=[perception_node]))
 
     return ld

@@ -216,7 +216,7 @@ void CloudBuild::workerLoop()
             {
                 break;
             }
-            img_set = mImgsBuffer.front();
+            img_set = std::move(mImgsBuffer.front());
             mImgsBuffer.pop();
         }
 

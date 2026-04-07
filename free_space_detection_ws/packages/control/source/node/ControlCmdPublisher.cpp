@@ -1,4 +1,5 @@
 #include "control/node/ControlCmdPublisher.h"
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 void ControlCmdPublisher::initSolver()
 {
@@ -48,88 +49,99 @@ void ControlCmdPublisher::initSolver()
 void ControlCmdPublisher::initSubscriptions()
 {
     const std::string param_name = "TopicName.Perception.Target.Pose";
-    this->declare_parameter(param_name, "/perception/target/pose");
+    this->declare_parameter(param_name, "/perception/slot_pose");
     const std::string target_pose_topic = this->get_parameter(param_name).as_string();
 
-    mGoalPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>(target_pose_topic, 10, 
-        [this](const geometry_msgs::msg::PoseStamped::ConstSharedPtr &pose_msg) -> void
+    mGoalPoseSub = this->create_subscription<geometry_msgs::msg::Pose2D>(
+        target_pose_topic, rclcpp::ServicesQoS(),
+        [this](const geometry_msgs::msg::Pose2D::ConstSharedPtr& pose_msg) -> void
             {
                 std::vector<double> goal(3, 0.0);
-                tf2::Quaternion tf2_quat;
-                tf2::convert(pose_msg->pose.orientation, tf2_quat);
-                goal[0] = pose_msg->pose.position.x;
-                goal[1] = pose_msg->pose.position.y;
+                goal[0] = pose_msg->x;
+                goal[1] = pose_msg->y;
+                goal[2] = pose_msg->theta;
 
-                const tf2::Matrix3x3 mat(tf2_quat);
-                double roll, pitch, yaw;
-                mat.getRPY(roll, pitch, yaw);
-                goal[2] = yaw;
-                mGoalBuffer.push(std::move(goal));
-                if (mGoalBuffer.size() > 1)
+                while (!mGoalBuffer.empty())
                 {
                     mGoalBuffer.pop();
                 }
+
+                mGoalBuffer.push(std::move(goal));
+                mTriggerEvent.notify_one();
             });
 }
 
 void ControlCmdPublisher::initPublishers()
 {
     const std::string params_prefix = "TopicName.Control";
-    this->declare_parameters<std::string>(params_prefix, {{"Command", "/control/cmds"},
-                                                          {"Path", "/control/path"}});
+    this->declare_parameters<std::string>(params_prefix, {
+                                              {"Command", "/lola/joint_command"},
+                                              {"Path", "/control/path"}
+                                          });
     std::map<std::string, std::string> control_topics;
-    if(!this->get_parameters(params_prefix, control_topics))
+    if (!this->get_parameters(params_prefix, control_topics))
     {
         RCLCPP_FATAL(this->get_logger(), "Failed to get parameters, control topic names!");
     }
 
-    mCmdPub = this->create_publisher<std_msgs::msg::Float64MultiArray>(control_topics["Command"], 10);
-    mPathPub = this->create_publisher<nav_msgs::msg::Path>(control_topics["Path"], rclcpp::SensorDataQoS().best_effort());
+    mCmdPub = this->create_publisher<sensor_msgs::msg::JointState>(control_topics["Command"], 10);
+    mPathPub = this->create_publisher<nav_msgs::msg::Path>(control_topics["Path"], rclcpp::SensorDataQoS());
 }
 
-void ControlCmdPublisher::cmdPubLoop() 
+void ControlCmdPublisher::cmdPubLoop()
 {
-    if (mGoalBuffer.empty())
-    {
-        return;
-    }
-
-    const std::vector<double> goal = std::move(mGoalBuffer.front());
-    mGoalBuffer.pop();
-
-    mController->setGoal(goal);
-    std::pair<nmpc::Solution, nmpc::Solution> result;
-    if (!mController->solve(result))
-    {
-        return;
-    }
-    const auto& [us, xs] = result;
-    const std::vector<double>& cmd = us[0];
-    std_msgs::msg::Float64MultiArray cmd_msg;
-    cmd_msg.data.push_back(cmd[0]);
-    cmd_msg.data.push_back(cmd[1]);
-    cmd_msg.data.push_back(0.0);
-    mCmdPub->publish(cmd_msg);
-
+    std::vector<double> goal;
+    sensor_msgs::msg::JointState cmd_msg;
+    cmd_msg.name = {"drive_joint", "steer_joint", "lift_z", "lift_y"};
     nav_msgs::msg::Path state_path;
-    state_path.header.frame_id = "map";
-    // for (const auto& x : xs)
-    for (size_t i = 0; i < xs.size(); i += 3)
+    state_path.header.frame_id = "LOLA";
+    while (rclcpp::ok())
     {
-        geometry_msgs::msg::PoseStamped pose;
-        pose.header.frame_id = "map";
-        pose.header.stamp = this->now();
+        cmd_msg.velocity = std::vector(4, 0.0);
+        cmd_msg.position = std::vector(4, 0.0);
+        state_path.poses.clear();
+        //
+        {
+            std::unique_lock<std::mutex> lock(mGoalMutex);
+            mTriggerEvent.wait(lock, [this]() -> bool { return !mGoalBuffer.empty() || mIsShutdown; });
+            if (mIsShutdown)
+            {
+                break;
+            }
+            goal = std::move(mGoalBuffer.front());
+            mGoalBuffer.pop();
+        }
+        mController->setGoal(goal);
+        std::pair<nmpc::Solution, nmpc::Solution> result;
+        if (!mController->solve(result))
+        {
+            RCLCPP_WARN(get_logger(), "Controller failed to solve the problem!");
+            continue;
+        }
+        const auto& [us, xs] = result;
+        const std::vector<double>& cmd = us[0];
+        cmd_msg.velocity[0] = cmd[0];
+        cmd_msg.velocity[1] = cmd[0];
+        cmd_msg.header.stamp = this->now();
+        mCmdPub->publish(cmd_msg);
 
-        const auto& x = xs[i];
+        /* Publish  */
+        for (size_t i = 0; i < xs.size(); i += 3)
+        {
+            geometry_msgs::msg::PoseStamped pose;
+            pose.header.frame_id = "LOLA";
+            pose.header.stamp = this->now();
+            const auto& x = xs[i];
 
-        pose.pose.position.x = x[0];
-        pose.pose.position.y = x[1];
-        pose.pose.position.z = 0.1;
-        tf2::Quaternion orien;
-        orien.setRPY(0.0, 0.0, x[2]);
-        orien.normalize();
-        pose.pose.orientation = tf2::toMsg(orien);
-        state_path.poses.push_back(pose);
+            pose.pose.position.x = x[0];
+            pose.pose.position.y = x[1];
+            pose.pose.position.z = 0.1;
+            tf2::Quaternion orien;
+            orien.setRPY(0.0, 0.0, x[2]);
+            orien.normalize();
+            pose.pose.orientation = tf2::toMsg(orien);
+            state_path.poses.push_back(pose);
+        }
+        mPathPub->publish(state_path);
     }
-    mPathPub->publish(state_path);
 }

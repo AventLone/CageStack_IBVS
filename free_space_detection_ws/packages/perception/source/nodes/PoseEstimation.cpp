@@ -58,7 +58,7 @@ void PoseEstimation::initPublishers()
     mVisualizationPub = create_publisher<visualization_msgs::msg::MarkerArray>(target_topics["BBox"], rclcpp::SensorDataQoS());
     mTargetPosePub = create_publisher<geometry_msgs::msg::PoseStamped>(target_topics["Pose"], rclcpp::ServicesQoS());
     mLoadPosePub = create_publisher<geometry_msgs::msg::PoseStamped>("load_pose", rclcpp::ServicesQoS());
-    mSlotPosePub = create_publisher<geometry_msgs::msg::PoseStamped>("slot_pose", rclcpp::ServicesQoS());
+    mSlotPosePub = create_publisher<geometry_msgs::msg::Pose2D>("slot_pose", rclcpp::ServicesQoS());
     mRoiCloudPub = create_publisher<sensor_msgs::msg::PointCloud2>("visualization/cloud_in_roi", rclcpp::SensorDataQoS());
 }
 
@@ -84,7 +84,7 @@ void PoseEstimation::workerLoop()
             {
                 break;
             }
-            data = mDataBuffer.front();
+            data = std::move(mDataBuffer.front());
             mDataBuffer.pop();
         }
 
@@ -174,15 +174,19 @@ void PoseEstimation::workerLoop()
                 continue;
             }
         }
-        geometry_msgs::msg::PoseStamped slot_pose_msg;
-        slot_pose_msg.pose.position.x = slot_pose_filtered.x();
-        slot_pose_msg.pose.position.y = slot_pose_filtered.y();
-        slot_pose_msg.pose.orientation = toQuaternionMsg(slot_pose_filtered[2]);
-        slot_pose_msg.header.frame_id = "LOLA";
-        slot_pose_msg.header.stamp = now();
+        geometry_msgs::msg::Pose2D slot_pose_msg;
+        slot_pose_msg.x = slot_pose_filtered.x();
+        slot_pose_msg.y = slot_pose_filtered.y();
+        slot_pose_msg.theta = slot_pose_filtered[2];
+        // slot_pose_msg.pose.position.x = slot_pose_filtered.x();
+        // slot_pose_msg.pose.position.y = slot_pose_filtered.y();
+        // slot_pose_msg.pose.orientation = toQuaternionMsg(slot_pose_filtered[2]);
+        // slot_pose_msg.header.frame_id = "LOLA";
+        // slot_pose_msg.header.stamp = now();
         mSlotPosePub->publish(slot_pose_msg);
 
-        mGoalMsg.pose = slot_pose_msg.pose;
+        mGoalMsg.pose.position.x = slot_pose_filtered.x();
+        mGoalMsg.pose.position.y = slot_pose_filtered.y();
 
         ColoredCloud slot_space_cloud_colored;
         pcl::copyPointCloud(*slot_space_cloud_without_ground, slot_space_cloud_colored);
@@ -208,8 +212,10 @@ void PoseEstimation::workerLoop()
                                                                       0.2, 0.2, 0.2, 0.86, slot_pose_filtered);
         slot_cube_msg.pose.position.z = 0.5 * load_size_z;
         constexpr ROI load_roi{-1.2f, 0.0f, -0.5f, 0.5f, 0.0f, 1.5f};
-        Eigen::Isometry3d slot_pose_eigen;
-        tf2::convert(slot_pose_msg.pose, slot_pose_eigen);
+        Eigen::Isometry3f slot_pose_eigen(Eigen::Isometry3f::Identity());
+        slot_pose_eigen.rotate(Eigen::AngleAxisf(slot_pose_filtered[2], Eigen::Vector3f::UnitZ()));
+        slot_pose_eigen.pretranslate(Eigen::Vector3f(slot_pose_filtered[0], slot_pose_filtered[1], 0.0f));
+        // tf2::convert(slot_pose_msg.pose, slot_pose_eigen);
         if (!checkSpace(*slot_space_cloud_without_ground, slot_pose_eigen.cast<float>(), load_roi))
         {
             RCLCPP_WARN(get_logger(), "There is not enough space or there might be obstacles in the slot!");

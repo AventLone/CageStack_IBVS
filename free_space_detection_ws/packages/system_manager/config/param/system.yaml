@@ -40,8 +40,8 @@
             MaxSteerSpeed: 0.5
             MaxSteerAngle: 1.14
 
-            WheelBase: 1.37
-            WheelRadius: 0.11
+            WheelBase: 1.20551
+            WheelRadius: 0.115
 
             WeightQ: [360.0, 660.0, 370.0, 60.0]
             WeightF: [4000.0, 4000.0, 4000.0]

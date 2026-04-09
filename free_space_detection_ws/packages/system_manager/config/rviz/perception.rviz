@@ -218,7 +218,7 @@ Visualization Manager:
       Head Length: 0.30000001192092896
       Head Radius: 0.10000000149011612
       Name: Pose
-      Shaft Length: 0.699999988079071
+      Shaft Length: 0.6000000238418579
       Shaft Radius: 0.05000000074505806
       Shape: Arrow
       Topic:
@@ -303,7 +303,7 @@ Visualization Manager:
       Head Length: 0.30000001192092896
       Head Radius: 0.10000000149011612
       Name: Pose
-      Shaft Length: 0.699999988079071
+      Shaft Length: 0.4000000059604645
       Shaft Radius: 0.05000000074505806
       Shape: Arrow
       Topic:

@@ -93,8 +93,8 @@ private:
     std::unique_ptr<message_filters::Synchronizer<SyncPolicy>> mSynchronizer;
 
     /** Publishers **/
-    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr mTargetPosePub, mLoadPosePub;
-    rclcpp::Publisher<geometry_msgs::msg::Pose2D>::SharedPtr mSlotPosePub;
+    // rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr mTargetPosePub, mLoadPosePub;
+    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr mSlotPosePub;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr mVisualizationPub;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr mRoiCloudPub;
 

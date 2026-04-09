@@ -39,8 +39,11 @@ def generate_launch_description():
         arguments=["-d", rviz_config_path, '--ros-args', '--log-level', 'warn']
     )
 
-    perception_node = Node(package="perception", executable="perception", 
-                           namespace="perception", emulate_tty=True)
+    perception_node = Node(
+        package="perception", executable="perception", 
+        namespace="perception", emulate_tty=True,
+        # arguments=['--ros-args', '--log-level', 'warn']
+    )
 
     ld = LaunchDescription()
     ld.add_action(robot_state_publisher_node)

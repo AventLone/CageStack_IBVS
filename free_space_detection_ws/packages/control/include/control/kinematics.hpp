@@ -19,7 +19,7 @@ struct Bicycle
         return vec_x + mParams.dt * casadi::MX::vertcat({
                        v * mParams.wheel_radius * casadi::MX::cos(th),
                        v * mParams.wheel_radius * casadi::MX::sin(th),
-                       -v * mParams.wheel_radius / mParams.wheel_base * casadi::MX::tan(del),
+                       v * mParams.wheel_radius / mParams.wheel_base * casadi::MX::tan(del),
                        w
                    });
     }

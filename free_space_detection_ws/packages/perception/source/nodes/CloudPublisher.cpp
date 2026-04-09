@@ -106,10 +106,10 @@ void CloudBuild::initSubscritions()
     mSynchronizer->registerCallback(std::bind(&CloudBuild::imgsHandler,
                                               this, std::placeholders::_1, std::placeholders::_2));
 
-    mSemanticLabelsSub = this->create_subscription<StrMsg>("/semantic_labels",
-                                                           rclcpp::SensorDataQoS(),
-                                                           std::bind(&CloudBuild::semanticLabelsHandler,
-                                                                     this, std::placeholders::_1));
+    // mSemanticLabelsSub = this->create_subscription<StrMsg>("/semantic_labels",
+    //                                                        rclcpp::SensorDataQoS(),
+    //                                                        std::bind(&CloudBuild::semanticLabelsHandler,
+    //                                                                  this, std::placeholders::_1));
 }
 
 void CloudBuild::initPublishers()

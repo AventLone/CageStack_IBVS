@@ -24,10 +24,10 @@ struct Params
 inline std::ostream& operator<<(std::ostream& os, const Params& p)
 {
     return os << "---------------------- NMPC Params ----------------------\n" <<
-           "horizon: " << p.horizon << ", dt: " << p.dt
+           "horizon: " << p.horizon << ", dt: " << p.dt << " s"
            << "\ninput_len: " << p.input_len << ", state_len: " << p.state_len << ", output_len: " << p.output_len
            << "\nwheel_base: " << p.wheel_base << ", wheel_radius: " << p.wheel_radius
-           << "\nmax_acc: " << p.max_acc << "\nmax_speed: " << p.max_speed
+           << "\nmax_acc: " << p.max_acc << ", max_speed: " << p.max_speed
            << "\nmax_steer_speed: " << p.max_steer_speed << ", max_steer_angle: " << p.max_steer_angle
            << "\nWeight_Q: " << p.weight_Q << "\nWeight_F: " << p.weight_F << "\nWeight_R: " << p.weight_R
            << "\n--------------------------------------------------------";
@@ -51,10 +51,10 @@ public:
         mNLP.set_value(mX0, state);
     }
 
-    void setGoal(const std::vector<double>& goal)
+    void setGoal(const std::vector<double>& goal, const double delta)
     {
         mNLP.set_value(mGoal, goal);
-        mNLP.set_value(mX0, {0.0, 0.0, 0.0, 0.0});
+        mNLP.set_value(mX0, {0.0, 0.0, 0.0, delta});
     }
 
     bool solve(std::pair<Solution, Solution>& result);
@@ -130,7 +130,7 @@ Solver<Kinematics>::Solver(Params params) : mParams(std::move(params)), kinemati
     mX0 = mNLP.parameter(mParams.state_len);
 
     mQ = mNLP.parameter(4);
-    mF = mNLP.parameter(3);
+    mF = mNLP.parameter(4);
     mR = mNLP.parameter(2);
 
     mUs = mNLP.variable(mParams.input_len, mParams.horizon);
@@ -202,11 +202,12 @@ void Solver<Kinematics>::buildModel()
         auto e_y = -casadi::MX::sin(th) * dx + casadi::MX::cos(th) * dy;
         // auto e_th = casadi::MX::atan2(casadi::MX::sin(mGoal(2) - th), casadi::MX::cos(mGoal(2) - th));
         auto e_th = mGoal(2) - th;
-        auto s_penalty = casadi::MX::fmax(0.0, -dx);
-        auto mix = casadi::MX::fmax(0.0, u_k(0));
+        // auto s_penalty = casadi::MX::fmax(0.0, -dx);
+        // auto mix = casadi::MX::fmax(0.0, u_k(0));
 
         // casadi::MX e_k = casadi::MX::vertcat({e_x, e_y, e_th, dv}); // Error vector
-        casadi::MX e_k = casadi::MX::vertcat({e_x, e_y, e_th, mix * s_penalty}); // Error vector
+        // casadi::MX e_k = casadi::MX::vertcat({e_x, e_y, e_th, mix * s_penalty}); // Error vector
+        casadi::MX e_k = casadi::MX::vertcat({e_x, e_y, e_th, x_k(3)}); // Error vector
 
         // 阶段代价
         J += casadi::MX::mtimes(casadi::MX::mtimes(e_k.T(), weight_Q), e_k) + casadi::MX::mtimes(
@@ -229,7 +230,7 @@ void Solver<Kinematics>::buildModel()
         casadi::MX e_y = -casadi::MX::sin(th) * dx + casadi::MX::cos(th) * dy;
         // casadi::MX e_th = casadi::MX::atan2(casadi::MX::sin(mGoal(2) - th), casadi::MX::cos(mGoal(2) - th));
         auto e_th = mGoal(2) - th;
-        casadi::MX e_n = casadi::MX::vertcat({e_x, e_y, e_th}); // Error vector
+        casadi::MX e_n = casadi::MX::vertcat({e_x, e_y, e_th, x_n(3)}); // Error vector
 
         J += casadi::MX::mtimes(casadi::MX::mtimes(e_n.T(), weight_F), e_n);
     }

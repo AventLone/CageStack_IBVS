@@ -56,9 +56,9 @@ void PoseEstimation::initPublishers()
         RCLCPP_ERROR(this->get_logger(), "Failed to get parameters, target topic names!");
     }
     mVisualizationPub = create_publisher<visualization_msgs::msg::MarkerArray>(target_topics["BBox"], rclcpp::SensorDataQoS());
-    mTargetPosePub = create_publisher<geometry_msgs::msg::PoseStamped>(target_topics["Pose"], rclcpp::ServicesQoS());
-    mLoadPosePub = create_publisher<geometry_msgs::msg::PoseStamped>("load_pose", rclcpp::ServicesQoS());
-    mSlotPosePub = create_publisher<geometry_msgs::msg::Pose2D>("slot_pose", rclcpp::ServicesQoS());
+    // mTargetPosePub = create_publisher<geometry_msgs::msg::PoseStamped>(target_topics["Pose"], rclcpp::ServicesQoS());
+    // mLoadPosePub = create_publisher<geometry_msgs::msg::PoseStamped>("load_pose", rclcpp::ServicesQoS());
+    mSlotPosePub = create_publisher<geometry_msgs::msg::PoseStamped>("slot_pose", rclcpp::ServicesQoS());
     mRoiCloudPub = create_publisher<sensor_msgs::msg::PointCloud2>("visualization/cloud_in_roi", rclcpp::SensorDataQoS());
 }
 
@@ -95,7 +95,7 @@ void PoseEstimation::workerLoop()
         auto cloud = std::make_shared<RawCloud>();
         pcl::fromROSMsg(cloud_msg, *cloud);
 
-        constexpr ROI slot_space_roi{-1.2f - 0.6f, 0.3f, -0.5f - 0.5f, 0.5f + 0.5f, 0.0f, 1.5f};
+        constexpr ROI slot_space_roi{-1.2f - 0.6f, 0.3f, -0.5f - 0.3f, 0.5f + 0.3f, 0.0f, 1.5f};
 
         /* Visualize slot_space_roi */
         tf2::Quaternion tf_q;
@@ -169,24 +169,26 @@ void PoseEstimation::workerLoop()
             slot_pose_filtered = ukf->update(Eigen::Vector2f(data.v, data.delta), slot_pose);
 
             if (const auto gap = (slot_pose_filtered.head<2>() - goal_pose.translation().head<2>()).norm();
-                gap > 0.5f)
+                gap > 0.36f)
             {
                 continue;
             }
         }
-        geometry_msgs::msg::Pose2D slot_pose_msg;
-        slot_pose_msg.x = slot_pose_filtered.x();
-        slot_pose_msg.y = slot_pose_filtered.y();
-        slot_pose_msg.theta = slot_pose_filtered[2];
-        // slot_pose_msg.pose.position.x = slot_pose_filtered.x();
-        // slot_pose_msg.pose.position.y = slot_pose_filtered.y();
-        // slot_pose_msg.pose.orientation = toQuaternionMsg(slot_pose_filtered[2]);
-        // slot_pose_msg.header.frame_id = "LOLA";
-        // slot_pose_msg.header.stamp = now();
+        geometry_msgs::msg::PoseStamped slot_pose_msg;
+        // slot_pose_msg.x = slot_pose_filtered.x();
+        // slot_pose_msg.y = slot_pose_filtered.y();
+        // slot_pose_msg.theta = slot_pose_filtered[2];
+        slot_pose_msg.pose.position.x = slot_pose_filtered.x();
+        slot_pose_msg.pose.position.y = slot_pose_filtered.y();
+        slot_pose_msg.pose.orientation = toQuaternionMsg(slot_pose_filtered[2]);
+        slot_pose_msg.header.frame_id = "LOLA";
+        slot_pose_msg.header.stamp = now();
         mSlotPosePub->publish(slot_pose_msg);
 
-        mGoalMsg.pose.position.x = slot_pose_filtered.x();
-        mGoalMsg.pose.position.y = slot_pose_filtered.y();
+        mGoalMsg.pose = slot_pose_msg.pose;
+        // mGoalMsg.pose.position.x = slot_pose_filtered.x();
+        // mGoalMsg.pose.position.y = slot_pose_filtered.y();
+        // mGoalMsg.pose.orientation = toQuaternionMsg(slot_pose_filtered[2]);
 
         ColoredCloud slot_space_cloud_colored;
         pcl::copyPointCloud(*slot_space_cloud_without_ground, slot_space_cloud_colored);

@@ -66,12 +66,17 @@ class KeyboardJointPublisher(Node):
         elif k == 'd':
             joint_cmd_msg.velocity[1] = -KeyboardJointPublisher.STEER_SPEED
 
+        # if key == keyboard.Key.up:
+        #     self.fork_z += 0.01
+        #     self.fork_z = clamp(self.fork_z, 0.0, 1.0)
+        # elif key == keyboard.Key.down:
+        #     self.fork_z -= 0.01
+        #     self.fork_z = clamp(self.fork_z, 0.0, 1.0)
+
         if key == keyboard.Key.up:
-            self.fork_z += 0.01
-            self.fork_z = clamp(self.fork_z, 0.0, 1.0)
+            joint_cmd_msg.velocity[2] = KeyboardJointPublisher.LIFT_SPEED
         elif key == keyboard.Key.down:
-            self.fork_z -= 0.01
-            self.fork_z = clamp(self.fork_z, 0.0, 1.0)
+            joint_cmd_msg.velocity[2] = -KeyboardJointPublisher.LIFT_SPEED
 
         if key == keyboard.Key.left:
             self.fork_y -= 0.01
@@ -84,7 +89,8 @@ class KeyboardJointPublisher(Node):
             self.fork_z = 0.0
             self.fork_y = 0.0
 
-        joint_cmd_msg.position = [0.0, 0.0, self.fork_z, self.fork_y]
+        # joint_cmd_msg.position = [0.0, 0.0, self.fork_z, self.fork_y]
+        joint_cmd_msg.position = [0.0, 0.0, 0.0, self.fork_y]
 
         self.pub.publish(joint_cmd_msg)
 
@@ -92,9 +98,9 @@ class KeyboardJointPublisher(Node):
         try:
             k = key.char.lower()
         except AttributeError:
-            k = None
+            k = key
 
-        if k not in {'w', 's', 'a', 'd'}:
+        if k not in {'w', 's', 'a', 'd', keyboard.Key.up, keyboard.Key.down}:
             return
 
         joint_cmd_msg = JointState()
@@ -106,6 +112,10 @@ class KeyboardJointPublisher(Node):
 
         if k == 'a' or k=='d':
             joint_cmd_msg.name.append(KeyboardJointPublisher.STEER_JOINT_NAME)
+            joint_cmd_msg.velocity.append(0.0)
+
+        if k == keyboard.Key.up or k == keyboard.Key.down:
+            joint_cmd_msg.name.append(KeyboardJointPublisher.LIFT_Z)
             joint_cmd_msg.velocity.append(0.0)
 
         # if key == keyboard.Key.up or key == keyboard.Key.down:
@@ -130,3 +140,4 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+

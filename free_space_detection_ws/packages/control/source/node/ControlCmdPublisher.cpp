@@ -103,18 +103,20 @@ void ControlCmdPublisher::cmdPubLoop()
     DataElement data;
     sensor_msgs::msg::JointState cmd_msg;
     cmd_msg.name = {"drive_joint", "steer_joint", "lift_z", "lift_y"};
+    cmd_msg.position = std::vector(4, 0.0);
+    cmd_msg.velocity = std::vector(4, 0.0);
     nav_msgs::msg::Path state_path;
     state_path.header.frame_id = "LOLA";
 
-    // const std::chrono::milliseconds interval{static_cast<int>(mControllerParams.dt * 1000)};
+    bool stage_1{false}, stage_2{false};
+    constexpr float fork_heel = 0.22f; // Distance between fork heel and truck base
+
     const rclcpp::Duration interval = rclcpp::Duration::from_seconds(mControllerParams.dt);
-    // std::chrono::time_point<std::chrono::steady_clock> next_tick;
     while (rclcpp::ok())
     {
         cmd_msg.velocity = std::vector(4, 0.0);
-        cmd_msg.position = std::vector(4, 0.0);
         cmd_msg.position[2] = 0.5;
-        mCmdPub->publish(cmd_msg);
+        // mCmdPub->publish(cmd_msg);
         state_path.poses.clear();
         //
         {
@@ -138,19 +140,17 @@ void ControlCmdPublisher::cmdPubLoop()
         //     cmd_msg.velocity[1] = 0.0;
         //     cmd_msg.header.stamp = this->now();
         // }
-        cmd_msg.position[3] = data.goal[1];
-        if (std::abs(data.goal[0]) < 0.01)
+
+        // if (std::abs(data.goal[0]) < 0.01)
+        // {
+        //     cmd_msg.velocity[0] = 0.0;
+        //     cmd_msg.velocity[1] = 0.0;
+        // }
+        // else
+        if (const std::vector<double> stage1_goal{data.goal[0] + 1.6, 0.0, 0.0};
+            std::abs(stage1_goal[0]) > 0.1)
         {
-            cmd_msg.velocity[0] = 0.0;
-            cmd_msg.velocity[1] = 0.0;
-            cmd_msg.header.stamp = this->now();
-        }
-        else
-        {
-            data.goal[0] += 1.3;
-            data.goal[1] = 0.0;
-            data.goal[2] = 0.0;
-            mController->setGoal(data.goal, -data.steer_angle);
+            mController->setGoal(stage1_goal, -data.steer_angle);
             std::pair<nmpc::Solution, nmpc::Solution> result;
             if (!mController->solve(result))
             {
@@ -161,9 +161,61 @@ void ControlCmdPublisher::cmdPubLoop()
             const std::vector<double>& cmd = us[0];
             cmd_msg.velocity[0] = -cmd[0];
             cmd_msg.velocity[1] = -cmd[1];
+
             cmd_msg.header.stamp = this->now();
+            mCmdPub->publish(cmd_msg);
         }
-        mCmdPub->publish(cmd_msg);
+        else
+        {
+            if (!stage_1)
+            {
+                cmd_msg.position[3] = data.goal[1];
+                cmd_msg.velocity[0] = 0.0;
+                cmd_msg.header.stamp = this->now();
+                mCmdPub->publish(cmd_msg);
+                RCLCPP_INFO(get_logger(), "First stage finished");
+                stage_1 = true;
+                continue;
+            }
+            const double dura = (data.goal[0] + fork_heel) / (M_PI * mControllerParams.wheel_radius);
+
+            cmd_msg.velocity[0] = M_PI;
+            cmd_msg.header.stamp = this->now();
+            mCmdPub->publish(cmd_msg);
+            this->get_clock()->sleep_for(rclcpp::Duration::from_seconds(dura));
+
+            cmd_msg.velocity[0] = 0.0;
+            cmd_msg.position[2] = 0.01;
+            cmd_msg.header.stamp = this->now();
+            mCmdPub->publish(cmd_msg);
+            this->get_clock()->sleep_for(rclcpp::Duration::from_seconds(3.0));
+            cmd_msg.velocity[0] = -3.0;
+            cmd_msg.header.stamp = this->now();
+            mCmdPub->publish(cmd_msg);
+            this->get_clock()->sleep_for(rclcpp::Duration::from_seconds(3.0));
+
+            cmd_msg.velocity[0] = 0.0;
+            cmd_msg.header.stamp = this->now();
+            mCmdPub->publish(cmd_msg);
+
+            // cmd_msg.velocity[0] = M_PI;
+            // cmd_msg.header.stamp = this->now();
+            // const double dura = 1.6 / (M_PI * mControllerParams.wheel_radius);
+            // mCmdPub->publish(cmd_msg);
+            // this->get_clock()->sleep_for(rclcpp::Duration::from_seconds(dura));
+            // cmd_msg.velocity[0] = 0.0;
+            // cmd_msg.position[2] = 0.01;
+            // cmd_msg.header.stamp = this->now();
+            // mCmdPub->publish(cmd_msg);
+            // this->get_clock()->sleep_for(rclcpp::Duration::from_seconds(2.0));
+            // cmd_msg.velocity[0] = -5.0;
+            // cmd_msg.header.stamp = this->now();
+            // mCmdPub->publish(cmd_msg);
+            // this->get_clock()->sleep_for(rclcpp::Duration::from_seconds(2.1));
+            // cmd_msg.velocity[0] = 0.0;
+            // mCmdPub->publish(cmd_msg);
+            break;
+        }
 
 
         /* Publish Path */

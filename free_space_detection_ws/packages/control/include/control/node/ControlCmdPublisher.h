@@ -25,8 +25,6 @@ public:
         initSolver();
         initSubscriptions();
         initPublishers();
-
-        this->set_parameter(rclcpp::Parameter("use_sim_time", true)); // Force the node to use simulation time
         RCLCPP_INFO(this->get_logger(), "Current Sim Time: %f", this->now().seconds());
         mWorker = std::thread(&ControlCmdPublisher::cmdPubLoop, this);
 

@@ -148,7 +148,7 @@ void PoseEstimation::workerLoop()
             continue;
         }
         auto slot_space_cloud_without_ground = std::make_shared<RawCloud>();
-        removeGround(*slot_space_cloud, *slot_space_cloud_without_ground);
+        removeGround(*slot_space_cloud, *slot_space_cloud_without_ground, 0.036);
         Eigen::Vector3f slot_pose;
         if (!estimateSlotPose(slot_space_cloud_without_ground, slot_pose))
         {
@@ -171,6 +171,13 @@ void PoseEstimation::workerLoop()
             if (const auto gap = (slot_pose_filtered.head<2>() - goal_pose.translation().head<2>()).norm();
                 gap > 0.36f)
             {
+                continue;
+            }
+
+            if (slot_pose_filtered.x() > -1.6f)
+            {
+                std::lock_guard<std::mutex> lock(mBufferMutex);
+                this->mHasGoal = false;
                 continue;
             }
         }

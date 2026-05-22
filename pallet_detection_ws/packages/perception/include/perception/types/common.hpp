@@ -9,6 +9,9 @@ using ColoredCloud = pcl::PointCloud<pcl::PointXYZRGB>;
 using SemanticCloud = pcl::PointCloud<SemanticPoint>;
 using SemanticCloudPtr = std::unique_ptr<SemanticCloud>;
 
+using InstanceCloud = pcl::PointCloud<InstancePoint>;
+using InstanceCloudPtr = std::unique_ptr<InstanceCloud>;
+
 struct ROI
 {
     float min_x, max_x;

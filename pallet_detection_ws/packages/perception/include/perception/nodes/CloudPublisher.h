@@ -11,6 +11,7 @@
 #include <tf2_ros/buffer.h>
 #include <std_msgs/msg/string.hpp>
 #include <tf2_eigen/tf2_eigen.hpp> // ROS 2 header
+#include "perception/tools/rfdetr_segmentor.h"
 
 class CloudBuild final : public rclcpp::Node
 {
@@ -32,7 +33,15 @@ class CloudBuild final : public rclcpp::Node
     {
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
         Eigen::Isometry3f T_body2fork;
-        cv::Mat depth_img, semantic_img;
+        cv::Mat depth_img, rgb_img;
+    };
+
+    struct InstanceData
+    {
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+        Eigen::Isometry3f T_body2fork;
+        cv::Mat depth_img;
+        std::vector<Instance> instances;
     };
 
 public:
@@ -42,6 +51,8 @@ public:
         initSubscritions();
         initPublishers();
 
+        mSegmentor = std::make_unique<RfDetrSeg>("/home/avent/Desktop/CageStack_IBVS/pallet_detection_ws/rfdetr_model.plan");
+        // mSegmentor = std::make_unique<RfDetrSeg>("/home/avent/Desktop/rfdetr_model.plan");
         // mTfBuffer = std::make_unique<tf2_ros::Buffer>(this->get_clock());
         // mTfListener = std::make_shared<tf2_ros::TransformListener>(*mTfBuffer);
 
@@ -63,7 +74,8 @@ public:
         this->set_parameter(rclcpp::Parameter("use_sim_time", true));
         // Now, this->now() will return Isaac Sim's time
         RCLCPP_INFO(this->get_logger(), "Current Sim Time: %f", this->now().seconds());
-        mWorker = std::thread(&CloudBuild::workerLoop, this);
+        mSegWorker = std::thread(&CloudBuild::segmentLoop, this);
+        mMainWorker = std::thread(&CloudBuild::workerLoop, this);
         RCLCPP_INFO(get_logger(), "The node has been activated.");
     }
 
@@ -71,13 +83,18 @@ public:
     {
         //
         {
-            std::unique_lock<std::mutex> lock(mBufferMutex);
+            std::unique_lock<std::mutex> lock(mImgBufferMutex);
             mIsShutdown = true;
         }
-        mTriggerEvent.notify_one();
-        if (mWorker.joinable())
+        mTriggerSegEvent.notify_one();
+        mTriggerCloudEvent.notify_one();
+        if (mMainWorker.joinable())
         {
-            mWorker.join();
+            mMainWorker.join();
+        }
+        if (mSegWorker.joinable())
+        {
+            mSegWorker.join();
         }
         RCLCPP_INFO(get_logger(), "The node has been shutdown.");
     }
@@ -85,13 +102,17 @@ public:
 private:
     /* Received Data Buffer */
     bool mIsShutdown{false};
-    std::mutex mBufferMutex;
-    std::condition_variable mTriggerEvent;
-    std::thread mWorker;
+    std::mutex mImgBufferMutex, mInstanceBufferMutex;
+    std::condition_variable mTriggerSegEvent, mTriggerCloudEvent;
+    std::thread mMainWorker, mSegWorker;
     std::queue<ImgSet> mImgsBuffer;
+    std::queue<InstanceData> mInstanceBuffer;
+
     // std::shared_ptr<tf2_ros::TransformListener> mTfListener;
     // std::unique_ptr<tf2_ros::Buffer> mTfBuffer;
     Eigen::Isometry3f mT_fork2camera;
+
+    std::unique_ptr<RfDetrSeg> mSegmentor;
 
     /*** Synchronized Subsribers ***/
     using ImgMsg = sensor_msgs::msg::Image;
@@ -101,8 +122,8 @@ private:
     std::unique_ptr<message_filters::Synchronizer<SyncPolicy>> mSynchronizer;
 
     /* Publishers */
-    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr mColoredCloudPub;
-    rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr mFilteredImagePub;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr mColoredCloudPub, mInstanceCloudPub;
+    rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr mFilteredImagePub, mSegImagePub;
 
     void initSubscritions();
 
@@ -112,13 +133,15 @@ private:
 
     void pushInBuffer(ImgSet&& img_set)
     {
-        std::lock_guard<std::mutex> lock(mBufferMutex);
+        std::lock_guard<std::mutex> lock(mImgBufferMutex);
         while (!mImgsBuffer.empty())
         {
             mImgsBuffer.pop();
         }
         mImgsBuffer.push(std::move(img_set));
     }
+
+    void segmentLoop();
 
     void workerLoop();
 };

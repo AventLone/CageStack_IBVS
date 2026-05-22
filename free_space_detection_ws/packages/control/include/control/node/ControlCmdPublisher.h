@@ -22,6 +22,7 @@ class ControlCmdPublisher final : public rclcpp::Node
 public:
     explicit ControlCmdPublisher(const std::string& name = "controller") : rclcpp::Node(name)
     {
+        this->set_parameter(rclcpp::Parameter("use_sim_time", true));
         initSolver();
         initSubscriptions();
         initPublishers();

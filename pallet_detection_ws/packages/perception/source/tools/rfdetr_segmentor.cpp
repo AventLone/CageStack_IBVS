@@ -29,7 +29,8 @@ bool RfDetrSeg::infer(const cv::Mat& input_image)
 {
     /* Preprocess of the input. */
     cv::Mat input_tensor;
-    cv::dnn::blobFromImage(input_image, input_tensor, 1.0 / 255.0, mInputSize, {0.0, 0.0, 0.0}, true, false);
+    cv::dnn::blobFromImage(input_image, input_tensor, 1.0 / 255.0, mInputSize);
+    // const std::vector<float> input_tensor = preprocess(input_image, mInputSize, {0.485, 0.456, 0.406}, {0.229, 0.224, 0.225});
     cudaMemcpyAsync(mCudaBuffers["input"].data(), input_tensor.ptr<float>(),
                     mCudaBuffers["input"].bytes(), cudaMemcpyHostToDevice, mCudaStream);
 
@@ -50,15 +51,55 @@ bool RfDetrSeg::infer(const cv::Mat& input_image)
     return true;
 }
 
-std::vector<InstanceResult> RfDetrSeg::postprocess(const cv::Mat& original_image,
-                                                   const float score_thresh,
-                                                   const float mask_thresh) const
+std::vector<float> RfDetrSeg::preprocess(const cv::Mat& image, const cv::Size& input_size,
+                                         const cv::Scalar& mean, const cv::Scalar& std_,
+                                         const bool swap_rb)
+{
+    cv::Mat resized_img;
+    cv::resize(image, resized_img, input_size);
+
+    // 2. 将 BGR 转换为 RGB 并转为 float 格式 (一步到位，且缩放到 [0, 1])
+    cv::Mat rgb_fp32;
+    if (swap_rb)
+    {
+        cv::cvtColor(resized_img, rgb_fp32, cv::COLOR_BGR2RGB);
+    }
+    rgb_fp32.convertTo(rgb_fp32, CV_32FC3, 1.0 / 255.0);
+
+    // 3. 核心：分通道高效处理不同 Mean 和 Std
+    const cv::Scalar alpha(1.0 / std_[0], 1.0 / std_[1], 1.0 / std_[2]); // 对应 1/std
+    const cv::Scalar beta(-mean[0] / std_[1], -mean[1] / std_[2], -mean[2] / std_[3]); // 对应 -mean/std
+
+    // 一行矩阵乘加操作，底层直接触发 CPU 的 AVX2 / NEON 向量化加速
+    cv::multiply(rgb_fp32, alpha, rgb_fp32);
+    cv::add(rgb_fp32, beta, rgb_fp32);
+
+    // 4. 将 HWC 转换为 NCHW
+    // 我们必须将排布好的 RRR...GGG...BBB... 存入一个连续的临时 Host 内存中
+    const int plane_size = input_size.area();
+    std::vector<cv::Mat> chw_planes(3);
+
+    // 巧妙利用 cv::Mat 构造函数，让 chw_planes 直接指向一片连续内存（无二次拷贝！）
+    std::vector<float> host_nchw_buffer(plane_size * 3);
+    chw_planes[0] = cv::Mat(input_size, CV_32FC1, host_nchw_buffer.data());
+    chw_planes[1] = cv::Mat(input_size, CV_32FC1, host_nchw_buffer.data() + plane_size);
+    chw_planes[2] = cv::Mat(input_size, CV_32FC1, host_nchw_buffer.data() + plane_size * 2);
+
+    // split 会把 rgb_fp32 的 HWC 数据打散，并极其高效地写入到我们指定的连续 NCHW 内存中
+    cv::split(rgb_fp32, chw_planes);
+    return host_nchw_buffer;
+}
+
+std::vector<Instance> RfDetrSeg::postprocess(const cv::Mat& original_image,
+                                             const float score_thresh,
+                                             const float mask_thresh,
+                                             const int choose_the_bset_count) const
 {
     const int img_width = original_image.cols;
     const int img_height = original_image.rows;
 
-    std::vector<InstanceResult> results;
-    results.reserve(mQueriesNum);
+    std::vector<Instance> results;
+    results.reserve(mQueriesNum / 2);
 
     for (size_t q = 0; q < mQueriesNum; ++q)
     {
@@ -86,12 +127,11 @@ std::vector<InstanceResult> RfDetrSeg::postprocess(const cv::Mat& original_image
         int y2 = static_cast<int>((cy + h * 0.5f) * static_cast<float>(img_height));
 
         cv::Rect box = clamp_rect(cv::Rect(x1, y1, x2 - x1, y2 - y1), img_width, img_height);
-        if (box.width <= 0 || box.height <= 0)
+        if (box.width <= 6 || box.height <= 6 || box.area() < 100)
         {
             continue;
         }
 
-        // 取出 108 x 108 mask logits
         cv::Mat mask_small(mMaskSize, CV_32F);
         const float* mask_ptr = mTensorInstanceMask.data() + q * mMaskSize.width * mMaskSize.height;
 
@@ -117,8 +157,7 @@ std::vector<InstanceResult> RfDetrSeg::postprocess(const cv::Mat& original_image
         mask_bin(box).copyTo(box_mask(box));
         mask_bin = box_mask;
 
-        InstanceResult result;
-        result.query_idx = static_cast<int>(q);
+        Instance result;
         result.class_id = class_id;
         result.score = score;
         result.bbox = box;
@@ -126,11 +165,15 @@ std::vector<InstanceResult> RfDetrSeg::postprocess(const cv::Mat& original_image
         results.push_back(std::move(result));
     }
 
-    // std::sort(results.begin(), results.end(),
-    //           [](const InstanceResult& a, const InstanceResult& b)
-    //               {
-    //                   return a.score > b.score;
-    //               });
+    std::sort(results.begin(), results.end(), [](const Instance& a, const Instance& b)
+                  {
+                      return a.score > b.score;
+                  });
 
-    return results;
+    if (choose_the_bset_count == -1 or choose_the_bset_count > results.size())
+    {
+        return results;
+    }
+
+    return {std::make_move_iterator(results.begin()), std::make_move_iterator(results.begin() + choose_the_bset_count)};
 }

@@ -111,6 +111,7 @@ void ControlCmdPublisher::cmdPubLoop()
     bool stage_1{false}, stage_2{false};
     constexpr float fork_heel = 0.22f; // Distance between fork heel and truck base
 
+
     const rclcpp::Duration interval = rclcpp::Duration::from_seconds(mControllerParams.dt);
     while (rclcpp::ok())
     {
@@ -177,7 +178,7 @@ void ControlCmdPublisher::cmdPubLoop()
                 stage_1 = true;
                 continue;
             }
-            const double dura = (data.goal[0] + fork_heel) / (M_PI * mControllerParams.wheel_radius);
+            const double dura = std::abs(data.goal[0] + fork_heel) / (M_PI * mControllerParams.wheel_radius);
 
             cmd_msg.velocity[0] = M_PI;
             cmd_msg.header.stamp = this->now();
@@ -188,11 +189,11 @@ void ControlCmdPublisher::cmdPubLoop()
             cmd_msg.position[2] = 0.01;
             cmd_msg.header.stamp = this->now();
             mCmdPub->publish(cmd_msg);
-            this->get_clock()->sleep_for(rclcpp::Duration::from_seconds(3.0));
-            cmd_msg.velocity[0] = -3.0;
+            this->get_clock()->sleep_for(rclcpp::Duration::from_seconds(1.0));
+            cmd_msg.velocity[0] = -6.0;
             cmd_msg.header.stamp = this->now();
             mCmdPub->publish(cmd_msg);
-            this->get_clock()->sleep_for(rclcpp::Duration::from_seconds(3.0));
+            this->get_clock()->sleep_for(rclcpp::Duration::from_seconds(6.0));
 
             cmd_msg.velocity[0] = 0.0;
             cmd_msg.header.stamp = this->now();

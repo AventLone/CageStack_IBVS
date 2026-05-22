@@ -3,9 +3,8 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
 
-struct InstanceResult
+struct Instance
 {
-    int query_idx{-1};
     int class_id{-1};
     float score{0.0f};
     cv::Rect bbox;
@@ -29,6 +28,8 @@ class RfDetrSeg
 public:
     explicit RfDetrSeg(const std::string& model_path)
     {
+        cudaSetDeviceFlags(cudaDeviceScheduleYield);
+
         Logger logger;
         const std::unique_ptr<nvinfer1::IRuntime> runtime{nvinfer1::createInferRuntime(logger)};
 
@@ -65,23 +66,23 @@ public:
             mMaskSize = cv::Size(static_cast<int>(d[3]), static_cast<int>(d[2]));
         }
 
-
         mTensorBBox.reserve(mCudaBuffers["dets"].size());
         mTensorLabels.reserve(mCudaBuffers["labels"].size());
         mTensorInstanceMask.reserve(mCudaBuffers["masks"].size());
 
-        mContext->setInputShape("input", nvinfer1::Dims4{1, 3, 432, 432}); // Set shape of the input if it is dynamic shape
         cudaStreamCreate(&mCudaStream);
     }
 
-    std::vector<InstanceResult> seg(const cv::Mat& img, const float confidence_thresh = 0.5f, const float mask_thresh = 0.5f)
+    std::vector<Instance> seg(const cv::Mat& img,
+                              const float confidence_thresh = 0.5f, const float mask_thresh = 0.5f,
+                              const int choose_the_best = -1)
     {
         if (!infer(img))
         {
             return {};
         }
 
-        return postprocess(img, confidence_thresh, mask_thresh);
+        return postprocess(img, confidence_thresh, mask_thresh, choose_the_best);
     }
 
 private:
@@ -111,53 +112,76 @@ private:
 
     bool infer(const cv::Mat& input_image);
 
-    std::vector<InstanceResult> postprocess(const cv::Mat& original_image,
-                                            float score_thresh = 0.5f,
-                                            float mask_thresh = 0.5f) const;
+    static std::vector<float> preprocess(const cv::Mat& image, const cv::Size& input_size,
+                                         const cv::Scalar& mean, const cv::Scalar& std_,
+                                         bool swap_rb = false);
+
+    std::vector<Instance> postprocess(const cv::Mat& original_image,
+                                      float score_thresh = 0.5f, float mask_thresh = 0.5f,
+                                      int choose_the_bset_count = -1) const;
 };
 
-inline void visualizeInstanceSeg(const cv::Mat& original_image, const std::vector<InstanceResult>& results, cv::Mat& output_image)
+inline void visualizeInstanceSeg(const cv::Mat& original_image, cv::Mat& output_image, const std::vector<Instance>& results,
+                                 const std::unordered_map<int, std::string>& label_dict)
 {
-    static cv::RNG rng(123456);
+    // static cv::RNG rng(123456);
+    const static auto get_random_color = []() -> cv::Scalar_<uint8_t>
+        {
+            static cv::RNG rng(66);
+            return cv::Scalar(rng.uniform(66, 256), rng.uniform(66, 256), rng.uniform(66, 256));
+        };
+
+    const static auto get_color = [](int id) -> cv::Scalar_<uint8_t>
+        {
+            static std::unordered_map<int, cv::Scalar_<uint8_t>> color_map; // map label -> (r,g,b)
+            cv::Scalar_<uint8_t> color;
+            if (const auto it = color_map.find(id); it == color_map.end())
+            {
+                color = get_random_color();
+
+                color_map.emplace(id, color);
+            }
+            else
+            {
+                color = it->second;
+            }
+            return color;
+        };
 
     output_image = original_image.clone();
 
-    for (const auto& result : results)
+    for (const auto& [class_id, score, bbox, mask] : results)
     {
-        cv::Scalar color(rng.uniform(0, 256), rng.uniform(0, 256), rng.uniform(0, 256));
+        cv::Scalar color = get_color(class_id);
+        cv::Mat overlay = output_image.clone();
+        overlay.setTo(color, mask);
+        cv::addWeighted(overlay, 0.4, output_image, 0.6, 0, output_image);
 
-        // mask overlay
-        for (int y = 0; y < output_image.rows; ++y)
+        // 2. 定义储存轮廓的容器
+        std::vector<std::vector<cv::Point>> contours;
+        std::vector<cv::Vec4i> hierarchy; // 拓扑结构信息
+        cv::findContours(mask, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE); // 压缩水平、垂直和对角分割，只保留终点坐标
+        for (size_t i = 0; i < contours.size(); i++)
         {
-            const auto* mask_row = result.mask.ptr<uchar>(y);
-            auto* img_row = output_image.ptr<cv::Vec3b>(y);
-
-            for (int x = 0; x < output_image.cols; ++x)
+            if (cv::contourArea(contours[i]) > 10)
             {
-                if (mask_row[x])
-                {
-                    for (int c = 0; c < 3; ++c)
-                    {
-                        img_row[x][c] = static_cast<uchar>(img_row[x][c] * 0.5 + color[c] * 0.5);
-                    }
-                }
+                cv::drawContours(output_image, contours, static_cast<int>(i), cv::Scalar(255, 255, 255), 1);
             }
         }
 
-        cv::rectangle(output_image, result.bbox, color, 2);
+        cv::rectangle(output_image, bbox, color, 2);
 
-        char text[128];
-        std::snprintf(text, sizeof(text), "cls:%d score:%.2f", result.class_id, result.score);
+        std::ostringstream oss;
+        oss << label_dict.at(class_id) << ": " << std::fixed << std::setprecision(2) << score;
 
         int base_line = 0;
-        const cv::Size text_size = cv::getTextSize(text, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &base_line);
+        const cv::Size text_size = cv::getTextSize(oss.str(), cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &base_line);
 
-        const int tx = std::max(0, result.bbox.x);
-        const int ty = std::max(text_size.height + 2, result.bbox.y);
+        const int tx = std::max(0, bbox.x);
+        const int ty = std::max(text_size.height + 2, bbox.y);
 
         cv::rectangle(output_image, cv::Rect(tx, ty - text_size.height - 2, text_size.width + 4, text_size.height + 4),
                       color, cv::FILLED);
-        cv::putText(output_image, text, cv::Point(tx + 2, ty), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0), 1);
+        cv::putText(output_image, oss.str(), cv::Point(tx + 2, ty), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0), 1);
     }
 }
-

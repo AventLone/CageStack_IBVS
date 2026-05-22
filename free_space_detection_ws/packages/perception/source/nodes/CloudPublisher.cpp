@@ -315,7 +315,7 @@ void CloudBuild::workerLoop()
         // RCLCPP_INFO(get_logger(), "downsampled_cloudo_truck size is %lu.", downsampled_cloud_truck.size());
 
         // ColoredCloud colored_cloud;
-        // getCloud(left_cloud_truck, colored_cloud);
+        getCloud(left_cloud_truck, colored_cloud);
 
         sensor_msgs::msg::PointCloud2 cloud_msg;
         pcl::toROSMsg(*cloud_truck, cloud_msg);

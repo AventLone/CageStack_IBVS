@@ -106,7 +106,7 @@ public:
     /**
      * @brief Returns pointer to underlying array.
      */
-    const void* data() const
+    [[nodiscard]] const void* data() const
     {
         return mBuffer;
     }
@@ -114,7 +114,7 @@ public:
     /**
      * @brief Returns the size (in number of elements) of the buffer.
      */
-    size_t size() const
+    [[nodiscard]] size_t size() const
     {
         return mSize;
     }
@@ -122,7 +122,7 @@ public:
     /**
      * @brief Returns the size (in bytes) of the buffer.
      */
-    size_t bytes() const
+    [[nodiscard]] size_t bytes() const
     {
         return mBytes;
     }

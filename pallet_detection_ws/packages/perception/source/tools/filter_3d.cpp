@@ -61,3 +61,34 @@ void getCloud(const SemanticCloud& semantic_cloud, pcl::PointCloud<pcl::PointXYZ
     colored_cloud.width = static_cast<uint32_t>(colored_cloud.points.size());
     colored_cloud.height = 1;
 }
+
+std::vector<RawCloud::Ptr> getInstanceClusters(const InstanceCloud& src_cloud, const int target_label)
+{
+    std::unordered_map<uint16_t, RawCloud::Ptr> cluster_map;
+
+    for (const auto& point : src_cloud)
+    {
+        if (point.label == target_label)
+        {
+            if (cluster_map.find(point.instance) == cluster_map.end())
+            {
+                cluster_map[point.instance] = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+            }
+            cluster_map[point.instance]->points.emplace_back(point.x, point.y, point.z);
+        }
+    }
+
+    std::vector<RawCloud::Ptr> output_clusters;
+    output_clusters.reserve(cluster_map.size());
+
+    for (auto& [_, snd] : cluster_map)
+    {
+        snd->width = snd->points.size();
+        snd->height = 1;
+        snd->is_dense = true; // 假设没有 NaN 点
+
+        output_clusters.push_back(std::move(snd));
+    }
+
+    return output_clusters;
+}

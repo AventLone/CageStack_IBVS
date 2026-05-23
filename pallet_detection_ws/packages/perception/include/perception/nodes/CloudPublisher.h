@@ -51,7 +51,7 @@ public:
         initSubscritions();
         initPublishers();
 
-        mSegmentor = std::make_unique<RfDetrSeg>("/home/avent/Desktop/CageStack_IBVS/pallet_detection_ws/rfdetr_model.plan");
+        mSegmentor = std::make_unique<RfDetrSeg>("/home/avent/Desktop/CageStack_IBVS/pallet_detection_ws/rfdetr-seg-medium.plan");
         // mSegmentor = std::make_unique<RfDetrSeg>("/home/avent/Desktop/rfdetr_model.plan");
         // mTfBuffer = std::make_unique<tf2_ros::Buffer>(this->get_clock());
         // mTfListener = std::make_shared<tf2_ros::TransformListener>(*mTfBuffer);

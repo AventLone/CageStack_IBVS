@@ -170,6 +170,15 @@ void getCloud(const pcl::PointCloud<PointT>& src_cloud, typename pcl::PointCloud
     }
 }
 
+/**
+ * @brief 提取指定语义标签的所有实例聚类
+ *
+ * @param src_cloud  输入的目标点云
+ * @param target_label 需要提取的指定语义标签（例如：车辆、行人等）
+ * @return std::vector<pcl::PointCloud<InstancePoint>::Ptr> 包含所有独立实例点云的 vector
+ */
+std::vector<RawCloud::Ptr> getInstanceClusters(const InstanceCloud& src_cloud, int target_label);
+
 template<class PointT>
 void removeGround(const pcl::PointCloud<PointT>& cloud_in, pcl::PointCloud<PointT>& cloud_out, const float threshold = 0.01f)
 {
@@ -290,7 +299,6 @@ bool normalFilter(const typename pcl::PointCloud<PointT>::Ptr& src_cloud,
             }
         }
     }
-
 
     return true;
 }

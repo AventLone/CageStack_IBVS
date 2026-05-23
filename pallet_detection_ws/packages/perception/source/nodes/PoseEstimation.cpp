@@ -21,7 +21,9 @@ void PoseEstimation::initSubscriptions()
                                                                    rclcpp::SensorDataQoS(),
                                                                    [this](const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg)
                                                                        {
-                                                                           this->pushInBuffer(*msg);
+                                                                           auto temp = std::make_unique<InstanceCloud>();
+                                                                           pcl::fromROSMsg(*msg, *temp);
+                                                                           this->pushInBuffer(std::move(temp));
                                                                            this->mTriggerEvent.notify_one();
                                                                        });
     mGoalSub = create_subscription<geometry_msgs::msg::PoseStamped>(
@@ -65,10 +67,11 @@ void PoseEstimation::workerLoop()
     static constexpr float load_size_y = 1.0f;
     static constexpr float load_size_z = 1.5f;
 
-    static constexpr int pallet_label = 1;
+    static constexpr int pallet_label = 0;
     while (rclcpp::ok())
     {
-        sensor_msgs::msg::PointCloud2 cloud_msg;
+        // sensor_msgs::msg::PointCloud2 cloud_msg;
+        InstanceCloudPtr instance_cloud;
         visualization_msgs::msg::MarkerArray visualization_msg;
         //
         {
@@ -78,16 +81,12 @@ void PoseEstimation::workerLoop()
             {
                 break;
             }
-            cloud_msg = mCloudBuffer.front();
+            instance_cloud = std::move(mCloudBuffer.front());
             mCloudBuffer.pop();
         }
 
         const auto start = std::chrono::high_resolution_clock::now();
-        ColoredCloud::Ptr temp = std::make_shared<ColoredCloud>();
-        pcl::fromROSMsg(cloud_msg, *temp);
 
-        RawCloud::Ptr cloud = std::make_shared<RawCloud>();
-        pcl::copyPointCloud(*temp, *cloud);
 
         /* Stage 1. Detect the pose of the load on the forks */
         /* Step 1. Get the pose of the forks */
@@ -121,6 +120,7 @@ void PoseEstimation::workerLoop()
         // T_1.pretranslate(Eigen::Vector2f(mGoalMsg.pose.position.x, mGoalMsg.pose.position.y));
         // T_2.translate(Eigen::Vector2f(-0.5f * mLoadDimensions[0], 0.0f));
         // Eigen::Isometry2f T_3 = T_1 * T_2;
+
         visualization_msgs::msg::Marker load_roi_msg;
         load_roi_msg.header.frame_id = "LOLA";
         load_roi_msg.header.stamp = this->now();
@@ -151,50 +151,50 @@ void PoseEstimation::workerLoop()
         }
 
         /*------ Stage 2. Slot pose estimate ------*/
-        RawCloud::Ptr load_roi_cloud = std::make_shared<RawCloud>();
-        getCloud(*cloud, load_roi_cloud, nullptr, goal_pose, load_roi);
-        if (load_roi_cloud->size() < 10)
-        {
-            RCLCPP_ERROR(get_logger(), "slot_space_cloud has too few points!");
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            continue;
-        }
-        RawCloud::Ptr load_roi_clouod_without_ground = std::make_shared<RawCloud>();
-        removeGround(*load_roi_cloud, *load_roi_clouod_without_ground, 0.05f);
-        Eigen::Vector3f load_pose;
-        if (!estimateLoadPose(load_roi_clouod_without_ground, load_pose))
-        {
-            RCLCPP_ERROR(get_logger(), "Failed to estimate pose of the slot!");
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            continue;
-        }
-        geometry_msgs::msg::PoseStamped slot_pose_msg;
-        slot_pose_msg.pose.position.x = load_pose.x();
-        slot_pose_msg.pose.position.y = load_pose.y();
-        slot_pose_msg.pose.orientation = toQuaternionMsg(load_pose[2]);
-        slot_pose_msg.header.frame_id = "LOLA";
-        slot_pose_msg.header.stamp = now();
-        mSlotPosePub->publish(slot_pose_msg);
-
-        ColoredCloud slot_space_cloud_colored;
-        pcl::copyPointCloud(*load_roi_clouod_without_ground, slot_space_cloud_colored);
-        std::for_each(std::execution::par_unseq,
-                      slot_space_cloud_colored.begin(), slot_space_cloud_colored.end(),
-                      [](pcl::PointXYZRGB& point)
-                          {
-                              point.r = 200;
-                              point.g = 250;
-                              point.b = 200;
-                          });
-
-        ColoredCloud cloud_in_roi = slot_space_cloud_colored;
-        cloud_in_roi.width = cloud_in_roi.size();
-        cloud_in_roi.height = 1;
-        sensor_msgs::msg::PointCloud2 cloud_in_roi_msg;
-        pcl::toROSMsg(cloud_in_roi, cloud_in_roi_msg);
-        cloud_in_roi_msg.header.frame_id = "LOLA";
-        cloud_in_roi_msg.header.stamp = this->now();
-        mRoiCloudPub->publish(cloud_in_roi_msg);
+        // RawCloud::Ptr load_roi_cloud = std::make_shared<RawCloud>();
+        // getCloud(*cloud, load_roi_cloud, nullptr, goal_pose, load_roi);
+        // if (load_roi_cloud->size() < 10)
+        // {
+        //     RCLCPP_ERROR(get_logger(), "slot_space_cloud has too few points!");
+        //     std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        //     continue;
+        // }
+        // RawCloud::Ptr load_roi_clouod_without_ground = std::make_shared<RawCloud>();
+        // removeGround(*load_roi_cloud, *load_roi_clouod_without_ground, 0.05f);
+        // Eigen::Vector3f load_pose;
+        // if (!estimateLoadPose(load_roi_clouod_without_ground, load_pose))
+        // {
+        //     RCLCPP_ERROR(get_logger(), "Failed to estimate pose of the slot!");
+        //     std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        //     continue;
+        // }
+        // geometry_msgs::msg::PoseStamped slot_pose_msg;
+        // slot_pose_msg.pose.position.x = load_pose.x();
+        // slot_pose_msg.pose.position.y = load_pose.y();
+        // slot_pose_msg.pose.orientation = toQuaternionMsg(load_pose[2]);
+        // slot_pose_msg.header.frame_id = "LOLA";
+        // slot_pose_msg.header.stamp = now();
+        // mSlotPosePub->publish(slot_pose_msg);
+        //
+        // ColoredCloud slot_space_cloud_colored;
+        // pcl::copyPointCloud(*load_roi_clouod_without_ground, slot_space_cloud_colored);
+        // std::for_each(std::execution::par_unseq,
+        //               slot_space_cloud_colored.begin(), slot_space_cloud_colored.end(),
+        //               [](pcl::PointXYZRGB& point)
+        //                   {
+        //                       point.r = 200;
+        //                       point.g = 250;
+        //                       point.b = 200;
+        //                   });
+        //
+        // ColoredCloud cloud_in_roi = slot_space_cloud_colored;
+        // cloud_in_roi.width = cloud_in_roi.size();
+        // cloud_in_roi.height = 1;
+        // sensor_msgs::msg::PointCloud2 cloud_in_roi_msg;
+        // pcl::toROSMsg(cloud_in_roi, cloud_in_roi_msg);
+        // cloud_in_roi_msg.header.frame_id = "LOLA";
+        // cloud_in_roi_msg.header.stamp = this->now();
+        // mRoiCloudPub->publish(cloud_in_roi_msg);
 
         // mGoalMsg.pose = slot_pose_msg.pose;
 
@@ -207,18 +207,18 @@ void PoseEstimation::workerLoop()
         // visualization_msg.markers.push_back(slot_cube_msg);
         mVisualizationPub->publish(visualization_msg);
 
-        if (const auto delta_translation = goal_pose.translation().head<2>() - load_pose.head<2>();
-            delta_translation.norm() < 0.2f)
-        {
-            mGoalMsg.pose.position.x = load_pose.x();
-            mGoalMsg.pose.position.y = load_pose.y();
-        }
-
-        /* Record the average elapsed time */
-        const auto end = std::chrono::high_resolution_clock::now();
-        const auto elapse = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-        mTotalElapseTime += static_cast<double>(elapse);
-        ++mLoopCount;
+        // if (const auto delta_translation = goal_pose.translation().head<2>() - load_pose.head<2>();
+        //     delta_translation.norm() < 0.2f)
+        // {
+        //     mGoalMsg.pose.position.x = load_pose.x();
+        //     mGoalMsg.pose.position.y = load_pose.y();
+        // }
+        //
+        // /* Record the average elapsed time */
+        // const auto end = std::chrono::high_resolution_clock::now();
+        // const auto elapse = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+        // mTotalElapseTime += static_cast<double>(elapse);
+        // ++mLoopCount;
 
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }

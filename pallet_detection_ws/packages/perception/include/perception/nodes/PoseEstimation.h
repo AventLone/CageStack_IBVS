@@ -60,7 +60,7 @@ private:
     std::mutex mBufferMutex;
     std::condition_variable mTriggerEvent;
     std::thread mWorker;
-    std::queue<sensor_msgs::msg::PointCloud2> mCloudBuffer;
+    std::queue<InstanceCloudPtr> mCloudBuffer;
 
     double mTotalElapseTime{};
     size_t mLoopCount{};
@@ -86,14 +86,14 @@ private:
 
     void initPublishers();
 
-    void pushInBuffer(const sensor_msgs::msg::PointCloud2& msg)
+    void pushInBuffer(InstanceCloudPtr&& data)
     {
         std::lock_guard<std::mutex> lock(mBufferMutex);
         while (!mCloudBuffer.empty())
         {
             mCloudBuffer.pop();
         }
-        mCloudBuffer.push(msg);
+        mCloudBuffer.push(std::move(data));
     }
 
     visualization_msgs::msg::Marker getCubeMarker(const char* frame_id, const char* ns, const int id,

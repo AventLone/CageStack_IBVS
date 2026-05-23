@@ -61,8 +61,7 @@ void CloudBuild::initPublishers()
     mSegImagePub = create_publisher<sensor_msgs::msg::Image>("/seg_rgb", rclcpp::SensorDataQoS());
 }
 
-void CloudBuild::imgsHandler(const ImgMsg::ConstSharedPtr& depth_msg,
-                             const ImgMsg::ConstSharedPtr& rgb_msg)
+void CloudBuild::imgsHandler(const ImgMsg::ConstSharedPtr& depth_msg, const ImgMsg::ConstSharedPtr& rgb_msg)
 {
     /* Get the pose of the forks */
     // Eigen::Isometry3f T_body2fork;
@@ -154,6 +153,7 @@ void CloudBuild::segmentLoop()
 
 void CloudBuild::workerLoop()
 {
+    constexpr int offset_x = 960 / 2 - 600 / 2;
     while (rclcpp::ok())
     {
         InstanceData instance_data;
@@ -210,7 +210,7 @@ void CloudBuild::workerLoop()
                     if (mask_ptr[u_roi] > 0 && depth_ptr[u_roi] > 0)
                     {
                         const float depth = depth_ptr[u_roi];
-                        const int u_global = roi.x + u_roi;
+                        const int u_global = roi.x + u_roi + offset_x;
 
                         const float x = (static_cast<float>(u_global) - cx) * depth * fx_inv;
                         const float y = (static_cast<float>(v_global) - cy) * depth * fy_inv;

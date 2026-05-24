@@ -2,9 +2,9 @@
 #include <pcl/common/common.h>
 #include <pcl/common/eigen.h>
 #include <pcl/common/centroid.h>
-#include <pcl/common/transforms.h>
 #include <opencv2/opencv.hpp>
 #include <random>
+
 
 namespace feature3d
 {
@@ -87,12 +87,12 @@ bool planeCoefficients(const pcl::PointCloud<PointT>& cloud, Eigen::Vector3f& co
     return true;
 }
 
-template<class PointT>
-void outerBoundary(const pcl::PointCloud<PointT>& cloud, const Eigen::Vector3f& cloud_plane,
-                   Eigen::Vector3f& outer_boundary, const float direction, const float resolution = 0.005f)
-{
-    const float step = direction * resolution;
-}
+// template<class PointT>
+// void outerBoundary(const pcl::PointCloud<PointT>& cloud, const Eigen::Vector3f& cloud_plane,
+//                    Eigen::Vector3f& outer_boundary, const float direction, const float resolution = 0.005f)
+// {
+//     const float step = direction * resolution;
+// }
 
 template<class PointT>
 std::pair<float, float> farthestDistanceFromLine(const pcl::PointCloud<PointT>& cloud,
@@ -252,44 +252,5 @@ Eigen::Vector3f computeCenter(const pcl::PointCloud<PointT>& cloud)
     pcl::getMinMax3D(cloud, min_point, max_point);
 
     return 0.5f * (min_point.head<3>() + max_point.head<3>());
-}
-
-inline pcl::PointCloud<pcl::PointXYZ> createPalletCloud(const float angle)
-{
-    pcl::PointCloud<pcl::PointXYZ> front_face, left_side_face, right_side_face, cloud, angel_cloud;
-
-    std::random_device rd; // Random device for seeding
-    std::mt19937 gen(rd()); // Mersenne Twister engine
-
-    static std::uniform_real_distribution<float> unifor(0.02, 0.2);
-    static std::cauchy_distribution<float> dist_chaos(0.0f, 0.001f);
-
-    for (float y = -0.5f; y < 0.5f; y += 0.02f)
-    {
-        std::normal_distribution<float> dist_normal(0.0, unifor(gen));
-        for (float z = 0.0f; z < 0.15f; z += 0.02f)
-        {
-            front_face.emplace_back((dist_normal(gen) + dist_chaos(gen)) * 0.5f, y, z);
-        }
-    }
-
-    for (float x = 0.0f; x > -1.2f; x -= 0.02f)
-    {
-        std::normal_distribution<float> dist_normal(0.0, 0.02);
-        for (float z = 0.0f; z < 0.15f; z += 0.02f)
-        {
-            left_side_face.emplace_back(x, -0.5f + (dist_normal(gen) + dist_chaos(gen)) * 0.5f, z);
-        }
-    }
-
-    Eigen::Isometry3f T(Eigen::Isometry3f::Identity());
-    T.translate(Eigen::Vector3f(0.0, 1.0, 0.0));
-    pcl::transformPointCloud(left_side_face, right_side_face, T);
-    cloud = front_face + left_side_face + right_side_face;
-    T = Eigen::Isometry3f::Identity();
-    T.rotate(Eigen::AngleAxisf(angle, Eigen::Vector3f::UnitZ()));
-    pcl::transformPointCloud(cloud, angel_cloud, T);
-
-    return angel_cloud;
 }
 }

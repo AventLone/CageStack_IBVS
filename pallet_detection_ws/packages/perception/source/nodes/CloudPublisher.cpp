@@ -33,13 +33,11 @@ void CloudBuild::initSubscritions()
     mDepthSub.subscribe(this, sensor_topics["Mid.Depth"]);
     mSemanticSub.subscribe(this, sensor_topics["Mid.Rgb"]);
 
-    mSynchronizer = std::make_unique<message_filters::Synchronizer<SyncPolicy>>(SyncPolicy(2),
-                                                                                mDepthSub, mSemanticSub);
+    mSynchronizer = std::make_unique<message_filters::Synchronizer<SyncPolicy>>(SyncPolicy(2), mDepthSub, mSemanticSub);
 
     // 设置更小的时间容差（单位：秒）
     mSynchronizer->setMaxIntervalDuration(rclcpp::Duration(0, 10 * 100000)); // 10ms 容差
-    mSynchronizer->registerCallback(std::bind(&CloudBuild::imgsHandler,
-                                              this, std::placeholders::_1, std::placeholders::_2));
+    mSynchronizer->registerCallback(std::bind(&CloudBuild::imgsHandler, this, std::placeholders::_1, std::placeholders::_2));
 }
 
 void CloudBuild::initPublishers()

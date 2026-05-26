@@ -95,6 +95,22 @@ void outerBoundary(const pcl::PointCloud<PointT>& cloud, const Eigen::Vector3f& 
 }
 
 template<class PointT>
+float measureDimensionsY(const pcl::PointCloud<PointT>& cloud)
+{
+    if (cloud.size() < 10)
+    {
+        return 0.0;
+    }
+    float min_y{std::numeric_limits<float>::max()}, max_y{std::numeric_limits<float>::min()};
+    for (const auto& point : cloud)
+    {
+        min_y = std::min(point.y, min_y);
+        max_y = std::max(point.y, max_y);
+    }
+    return max_y - min_y;
+}
+
+template<class PointT>
 std::pair<float, float> farthestDistanceFromLine(const pcl::PointCloud<PointT>& cloud,
                                                  const Eigen::Vector3f& line_coefficients)
 {
@@ -102,8 +118,7 @@ std::pair<float, float> farthestDistanceFromLine(const pcl::PointCloud<PointT>& 
     float distance_front{std::numeric_limits<float>::max()}, distance_rear{std::numeric_limits<float>::min()};
     for (const auto& point : cloud)
     {
-        const float distance = line_coefficients[0] * point.x +
-                               line_coefficients[1] * point.y + line_coefficients[2];
+        const float distance = line_coefficients[0] * point.x + line_coefficients[1] * point.y + line_coefficients[2];
         distance_front = std::min(distance_front, distance);
         distance_rear = std::max(distance_rear, distance);
     }

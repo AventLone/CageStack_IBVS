@@ -3,23 +3,24 @@
 
 namespace feature2d
 {
-cv::RotatedRect detectMinRect(const cv::Mat& src_img)
+std::vector<cv::Point2f> detectMinRect(const cv::Mat& src_img)
 {
     std::vector<cv::Point> non_zero_points;
     cv::findNonZero(src_img, non_zero_points);
     const cv::RotatedRect rr = cv::minAreaRect(non_zero_points); // 最小外接矩形
-    cv::Point2f corners[4];
-    rr.points(corners); // corners 是 Point2f[4]
+    // cv::Point2f corners[4];
+    std::vector<cv::Point2f> corners(4);
+    rr.points(corners.data()); // corners 是 Point2f[4]
 
-    cv::Mat debug_img;
-    cv::cvtColor(src_img, debug_img, cv::COLOR_GRAY2BGR);
-    for (int j = 0; j < 4; ++j)
-    {
-        cv::line(debug_img, corners[j], corners[(j + 1) % 4], cv::Scalar(0, 255, 0), 1);
-        cv::circle(debug_img, corners[j], 3, cv::Scalar(0, 0, 255), 2);
-    }
+    // cv::Mat debug_img;
+    // cv::cvtColor(src_img, debug_img, cv::COLOR_GRAY2BGR);
+    // for (int j = 0; j < 4; ++j)
+    // {
+    //     cv::line(debug_img, corners[j], corners[(j + 1) % 4], cv::Scalar(0, 255, 0), 1);
+    //     cv::circle(debug_img, corners[j], 3, cv::Scalar(0, 0, 255), 2);
+    // }
 
-    return rr;
+    return corners;
 }
 
 Line detectRectEdge(const cv::Mat& src_img, const EdgeType edge_type)

@@ -10,12 +10,13 @@
 #include "perception/tools/filter_3d.h"
 #include "perception/tools/feature_detect_2d.h"
 #include "perception/tools/feature_detect_3d.hpp"
+#include <pcl/filters/radius_outlier_removal.h>
 
 
 void PoseEstimation::initSubscriptions()
 {
     const std::string param_name = "TopicName.Perception.SemanticCloud";
-    this->declare_parameter(param_name, "/perception/colored_cloud");
+    this->declare_parameter(param_name, "/perception/instance_cloud");
     const std::string semantic_cloud_topic = this->get_parameter(param_name).as_string();
     mCloudSub = create_subscription<sensor_msgs::msg::PointCloud2>(semantic_cloud_topic,
                                                                    rclcpp::SensorDataQoS(),
@@ -52,6 +53,7 @@ void PoseEstimation::initPublishers()
     {
         RCLCPP_ERROR(this->get_logger(), "Failed to get parameters, target topic names!");
     }
+    mPosesPub = create_publisher<geometry_msgs::msg::PoseArray>("visualization/poses", rclcpp::SensorDataQoS());
     mVisualizationPub = create_publisher<visualization_msgs::msg::MarkerArray>(target_topics["BBox"], rclcpp::SensorDataQoS());
     mTargetPosePub = create_publisher<geometry_msgs::msg::PoseStamped>(target_topics["Pose"], rclcpp::ServicesQoS());
     mLoadPosePub = create_publisher<geometry_msgs::msg::PoseStamped>("load_pose", rclcpp::ServicesQoS());
@@ -67,16 +69,26 @@ void PoseEstimation::workerLoop()
     static constexpr float load_size_y = 1.0f;
     static constexpr float load_size_z = 1.5f;
 
+    cv::RNG rng(66);
+
     static constexpr int pallet_label = 0;
     while (rclcpp::ok())
     {
         // sensor_msgs::msg::PointCloud2 cloud_msg;
         InstanceCloudPtr instance_cloud;
         visualization_msgs::msg::MarkerArray visualization_msg;
+
+        geometry_msgs::msg::PoseArray pose_array_msg;
+        // visualization_msgs::msg::Marker delete_all_marker;
+        // delete_all_marker.action = visualization_msgs::msg::Marker::DELETEALL;
+        // visualization_msg.markers.push_back(delete_all_marker);
+        // mVisualizationPub->publish(visualization_msg);
+        // visualization_msg.markers.clear();
         //
         {
             std::unique_lock<std::mutex> lock(mBufferMutex);
-            mTriggerEvent.wait(lock, [this]() -> bool { return (mHasGoal && !mCloudBuffer.empty()) || mIsShutdown; });
+            // mTriggerEvent.wait(lock, [this]() -> bool { return (mHasGoal && !mCloudBuffer.empty()) || mIsShutdown; });
+            mTriggerEvent.wait(lock, [this]() -> bool { return !mCloudBuffer.empty() || mIsShutdown; });
             if (mIsShutdown)
             {
                 break;
@@ -90,135 +102,89 @@ void PoseEstimation::workerLoop()
 
         /* Stage 1. Detect the pose of the load on the forks */
         /* Step 1. Get the pose of the forks */
-        Eigen::Isometry3f T_body2fork;
-        try
-        {
-            // This returns the pose of 'fork' in 'body' coordinates
-            const geometry_msgs::msg::TransformStamped tf_body2fork =
-                    mTfBuffer->lookupTransform("LOLA", "fork", tf2::TimePointZero);
-            T_body2fork = tf2::transformToEigen(tf_body2fork).cast<float>();
-        }
-        catch (const tf2::TransformException& e)
-        {
-            RCLCPP_ERROR(this->get_logger(), "Could not transform fork to body: %s", e.what());
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            continue;
-        }
-
-        constexpr ROI load_bbox{-1.5f, 0.1f, -0.66f, 0.66f, -0.3f, 1.5f};
-        constexpr ROI load_roi{-0.3, 0.3f, -0.5f, 0.5f, -0.1f, 0.3f};
-
-        /* Visualize slot_space_roi */
-        tf2::Quaternion tf_q;
-        tf2::fromMsg(mGoalMsg.pose.orientation, tf_q); // Convert ROS msg → tf2 quaternion
-
-        // 3. Convert quaternion to roll/pitch/yaw (Euler angles)
-        double roll, pitch, yaw;
-        // tf2::Matrix3x3(tf_q).getRPY(roll, pitch, yaw); // Order: X(roll), Y(pitch), Z(yaw)
-        // Eigen::Isometry2f T_1(Eigen::Isometry2f::Identity()), T_2(Eigen::Isometry2f::Identity());
-        // T_1.rotate(yaw);
-        // T_1.pretranslate(Eigen::Vector2f(mGoalMsg.pose.position.x, mGoalMsg.pose.position.y));
-        // T_2.translate(Eigen::Vector2f(-0.5f * mLoadDimensions[0], 0.0f));
-        // Eigen::Isometry2f T_3 = T_1 * T_2;
-
-        visualization_msgs::msg::Marker load_roi_msg;
-        load_roi_msg.header.frame_id = "LOLA";
-        load_roi_msg.header.stamp = this->now();
-        load_roi_msg.ns = ns;
-        load_roi_msg.id = 0;
-        load_roi_msg.type = visualization_msgs::msg::Marker::CUBE;
-        load_roi_msg.action = visualization_msgs::msg::Marker::ADD;
-        load_roi_msg.scale.x = static_cast<double>(load_roi.max_x - load_roi.min_x);
-        load_roi_msg.scale.y = static_cast<double>(load_roi.max_y - load_roi.min_y);
-        load_roi_msg.scale.z = static_cast<double>(load_roi.max_z - load_roi.min_z);
-        load_roi_msg.color.r = 0.2;
-        load_roi_msg.color.g = 0.9;
-        load_roi_msg.color.b = 0.2;
-        load_roi_msg.color.a = 0.4;
-        load_roi_msg.pose = mGoalMsg.pose;
-        // load_roi_msg.pose.orientation = mGoalMsg.pose.orientation;
-        // load_roi_msg.pose.position.x = T_3.translation()[0];
-        // load_roi_msg.pose.position.y = T_3.translation()[1];
-        load_roi_msg.pose.position.z = 0.5 * load_roi_msg.scale.z;
-        visualization_msg.markers.push_back(load_roi_msg);
-
-        Eigen::Isometry3f goal_pose{};
-        //
-        {
-            Eigen::Isometry3d temp{};
-            tf2::fromMsg(mGoalMsg.pose, temp);
-            goal_pose = temp.cast<float>();
-        }
-
-        /*------ Stage 2. Slot pose estimate ------*/
-        // RawCloud::Ptr load_roi_cloud = std::make_shared<RawCloud>();
-        // getCloud(*cloud, load_roi_cloud, nullptr, goal_pose, load_roi);
-        // if (load_roi_cloud->size() < 10)
+        // Eigen::Isometry3f T_body2fork;
+        // try
         // {
-        //     RCLCPP_ERROR(get_logger(), "slot_space_cloud has too few points!");
+        //     // This returns the pose of 'fork' in 'body' coordinates
+        //     const geometry_msgs::msg::TransformStamped tf_body2fork =
+        //             mTfBuffer->lookupTransform("LOLA", "fork", tf2::TimePointZero);
+        //     T_body2fork = tf2::transformToEigen(tf_body2fork).cast<float>();
+        // }
+        // catch (const tf2::TransformException& e)
+        // {
+        //     RCLCPP_ERROR(this->get_logger(), "Could not transform fork to body: %s", e.what());
         //     std::this_thread::sleep_for(std::chrono::milliseconds(50));
         //     continue;
         // }
-        // RawCloud::Ptr load_roi_clouod_without_ground = std::make_shared<RawCloud>();
-        // removeGround(*load_roi_cloud, *load_roi_clouod_without_ground, 0.05f);
-        // Eigen::Vector3f load_pose;
-        // if (!estimateLoadPose(load_roi_clouod_without_ground, load_pose))
+
+        const auto instance_clusters = getInstanceClusters(*instance_cloud, 0);
+
+        std::vector<Eigen::Vector3f> dimensions_list, poses;
+        dimensions_list.reserve(instance_clusters.size());
+        poses.reserve(instance_clusters.size());
+        visualization_msg.markers.reserve(instance_clusters.size());
+        int msg_id = 0;
+        for (const auto& cluster : instance_clusters)
+        {
+            // Eigen::Vector3f dimensions;
+
+            // if (!estimateDimensionsAndPose(cluster, pose, dimensions))
+
+            // poses.push_back(std::move(pose));
+            // dimensions_list.push_back(std::move(dimensions));
+
+            // if (dimensions[1] > 0.5f && dimensions[2] > 0.1f)
+            if (feature3d::measureDimensionsY(*cluster) > 0.5f)
+            {
+                Eigen::Vector3f pose;
+                if (!estimateLoadPose(cluster, pose))
+                {
+                    continue;
+                }
+
+                if (std::abs(pose[2]) > M_PIf / 6.0f)
+                {
+                    continue;
+                }
+                // visualization_msgs::msg::Marker cube_msg;
+                // cube_msg.header.frame_id = "LOLA";
+                // cube_msg.header.stamp = this->now();
+                // cube_msg.ns = ns;
+                // cube_msg.id = msg_id++;
+                // cube_msg.type = visualization_msgs::msg::Marker::CUBE;
+                // cube_msg.action = visualization_msgs::msg::Marker::ADD;
+                // cube_msg.scale.x = 1.2;
+                // cube_msg.scale.y = 1.0;
+                // cube_msg.scale.z = 0.15;
+                // cube_msg.color.r = 0.9;
+                // cube_msg.color.g = 0.5;
+                // cube_msg.color.b = 0.5;
+                // cube_msg.color.a = 0.4;
+                // cube_msg.pose = targetToCubePose(pose, {1.2, 1.0, 0.15});
+                // cube_msg.pose.position.z = 0.5 * cube_msg.scale.z;
+                // visualization_msg.markers.push_back(cube_msg);
+
+                geometry_msgs::msg::Pose pose_msg;
+                pose_msg.position.x = pose[0];
+                pose_msg.position.y = pose[1];
+                pose_msg.position.z = 0.06;
+                pose_msg.orientation = toQuaternionMsg(pose[2]);
+                pose_array_msg.poses.push_back(pose_msg);
+            }
+        }
+
+
+        // Eigen::Isometry3f goal_pose{};
+        // //
         // {
-        //     RCLCPP_ERROR(get_logger(), "Failed to estimate pose of the slot!");
-        //     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        //     continue;
+        //     Eigen::Isometry3d temp{};
+        //     tf2::fromMsg(mGoalMsg.pose, temp);
+        //     goal_pose = temp.cast<float>();
         // }
-        // geometry_msgs::msg::PoseStamped slot_pose_msg;
-        // slot_pose_msg.pose.position.x = load_pose.x();
-        // slot_pose_msg.pose.position.y = load_pose.y();
-        // slot_pose_msg.pose.orientation = toQuaternionMsg(load_pose[2]);
-        // slot_pose_msg.header.frame_id = "LOLA";
-        // slot_pose_msg.header.stamp = now();
-        // mSlotPosePub->publish(slot_pose_msg);
-        //
-        // ColoredCloud slot_space_cloud_colored;
-        // pcl::copyPointCloud(*load_roi_clouod_without_ground, slot_space_cloud_colored);
-        // std::for_each(std::execution::par_unseq,
-        //               slot_space_cloud_colored.begin(), slot_space_cloud_colored.end(),
-        //               [](pcl::PointXYZRGB& point)
-        //                   {
-        //                       point.r = 200;
-        //                       point.g = 250;
-        //                       point.b = 200;
-        //                   });
-        //
-        // ColoredCloud cloud_in_roi = slot_space_cloud_colored;
-        // cloud_in_roi.width = cloud_in_roi.size();
-        // cloud_in_roi.height = 1;
-        // sensor_msgs::msg::PointCloud2 cloud_in_roi_msg;
-        // pcl::toROSMsg(cloud_in_roi, cloud_in_roi_msg);
-        // cloud_in_roi_msg.header.frame_id = "LOLA";
-        // cloud_in_roi_msg.header.stamp = this->now();
-        // mRoiCloudPub->publish(cloud_in_roi_msg);
-
-        // mGoalMsg.pose = slot_pose_msg.pose;
-
-        /*------ Visualize the slot pose Cube ------*/
-        // visualization_msgs::msg::Marker slot_cube_msg = getCubeMarker("LOLA", ns.data(),
-        //                                                               3, mLoadDimensions[0],
-        //                                                               mLoadDimensions[1], mLoadDimensions[2],
-        //                                                               0.2, 0.9, 0.2, 0.86, load_pose);
-        // slot_cube_msg.pose.position.z = 0.5 * load_size_z;
-        // visualization_msg.markers.push_back(slot_cube_msg);
-        mVisualizationPub->publish(visualization_msg);
-
-        // if (const auto delta_translation = goal_pose.translation().head<2>() - load_pose.head<2>();
-        //     delta_translation.norm() < 0.2f)
-        // {
-        //     mGoalMsg.pose.position.x = load_pose.x();
-        //     mGoalMsg.pose.position.y = load_pose.y();
-        // }
-        //
-        // /* Record the average elapsed time */
-        // const auto end = std::chrono::high_resolution_clock::now();
-        // const auto elapse = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-        // mTotalElapseTime += static_cast<double>(elapse);
-        // ++mLoopCount;
+        pose_array_msg.header.frame_id = "LOLA";
+        pose_array_msg.header.stamp = this->now();
+        mPosesPub->publish(pose_array_msg);
+        // mVisualizationPub->publish(visualization_msg);
 
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
@@ -241,15 +207,23 @@ bool PoseEstimation::estimateLoadPose(const RawCloud::Ptr& cloud, Eigen::Vector3
         filter2d::close(projection, temp_img);
         filter2d::removeIsolatedPoints(temp_img, closed_img);
     }
+    if (closed_img.empty() || cv::countNonZero(closed_img) < 10)
+    {
+        return false;
+    }
 
     /* Step 1. Locate the boundary on x direction */
     cv::Mat right_edge_img;
     feature2d::detectEdge(closed_img, right_edge_img, feature2d::EdgeType::RIGHT);
+    if (right_edge_img.empty() || cv::countNonZero(right_edge_img) < 10)
+    {
+        return false;
+    }
     auto line = feature2d::detectRectEdge(right_edge_img, feature2d::EdgeType::RIGHT);
 
-    cv::Mat debug_img;
-    cv::cvtColor(projection, debug_img, cv::COLOR_GRAY2BGR);
-    cv::line(debug_img, line.p1, line.p2, cv::Scalar(0, 255, 0), 2);
+    // cv::Mat debug_img;
+    // cv::cvtColor(projection, debug_img, cv::COLOR_GRAY2BGR);
+    // cv::line(debug_img, line.p1, line.p2, cv::Scalar(0, 255, 0), 2);
 
     cv::Mat mask = cv::Mat::zeros(closed_img.size(), CV_8UC1);
     try
@@ -278,5 +252,75 @@ bool PoseEstimation::estimateLoadPose(const RawCloud::Ptr& cloud, Eigen::Vector3
     load_pose.head<2>() = centroid.head<2>();
     load_pose[2] = yaw;
 
+    return true;
+}
+
+bool PoseEstimation::estimateDimensionsAndPose(const RawCloud::Ptr& input_cloud, Eigen::Vector3f& pose, Eigen::Vector3f& dimensions)
+{
+    if (input_cloud->size() < 10)
+    {
+        return false;
+    }
+
+    // static pcl::RadiusOutlierRemoval<pcl::PointXYZ> outlier_removal;
+    // outlier_removal.setRadiusSearch(0.05);
+    // outlier_removal.setMinNeighborsInRadius(3);
+    // outlier_removal.setInputCloud(input_cloud);
+    // const auto denoiesd_cloud = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+    // outlier_removal.filter(*denoiesd_cloud);
+
+    // if (denoiesd_cloud->size() < 10)
+    // {
+    //     return false;
+    // }
+    OrthographicProjector<pcl::PointXYZ> mProjector{View::TOP};
+    mProjector.setCloud(input_cloud);
+    const cv::Mat projection = mProjector.projection();
+    cv::Mat closed_img, denoised_img;
+    filter2d::close(projection, closed_img);
+    filter2d::removeIsolatedPoints(closed_img, denoised_img);
+    if (denoised_img.empty() || cv::countNonZero(denoised_img) < 6)
+    {
+        return false;
+    }
+    std::vector<cv::Point2f> rect_corners = feature2d::detectMinRect(denoised_img);
+
+    // Front edge points
+    std::sort(rect_corners.begin(), rect_corners.end(), [](const cv::Point2f& a, const cv::Point2f& b) -> bool
+                  {
+                      return a.x < b.x;
+                  });
+    const auto front_edge_point_1 = rect_corners[2];
+    const auto front_edge_point_2 = rect_corners[3];
+    const float dimensions_y = cv::norm(front_edge_point_1 - front_edge_point_2) * mProjector.getResolution();
+    if (dimensions_y < 0.5f)
+    {
+        return false;
+    }
+
+    /* Calculate the pose of the target */
+    const auto mid_point = 0.5f * (front_edge_point_1 + front_edge_point_2);
+    const auto world_coordinate = mProjector.getCoordinate(static_cast<cv::Point>(mid_point));
+    const auto yaw = std::atan2(front_edge_point_1.x - front_edge_point_2.x, front_edge_point_1.y - front_edge_point_2.y);
+    pose << world_coordinate.x, world_coordinate.y, yaw;
+
+    // Right edge points
+    std::sort(rect_corners.begin(), rect_corners.end(), [](const cv::Point2f& a, const cv::Point2f& b) -> bool
+                  {
+                      return a.y < b.y;
+                  });
+    const auto right_edge_point_1 = rect_corners[0];
+    const auto right_edge_point_2 = rect_corners[1];
+    const float dimensions_x = cv::norm(right_edge_point_1 - right_edge_point_2) * mProjector.getResolution();
+
+    float dimensions_z = std::numeric_limits<float>::min();
+    for (const auto& point : input_cloud->points)
+    {
+        dimensions_z = std::max(dimensions_z, point.z);
+    }
+
+    dimensions << dimensions_x, dimensions_y, dimensions_z;
+
+    // return Eigen::Vector3f(dimensions_x, dimensions_y, dimensions_z);
     return true;
 }

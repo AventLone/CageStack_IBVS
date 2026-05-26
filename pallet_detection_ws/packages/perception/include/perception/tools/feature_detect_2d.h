@@ -51,7 +51,7 @@ static cv::Mat getEdgeKernel(const EdgeType edge_type)
     }
 }
 
-cv::RotatedRect detectMinRect(const cv::Mat& src_img);
+std::vector<cv::Point2f> detectMinRect(const cv::Mat& src_img);
 
 Line detectRectEdge(const cv::Mat& src_img, const EdgeType edge_type);
 

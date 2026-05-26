@@ -12,6 +12,8 @@ meshs/
 *.urdf
 *.pcd
 *.ply
+*.png
+*.plan
 
 .idea/
 cmake-build-release/

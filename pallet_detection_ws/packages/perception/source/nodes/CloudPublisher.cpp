@@ -114,7 +114,7 @@ void CloudBuild::segmentLoop()
             mImgsBuffer.pop();
         }
 
-        std::vector<Instance> results = mSegmentor->seg(img_set.rgb_img, 0.8, 0.5, 8);
+        std::vector<Instance> results = mSegmentor->seg(img_set.rgb_img, 0.8, 0.3, 8);
         if (results.empty())
         {
             RCLCPP_INFO(get_logger(), "results is empty!");
@@ -173,9 +173,11 @@ void CloudBuild::workerLoop()
         const auto& instances = instance_data.instances;
 
         std::vector<std::vector<InstancePoint>> local_clouds(instances.size());
+        ColoredCloud color_cloud;
+        color_cloud.reserve(depth_img.cols * depth_img.rows);
         for (size_t i = 0; i < instances.size(); ++i)
         {
-            static constexpr int step = 3;
+            static constexpr int step = 2;
             const auto& instance = instances[i];
             if (instance.mask.empty())
                 continue;
@@ -207,9 +209,8 @@ void CloudBuild::workerLoop()
                 for (int u_roi = 0; u_roi < roi.width; u_roi += step)
                 {
                     // 仅当 mask 激活且深度值有效时处理
-                    if (mask_ptr[u_roi] > 0 && depth_ptr[u_roi] > 0)
+                    if (const float depth = depth_ptr[u_roi]; mask_ptr[u_roi] > 0 && depth > 1.0 && depth < 5.0f)
                     {
-                        const float depth = depth_ptr[u_roi];
                         const int u_global = roi.x + u_roi + offset_x;
 
                         const float x = (static_cast<float>(u_global) - cx) * depth * fx_inv;
@@ -253,7 +254,7 @@ void CloudBuild::workerLoop()
         pcl::transformPointCloud(cloud, cloud_base, T_body2camera);
 
         ColoredCloud colored_cloud;
-        getCloud(cloud_base, colored_cloud);
+        getColorCloudFromInstanceCloud(cloud_base, colored_cloud);
         sensor_msgs::msg::PointCloud2 rgb_cloud_msg;
         pcl::toROSMsg(colored_cloud, rgb_cloud_msg);
         rgb_cloud_msg.header.stamp = this->now();

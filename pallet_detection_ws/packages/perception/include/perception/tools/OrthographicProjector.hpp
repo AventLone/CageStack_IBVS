@@ -70,6 +70,11 @@ public:
         return static_cast<float>(pixel_y) * mResolution + mMinBound.y;
     }
 
+    float getResolution() const
+    {
+        return mResolution;
+    }
+
     pcl::PointCloud<PointT> extractCloud(const cv::Mat& mask);
 
     pcl::PointCloud<PointT> extractCloud(const std::vector<cv::Point>& pixels);

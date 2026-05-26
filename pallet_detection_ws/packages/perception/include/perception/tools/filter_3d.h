@@ -59,6 +59,53 @@ void getCloud(const pcl::PointCloud<PointT> cloud, pcl::PointCloud<pcl::PointXYZ
     }
 }
 
+inline void getColorCloudFromInstanceCloud(const InstanceCloud& cloud, pcl::PointCloud<pcl::PointXYZRGB>& colored_cloud)
+{
+    const static auto get_random_color = []() -> std::tuple<uint8_t, uint8_t, uint8_t>
+        {
+            static cv::RNG rng(66);
+            // 1. 在 HSV 空间创建 1x1 的像素点
+            // H (色调): 0-180 随机
+            // S (饱和度): 200-255 确保色彩鲜艳
+            // V (亮度): 200-255 确保颜色明亮，不发暗
+            const cv::Mat hsv(1, 1, CV_8UC3, cv::Scalar(rng.uniform(0, 180), rng.uniform(200, 255), rng.uniform(200, 255)));
+
+            // 2. 将其转换回 BGR 空间
+            cv::Mat bgr;
+            cv::cvtColor(hsv, bgr, cv::COLOR_HSV2BGR);
+
+            // 3. 读取转换后的颜色
+            const cv::Vec3b p = bgr.at<cv::Vec3b>(0, 0);
+            return {p[0], p[1], p[2]};
+        };
+
+    static std::unordered_map<int, std::tuple<uint8_t, uint8_t, uint8_t>> color_map; // map label -> (r,g,b)
+
+    for (const auto& p : cloud)
+    {
+        uint8_t r, g, b;
+        if (const auto it = color_map.find(p.instance); it == color_map.end())
+        {
+            std::tie(r, g, b) = get_random_color();
+
+            color_map.emplace(p.instance, std::make_tuple(r, g, b));
+        }
+        else
+        {
+            std::tie(r, g, b) = it->second;
+        }
+
+        pcl::PointXYZRGB q;
+        q.x = p.x;
+        q.y = p.y;
+        q.z = p.z;
+        q.r = r;
+        q.g = g;
+        q.b = b;
+        colored_cloud.points.push_back(q);
+    }
+}
+
 template<class PointT>
 void getCloud(const pcl::PointCloud<PointT>& src_cloud, typename pcl::PointCloud<PointT>::Ptr inliers,
               typename pcl::PointCloud<PointT>::Ptr outliers, const Eigen::Vector3f& base_position, const ROI& roi)

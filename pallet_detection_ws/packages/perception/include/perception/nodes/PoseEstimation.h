@@ -9,6 +9,7 @@
 #include <tf2_ros/buffer.h>
 #include "../types/common.hpp"
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <geometry_msgs/msg/pose_array.hpp>
 
 class PoseEstimation final : public rclcpp::Node
 {
@@ -76,6 +77,7 @@ private:
     /** Publishers **/
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr mTargetPosePub, mLoadPosePub, mSlotPosePub;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr mVisualizationPub;
+    rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr mPosesPub;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr mRoiCloudPub;
 
     /**/
@@ -94,6 +96,26 @@ private:
             mCloudBuffer.pop();
         }
         mCloudBuffer.push(std::move(data));
+    }
+
+    static geometry_msgs::msg::Pose targetToCubePose(const Eigen::Vector3f& target_pose, const Eigen::Vector3f& cube_dimensions)
+    {
+        Eigen::Isometry2f T_target(Eigen::Isometry2f::Identity());
+        T_target.rotate(target_pose[2]);
+        T_target.pretranslate(target_pose.head<2>());
+
+        Eigen::Isometry2f T_target2cube(Eigen::Isometry2f::Identity());
+        T_target2cube.translate(Eigen::Vector2f(-0.5 * cube_dimensions[0], 0.0f));
+
+        Eigen::Isometry2f T_cube = T_target * T_target2cube;
+
+        geometry_msgs::msg::Pose cube_pose;
+        cube_pose.position.x = T_cube.translation()[0];
+        cube_pose.position.y = T_cube.translation()[1];
+        cube_pose.position.z = 0.5 * cube_dimensions[2];
+        cube_pose.orientation = toQuaternionMsg(target_pose[2]);
+
+        return cube_pose;
     }
 
     visualization_msgs::msg::Marker getCubeMarker(const char* frame_id, const char* ns, const int id,
@@ -132,4 +154,6 @@ private:
 
     /* Sub detection modules */
     bool estimateLoadPose(const RawCloud::Ptr& cloud, Eigen::Vector3f& load_pose) const;
+
+    static bool estimateDimensionsAndPose(const RawCloud::Ptr& input_cloud, Eigen::Vector3f& pose, Eigen::Vector3f& dimensions);
 };

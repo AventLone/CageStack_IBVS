@@ -5,8 +5,8 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <Eigen/Geometry>
 #include <tf2_eigen/tf2_eigen.hpp> // ROS 2 header
-#include "perception/tools/rfdetr_segmentor.h"
-#include "perception/tools/filter_3d.h"
+#include "perception/tools/2d/rfdetr_segmentor.h"
+#include "perception/tools/3d/filter.h"
 #include <random>
 
 enum
@@ -22,6 +22,7 @@ void CloudBuild::initSubscritions()
     this->declare_parameters<std::string>(params_prefix, {
                                               {"Mid.Depth", "/zed/zed_node/depth/depth_registered"},
                                               {"Mid.Rgb", "/zed/zed_node/rgb/image_rect_color"}
+                                              // {"Mid.Rgb", "/zed/zed_node/rgb/color/rect/image"}
                                           });
 
     std::map<std::string, std::string> sensor_topics;
@@ -38,8 +39,7 @@ void CloudBuild::initSubscritions()
 
     // 设置更小的时间容差（单位：秒）
     mSynchronizer->setMaxIntervalDuration(rclcpp::Duration(0, 10 * 100000)); // 10ms 容差
-    mSynchronizer->registerCallback(std::bind(&CloudBuild::imgsHandler,
-                                              this, std::placeholders::_1, std::placeholders::_2));
+    mSynchronizer->registerCallback(std::bind(&CloudBuild::imgsHandler, this, std::placeholders::_1, std::placeholders::_2));
 }
 
 void CloudBuild::initPublishers()
@@ -114,15 +114,30 @@ void CloudBuild::segmentLoop()
             mImgsBuffer.pop();
         }
 
-        std::vector<Instance> results = mSegmentor->seg(img_set.rgb_img, 0.8, 0.3, 8);
+        static const auto choose_front_instances = [](std::vector<Instance> instances, int front_num) -> std::vector<Instance>
+            {
+                std::sort(instances.begin(), instances.end(), [](const Instance& a, const Instance& b) -> bool
+                              {
+                                  return a.bbox.y > b.bbox.y;
+                              });
+
+                front_num = std::min(front_num, static_cast<int>(instances.size()));
+                return {std::make_move_iterator(instances.begin()), std::make_move_iterator(instances.begin() + front_num)};
+            };
+
+        std::vector<Instance> results = choose_front_instances(mSegmentor->seg(img_set.rgb_img, 0.6, 0.3, 8), 5);
+        // std::vector<Instance> results = mSegmentor->seg(img_set.rgb_img, 0.5, 0.3, 8);
+
+        cv::Mat visualization;
         if (results.empty())
         {
             RCLCPP_INFO(get_logger(), "results is empty!");
-            continue;
+            visualization = std::move(img_set.rgb_img);
         }
-
-        cv::Mat visualization;
-        visualizeInstanceSeg(img_set.rgb_img, visualization, results, label_dict);
+        else
+        {
+            visualizeInstanceSeg(img_set.rgb_img, visualization, results, label_dict);
+        }
 
         // Create a cv_bridge object
         cv_bridge::CvImage img_bridge;

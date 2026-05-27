@@ -1,6 +1,6 @@
-#include "perception/tools/rfdetr_segmentor.h"
+#include "perception/tools/2d/rfdetr_segmentor.h"
 #include <fstream>
-#include "perception/tools/math.hpp"
+#include "perception/tools/math/math.hpp"
 
 static cv::Rect clamp_rect(const cv::Rect& r, const int width, const int height)
 {
@@ -99,7 +99,7 @@ std::vector<Instance> RfDetrSeg::postprocess(const cv::Mat& original_image,
     const int img_height = original_image.rows;
 
     std::vector<Instance> results;
-    results.reserve(mQueriesNum / 2);
+    results.reserve(mQueriesNum / 3);
 
     for (size_t q = 0; q < mQueriesNum; ++q)
     {
@@ -139,29 +139,26 @@ std::vector<Instance> RfDetrSeg::postprocess(const cv::Mat& original_image,
         {
             for (int x = 0; x < mMaskSize.width; ++x)
             {
-                mask_small.at<float>(y, x) = sigmoid(mask_ptr[y * mMaskSize.height + x]);
+                mask_small.ptr<float>(y)[x] = sigmoid(mask_ptr[y * mMaskSize.height + x]);
             }
         }
 
-        // resize 回原图大小
         cv::Mat mask_big;
-        cv::resize(mask_small, mask_big, cv::Size(img_width, img_height), 0, 0, cv::INTER_LINEAR);
+        cv::resize(mask_small, mask_big, original_image.size(), 0, 0, cv::INTER_LINEAR); // resize 回原图大小
 
-        // 二值化
         cv::Mat mask_bin;
-        cv::threshold(mask_big, mask_bin, mask_thresh, 255, cv::THRESH_BINARY);
+        cv::threshold(mask_big, mask_bin, mask_thresh, 255, cv::THRESH_BINARY); // 二值化
         mask_bin.convertTo(mask_bin, CV_8U);
 
-        // 可选：只保留 bbox 内部
+        // Optional: Keep the mask only inside bbox
         cv::Mat box_mask = cv::Mat::zeros(mask_bin.size(), CV_8U);
         mask_bin(box).copyTo(box_mask(box));
-        mask_bin = box_mask;
 
         Instance result;
         result.class_id = class_id;
         result.score = score;
         result.bbox = box;
-        result.mask = mask_bin;
+        result.mask = std::move(box_mask);
         results.push_back(std::move(result));
     }
 
@@ -170,7 +167,7 @@ std::vector<Instance> RfDetrSeg::postprocess(const cv::Mat& original_image,
                       return a.score > b.score;
                   });
 
-    if (choose_the_bset_count == -1 or choose_the_bset_count > results.size())
+    if (choose_the_bset_count == -1 or static_cast<std::size_t>(choose_the_bset_count) > results.size())
     {
         return results;
     }

@@ -1,4 +1,4 @@
-#include "perception/tools/filter_3d.h"
+#include "perception/tools/3d/filter.h"
 #include <random>
 
 void getCloud(const SemanticCloud& semantic_cloud, const int label, pcl::PointCloud<pcl::PointXYZ>& target_cloud)

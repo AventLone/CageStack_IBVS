@@ -2,15 +2,13 @@
 #include "perception/nodes/CloudPublisher.h"
 #include <cv_bridge/cv_bridge.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
-#include <Eigen/Geometry>
 #include <pcl_conversions/pcl_conversions.h>
 #include <tf2_eigen/tf2_eigen.hpp> // ROS 2 header
 #include <execution>
-#include "perception/tools/filter_2d.h"
-#include "perception/tools/filter_3d.h"
-#include "perception/tools/feature_detect_2d.h"
-#include "perception/tools/feature_detect_3d.hpp"
-#include <pcl/filters/radius_outlier_removal.h>
+#include "perception/tools/2d/filter.h"
+#include "perception/tools/3d/filter.h"
+#include "perception/tools/2d/feature_detect.h"
+#include "perception/tools/3d/feature_detect.hpp"
 
 
 void PoseEstimation::initSubscriptions()

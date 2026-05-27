@@ -1,4 +1,4 @@
-#include "perception/tools/feature_detect_2d.h"
+#include "perception/tools/2d/feature_detect.h"
 #include <random>
 
 namespace feature2d

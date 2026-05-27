@@ -1,5 +1,5 @@
 #pragma once
-#include "./filter_2d.h"
+#include "filter.h"
 #include <opencv2/opencv.hpp>
 
 namespace feature2d

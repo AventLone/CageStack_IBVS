@@ -5,13 +5,13 @@
 #include <message_filters/subscriber.h>
 #include <message_filters/sync_policies/approximate_time.h>
 #include <message_filters/synchronizer.h>
-#include "../types/common.hpp"
+#include "perception/types/common.hpp"
 #include "../tools/OrthographicProjector.hpp"
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
 #include <std_msgs/msg/string.hpp>
 #include <tf2_eigen/tf2_eigen.hpp> // ROS 2 header
-#include "perception/tools/rfdetr_segmentor.h"
+#include "perception/tools/2d/rfdetr_segmentor.h"
 
 class CloudBuild final : public rclcpp::Node
 {
@@ -51,7 +51,8 @@ public:
         initSubscritions();
         initPublishers();
 
-        mSegmentor = std::make_unique<RfDetrSeg>("/home/avent/Desktop/CageStack_IBVS/pallet_detection_ws/rfdetr_model.plan");
+        mSegmentor = std::make_unique<RfDetrSeg>(
+            "/home/avent/Desktop/pretrained_weights/instance_segmentation/rfdetr-seg-medium-20260526.plan");
         // mSegmentor = std::make_unique<RfDetrSeg>("/home/avent/Desktop/rfdetr_model.plan");
         // mTfBuffer = std::make_unique<tf2_ros::Buffer>(this->get_clock());
         // mTfListener = std::make_shared<tf2_ros::TransformListener>(*mTfBuffer);

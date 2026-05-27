@@ -5,7 +5,7 @@
 #include <pcl/features/normal_3d.h>   // Core normal estimation header
 #include <pcl/kdtree/kdtree_flann.h>
 
-#include "../types/common.hpp"
+#include "../../types/common.hpp"
 
 void getCloud(const SemanticCloud& semantic_cloud, int label, pcl::PointCloud<pcl::PointXYZ>& target_cloud);
 

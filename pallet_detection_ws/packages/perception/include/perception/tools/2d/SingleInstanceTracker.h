@@ -10,7 +10,7 @@ class SingleInstanceTracker
     using ControlT = Eigen::Matrix<float, 0, 1>; // There's no control input
     using MeasurementT = Eigen::Matrix<float, 4, 1>; // meas : [cx, cy, w, h]
 
-    static constexpr int MAX_LOST_FRAMES = 6; // 最大允许漏检帧数
+    const int MAX_LOST_FRAMES; // 最大允许漏检帧数
     static constexpr float dt = 1.0f;
 
     static constexpr float PROCESS_NOISE_SIGMA = 1.0f;
@@ -22,7 +22,7 @@ class SingleInstanceTracker
     static constexpr float AREA_RATIO_THRESHOLD = 2.0f;
 
 public:
-    SingleInstanceTracker()
+    explicit SingleInstanceTracker(const int max_lost_frames = 6) : MAX_LOST_FRAMES(max_lost_frames)
     {
         /* Setup Kalman filter */
         StateMatrix<StateT> matA = StateMatrix<StateT>::Identity(); // transition_matrix
@@ -60,7 +60,7 @@ public:
                                                                  MEASUREMENT_SIZE_SIGMA * MEASUREMENT_SIZE_SIGMA,
                                                                  MEASUREMENT_SIZE_SIGMA * MEASUREMENT_SIZE_SIGMA).asDiagonal();
 
-        mKF = KalmanFilter<StateT, ControlT, MeasurementT>::create(matA, CovarianceMatrix<ControlT>::Zero(), matQ, matH, matR);
+        mKF = KalmanFilter<StateT, ControlT, MeasurementT>::create(matA, ControlMatrix<StateT, ControlT>::Zero(), matQ, matH, matR);
     }
 
     void reset(const cv::Rect2f& init_bbox)
@@ -80,7 +80,7 @@ public:
         mKF->setInitialMatP(CovarianceMatrix<StateT>::Identity() * 10.f);
     }
 
-    std::optional<cv::Rect> update(const std::optional<cv::Rect2f>& det_bbox)
+    std::optional<cv::Rect> update(const std::optional<cv::Rect>& det_bbox)
     {
         if (!mInitialized)
         {
@@ -115,37 +115,14 @@ public:
         return stateToBbox(mKF->getState());
     }
 
-    std::optional<cv::Rect2f> getPredictedBbox() const
+    std::optional<cv::Rect> getPredictedBbox() const
     {
         if (!mInitialized)
         {
             return std::nullopt;
         }
 
-        return stateToBbox(mKF->getState());
-    }
-
-private:
-    bool mInitialized{false};
-    int mLostCount{0};
-    cv::Rect mLastBbox;
-    KalmanFilter<StateT, ControlT, MeasurementT>::Ptr mKF;
-
-    static cv::Rect2f stateToBbox(const StateT& vecX)
-    {
-        const float cx = vecX(0);
-        const float cy = vecX(1);
-        const float w = std::max(1.0f, vecX(2));
-        const float h = std::max(1.0f, vecX(3));
-
-        return cv::Rect2f(cx - 0.5f * w, cy - 0.5f * h, w, h);
-    }
-
-    static MeasurementT bboxToMeasurement(const cv::Rect2f& bbox)
-    {
-        const float cx = bbox.x + bbox.width * 0.5f;
-        const float cy = bbox.y + bbox.height * 0.5f;
-        return {cx, cy, std::max(1.0f, bbox.width), std::max(1.0f, bbox.height)};
+        return static_cast<cv::Rect>(stateToBbox(mKF->getState()));
     }
 
     static float IoU(const cv::Rect2f& a, const cv::Rect2f& b)
@@ -170,6 +147,30 @@ private:
 
         return inter_area / union_area;
     }
+
+private:
+    bool mInitialized{false};
+    int mLostCount{0};
+    cv::Rect mLastBbox;
+    KalmanFilter<StateT, ControlT, MeasurementT>::Ptr mKF;
+
+    static cv::Rect2f stateToBbox(const StateT& vecX)
+    {
+        const float cx = vecX(0);
+        const float cy = vecX(1);
+        const float w = std::max(1.0f, vecX(2));
+        const float h = std::max(1.0f, vecX(3));
+
+        return {cx - 0.5f * w, cy - 0.5f * h, w, h};
+    }
+
+    static MeasurementT bboxToMeasurement(const cv::Rect2f& bbox)
+    {
+        const float cx = bbox.x + bbox.width * 0.5f;
+        const float cy = bbox.y + bbox.height * 0.5f;
+        return {cx, cy, std::max(1.0f, bbox.width), std::max(1.0f, bbox.height)};
+    }
+
 
     static bool passGating(const cv::Rect2f& predicted_bbox, const cv::Rect2f& det_bbox)
     {

@@ -12,6 +12,7 @@
 #include <std_msgs/msg/string.hpp>
 #include <tf2_eigen/tf2_eigen.hpp> // ROS 2 header
 #include "perception/tools/2d/rfdetr_segmentor.h"
+#include "perception/tools/2d/SingleInstanceTracker.h"
 
 class CloudBuild final : public rclcpp::Node
 {
@@ -53,7 +54,6 @@ public:
 
         mSegmentor = std::make_unique<RfDetrSeg>(
             "/home/avent/Desktop/pretrained_weights/instance_segmentation/rfdetr-seg-medium-20260526.plan");
-        // mSegmentor = std::make_unique<RfDetrSeg>("/home/avent/Desktop/rfdetr_model.plan");
         // mTfBuffer = std::make_unique<tf2_ros::Buffer>(this->get_clock());
         // mTfListener = std::make_shared<tf2_ros::TransformListener>(*mTfBuffer);
 
@@ -114,6 +114,7 @@ private:
     Eigen::Isometry3f mT_fork2camera;
 
     std::unique_ptr<RfDetrSeg> mSegmentor;
+    SingleInstanceTracker mInstanceTracker;
 
     /*** Synchronized Subsribers ***/
     using ImgMsg = sensor_msgs::msg::Image;

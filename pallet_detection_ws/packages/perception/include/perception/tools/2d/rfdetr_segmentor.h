@@ -29,12 +29,15 @@ public:
     explicit RfDetrSeg(const std::string& model_path)
     {
         cudaSetDeviceFlags(cudaDeviceScheduleYield);
+        cudaSetDevice(0); // 或者是你指定的 GPU 索引ID
+        cudaDeviceSynchronize();
 
         Logger logger;
         const std::unique_ptr<nvinfer1::IRuntime> runtime{nvinfer1::createInferRuntime(logger)};
 
         const std::vector<char> model_data = readModel(model_path);
         mCudaEngine = std::unique_ptr<nvinfer1::ICudaEngine>(runtime->deserializeCudaEngine(model_data.data(), model_data.size()));
+
         if (mCudaEngine == nullptr)
         {
             throw std::runtime_error("Failed to deserialize tensorrt model plan!");

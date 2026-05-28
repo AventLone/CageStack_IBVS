@@ -98,7 +98,8 @@ void CloudBuild::imgsHandler(const ImgMsg::ConstSharedPtr& depth_msg, const ImgM
 
 void CloudBuild::segmentLoop()
 {
-    const std::unordered_map<int, std::string> label_dict{{0, "pallet"}, {1, "storage_cage"}, {2, "goods"}};
+    bool init_tracker = false;
+    const std::unordered_map<int, std::string> label_dict{{0, "pallet"}, {1, "storage_cage"}, {2, "goods"}, {3, "target"}};
     while (rclcpp::ok())
     {
         ImgSet img_set;
@@ -125,18 +126,57 @@ void CloudBuild::segmentLoop()
                 return {std::make_move_iterator(instances.begin()), std::make_move_iterator(instances.begin() + front_num)};
             };
 
-        std::vector<Instance> results = choose_front_instances(mSegmentor->seg(img_set.rgb_img, 0.6, 0.3, 8), 5);
-        // std::vector<Instance> results = mSegmentor->seg(img_set.rgb_img, 0.5, 0.3, 8);
+        std::vector<Instance> detections = choose_front_instances(mSegmentor->seg(img_set.rgb_img, 0.6, 0.3, 8), 5);
+        cv::Rect matched_bbox;
+        if (not init_tracker)
+        {
+            // const auto tracked_bbox = mInstanceTracker.update(detections[0].bbox);
+            matched_bbox = detections[0].bbox;
+            init_tracker = true;
+        }
+        else
+        {
+            const auto tracked_bbox = mInstanceTracker.getPredictedBbox();
+            if (!tracked_bbox.has_value())
+            {
+                RCLCPP_ERROR(get_logger(), "Failed to track the target!");
+                init_tracker = false;
+                continue;
+            }
+            // const auto predicted_bbox = mInstanceTracker.getPredictedBbox().value();
+
+
+            float best_iou = 0.0f;
+            size_t best_index = 0;
+
+            for (size_t i = 0; i < detections.size(); ++i)
+            {
+                if (const float iou = SingleInstanceTracker::IoU(tracked_bbox.value(), detections[i].bbox); iou > best_iou)
+                {
+                    best_iou = iou;
+                    best_index = i;
+                }
+            }
+            matched_bbox = detections[best_index].bbox;
+        }
+
+        if (const auto tracked_bbox = mInstanceTracker.update(matched_bbox); tracked_bbox.has_value())
+        {
+            Instance detection;
+            detection.bbox = tracked_bbox.value();
+            detection.class_id = 3;
+            detections.push_back(std::move(detection));
+        }
 
         cv::Mat visualization;
-        if (results.empty())
+        if (detections.empty())
         {
             RCLCPP_INFO(get_logger(), "results is empty!");
             visualization = std::move(img_set.rgb_img);
         }
         else
         {
-            visualizeInstanceSeg(img_set.rgb_img, visualization, results, label_dict);
+            visualizeInstanceSeg(img_set.rgb_img, visualization, detections, label_dict);
         }
 
         // Create a cv_bridge object
@@ -152,7 +192,7 @@ void CloudBuild::segmentLoop()
         mSegImagePub->publish(std::move(ros_image));
 
         InstanceData instance_data;
-        instance_data.instances = std::move(results);
+        instance_data.instances = std::move(detections);
         instance_data.depth_img = std::move(img_set.depth_img);
         instance_data.T_body2fork = std::move(img_set.T_body2fork);
 

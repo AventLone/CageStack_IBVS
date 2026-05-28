@@ -14,23 +14,8 @@ endif ()
 # --------------------------------------------------------------------------------
 find_package(OpenCV REQUIRED)
 find_package(CUDAToolkit REQUIRED)
-set(TENSORRT_ROOT /usr)
-find_path(TENSORRT_INCLUDE_DIR NvInfer.h
-    PATHS ${TENSORRT_ROOT}
-    PATH_SUFFIXES include
-)
-find_library(TENSORRT_LIBRARY nvinfer
-    PATHS ${TENSORRT_ROOT}
-    PATH_SUFFIXES lib lib64
-)
-if (NOT TENSORRT_INCLUDE_DIR OR NOT TENSORRT_LIBRARY)
-    message(FATAL_ERROR "Could not find TensorRT. Please set TENSORRT_ROOT.")
-endif ()
-add_library(TensorRT::nvinfer UNKNOWN IMPORTED)
-set_target_properties(TensorRT::nvinfer PROPERTIES
-    IMPORTED_LOCATION ${TENSORRT_LIBRARY}
-    INTERFACE_INCLUDE_DIRECTORIES ${TENSORRT_INCLUDE_DIR}
-)
+
+set(TENSORRT_LIBRARY "/usr/lib/x86_64-linux-gnu/libnvinfer.so")
 
 # --------------------------------------------------------------------------------
 # Find ROS2 dependencies
@@ -47,8 +32,8 @@ target_include_directories(perception PUBLIC
 )
 target_link_libraries(perception
     CUDA::cudart
-    TensorRT::nvinfer
     ${OpenCV_LIBS}
+    ${TENSORRT_LIBRARY}
 )
 target_compile_features(perception PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 

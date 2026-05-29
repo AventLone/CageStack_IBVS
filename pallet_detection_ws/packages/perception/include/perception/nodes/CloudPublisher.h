@@ -13,6 +13,7 @@
 #include <tf2_eigen/tf2_eigen.hpp> // ROS 2 header
 #include "perception/tools/2d/rfdetr_segmentor.h"
 #include "perception/tools/2d/SingleInstanceTracker.h"
+#include "perception/tools/2d/OpticalFlowTracking.h"
 
 class CloudBuild final : public rclcpp::Node
 {
@@ -52,8 +53,10 @@ public:
         initSubscritions();
         initPublishers();
 
-        mSegmentor = std::make_unique<RfDetrSeg>(
-            "/home/avent/Desktop/pretrained_weights/instance_segmentation/rfdetr-seg-medium-20260526.plan");
+        // mSegmentor = std::make_unique<RfDetrSeg>(
+        //     "/home/avent/Desktop/pretrained_weights/instance_segmentation/rfdetr-seg-medium-20260526.plan");
+
+        mSegmentor = std::make_unique<RfDetrSeg>("/home/avent/Desktop/rfdetr-seg-medium.plan");
         // mTfBuffer = std::make_unique<tf2_ros::Buffer>(this->get_clock());
         // mTfListener = std::make_shared<tf2_ros::TransformListener>(*mTfBuffer);
 
@@ -114,7 +117,8 @@ private:
     Eigen::Isometry3f mT_fork2camera;
 
     std::unique_ptr<RfDetrSeg> mSegmentor;
-    SingleInstanceTracker mInstanceTracker;
+    SingleInstanceTracker mInstanceTracker{36}; // Set “MAX LOST FRAMES” to 16
+    OpticalFlowTracking mOpticalTracker;
 
     /*** Synchronized Subsribers ***/
     using ImgMsg = sensor_msgs::msg::Image;

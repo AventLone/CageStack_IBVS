@@ -1,6 +1,6 @@
 #pragma once
 #include <optional>
-#include <opencv2/opencv.hpp>
+// #include <opencv2/opencv.hpp>
 #include "perception/tools/math/KalmanFilter.hpp"
 
 
@@ -80,14 +80,16 @@ public:
         mKF->setInitialMatP(CovarianceMatrix<StateT>::Identity() * 10.f);
     }
 
-    std::optional<cv::Rect> update(const std::optional<cv::Rect>& det_bbox)
+    std::optional<std::pair<cv::Rect, cv::Mat>> update(const std::optional<cv::Rect>& det_bbox, const std::optional<cv::Mat>& mask)
     {
         if (!mInitialized)
         {
             if (det_bbox.has_value())
             {
+                mLastMask = mask.value();
+                mLastBbox = det_bbox.value();
                 reset(det_bbox.value());
-                return det_bbox;
+                return std::make_pair(det_bbox.value(), mLastMask);
             }
             return std::nullopt;
         }
@@ -108,14 +110,17 @@ public:
             return handleMiss(predicted_bbox);
         }
 
+        mLastMask = mask.value().clone();
+        mLastBbox = det_bbox.value();
+
         const MeasurementT vecZ = bboxToMeasurement(det);
         mKF->correct(vecZ);
         mLostCount = 0;
 
-        return stateToBbox(mKF->getState());
+        return std::make_pair(stateToBbox(mKF->getState()), mask.value());
     }
 
-    std::optional<cv::Rect> getPredictedBbox() const
+    [[nodiscard]] std::optional<cv::Rect> getPredictedBbox() const
     {
         if (!mInitialized)
         {
@@ -132,12 +137,12 @@ public:
         const float inter_x2 = std::min(a.x + a.width, b.x + b.width);
         const float inter_y2 = std::min(a.y + a.height, b.y + b.height);
 
-        const float inter_w = std::max<float>(0.0f, inter_x2 - inter_x1);
-        const float inter_h = std::max<float>(0.0f, inter_y2 - inter_y1);
+        const float inter_w = std::max(0.0f, inter_x2 - inter_x1);
+        const float inter_h = std::max(0.0f, inter_y2 - inter_y1);
         const float inter_area = inter_w * inter_h;
 
-        const float area_a = std::max<float>(0.0f, a.width) * std::max<float>(0.0f, a.height);
-        const float area_b = std::max<float>(0.0f, b.width) * std::max<float>(0.0f, b.height);
+        const float area_a = std::max(0.0f, a.width) * std::max(0.0f, a.height);
+        const float area_b = std::max(0.0f, b.width) * std::max(0.0f, b.height);
         const float union_area = area_a + area_b - inter_area;
 
         if (union_area <= 0.0f)
@@ -152,6 +157,7 @@ private:
     bool mInitialized{false};
     int mLostCount{0};
     cv::Rect mLastBbox;
+    cv::Mat mLastMask;
     KalmanFilter<StateT, ControlT, MeasurementT>::Ptr mKF;
 
     static cv::Rect2f stateToBbox(const StateT& vecX)
@@ -222,7 +228,7 @@ private:
         return true;
     }
 
-    std::optional<cv::Rect> handleMiss(const cv::Rect2f& predicted_bbox)
+    std::optional<std::pair<cv::Rect, cv::Mat>> handleMiss(const cv::Rect2f& predicted_bbox)
     {
         ++mLostCount;
 
@@ -232,6 +238,11 @@ private:
             return std::nullopt;
         }
 
-        return predicted_bbox;
+        cv::Mat predict_mask;
+        cv::resize(mLastMask(mLastBbox), predict_mask, static_cast<cv::Rect>(predicted_bbox).size(), 0, 0, cv::INTER_NEAREST);
+        mLastMask.setTo(0);
+        predict_mask.copyTo(mLastMask(predicted_bbox));
+        mLastBbox = predicted_bbox;
+        return std::make_pair(predicted_bbox, mLastMask);
     }
 };

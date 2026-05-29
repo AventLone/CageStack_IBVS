@@ -98,8 +98,20 @@ void CloudBuild::imgsHandler(const ImgMsg::ConstSharedPtr& depth_msg, const ImgM
 
 void CloudBuild::segmentLoop()
 {
+    const auto choose_front_instances = [](std::vector<Instance> instances, int front_num) -> std::vector<Instance>
+        {
+            std::sort(instances.begin(), instances.end(), [](const Instance& a, const Instance& b) -> bool
+                          {
+                              return a.bbox.y > b.bbox.y;
+                          });
+
+            front_num = std::min(front_num, static_cast<int>(instances.size()));
+            return {std::make_move_iterator(instances.begin()), std::make_move_iterator(instances.begin() + front_num)};
+        };
+
     bool init_tracker = false;
     const std::unordered_map<int, std::string> label_dict{{0, "pallet"}, {1, "storage_cage"}, {2, "goods"}, {3, "target"}};
+
     while (rclcpp::ok())
     {
         ImgSet img_set;
@@ -115,56 +127,63 @@ void CloudBuild::segmentLoop()
             mImgsBuffer.pop();
         }
 
-        static const auto choose_front_instances = [](std::vector<Instance> instances, int front_num) -> std::vector<Instance>
-            {
-                std::sort(instances.begin(), instances.end(), [](const Instance& a, const Instance& b) -> bool
-                              {
-                                  return a.bbox.y > b.bbox.y;
-                              });
-
-                front_num = std::min(front_num, static_cast<int>(instances.size()));
-                return {std::make_move_iterator(instances.begin()), std::make_move_iterator(instances.begin() + front_num)};
-            };
-
+        /* Perform instance segmentation on rgb image and select the frontest 5 */
         std::vector<Instance> detections = choose_front_instances(mSegmentor->seg(img_set.rgb_img, 0.6, 0.3, 8), 5);
-        cv::Rect matched_bbox;
+
+        /* Track the target bbox */
+        // std::optional<cv::Rect> matched_bbox;
+        // std::optional<cv::Mat> matched_mask;
+        cv::Rect* matched_bbox = nullptr;
+        cv::Mat* matched_mask = nullptr;
         if (not init_tracker)
         {
-            // const auto tracked_bbox = mInstanceTracker.update(detections[0].bbox);
-            matched_bbox = detections[0].bbox;
+            matched_bbox = &detections[2].bbox;
+            matched_mask = &detections[2].mask;
             init_tracker = true;
         }
         else
         {
-            const auto tracked_bbox = mInstanceTracker.getPredictedBbox();
-            if (!tracked_bbox.has_value())
+            // const auto tracked_bbox = mInstanceTracker.getPredictedBbox();
+            // if (!tracked_bbox.has_value())
+            // {
+            //     RCLCPP_ERROR(get_logger(), "Failed to track the target!");
+            //     init_tracker = false;
+            //     continue;
+            // }
+
+            float best_iou = 0.2f; // set a lower bound for the bast IoU
+            int best_index = -1;
+
+            for (int i = 0; i < static_cast<int>(detections.size()); ++i)
             {
-                RCLCPP_ERROR(get_logger(), "Failed to track the target!");
-                init_tracker = false;
-                continue;
-            }
-            // const auto predicted_bbox = mInstanceTracker.getPredictedBbox().value();
-
-
-            float best_iou = 0.0f;
-            size_t best_index = 0;
-
-            for (size_t i = 0; i < detections.size(); ++i)
-            {
-                if (const float iou = SingleInstanceTracker::IoU(tracked_bbox.value(), detections[i].bbox); iou > best_iou)
+                // if (const float iou = SingleInstanceTracker::IoU(tracked_bbox.value(), detections[i].bbox); iou > best_iou)
+                if (const float iou = SingleInstanceTracker::IoU(mOpticalTracker.mPrevBBox, detections[i].bbox); iou > best_iou)
                 {
                     best_iou = iou;
                     best_index = i;
                 }
             }
-            matched_bbox = detections[best_index].bbox;
+            if (best_index >= 0)
+            {
+                matched_bbox = &detections[best_index].bbox;
+                matched_mask = &detections[best_index].mask;
+            }
+            // else
+            // {
+            //     matched_bbox = std::nullopt;
+            //     matched_mask = std::nullopt;
+            // }
         }
 
-        if (const auto tracked_bbox = mInstanceTracker.update(matched_bbox); tracked_bbox.has_value())
+        // if (const auto tracked_target = mInstanceTracker.update(matched_bbox, matched_mask); tracked_target.has_value())
+        if (const auto [tracked_bbox, tracked_mask] = mOpticalTracker.update(img_set.rgb_img, matched_bbox, matched_mask);
+            !tracked_bbox.empty() and !tracked_mask.empty())
         {
             Instance detection;
-            detection.bbox = tracked_bbox.value();
             detection.class_id = 3;
+            detection.score = 1.0;
+            detection.bbox = tracked_bbox;
+            detection.mask = tracked_mask;
             detections.push_back(std::move(detection));
         }
 

@@ -71,6 +71,5 @@ inline void detectEdge(const cv::Mat& src, cv::Mat& dst, const EdgeType edge_typ
     dst.convertTo(dst, CV_8U);
 }
 
-bool findInliers(const cv::Mat& src_img, std::vector<cv::Point>& inliers,
-                 const float dist_thresh, const int iters = 300);
+bool findInliers(const cv::Mat& src_img, std::vector<cv::Point>& inliers, float dist_thresh, int iters = 300);
 }

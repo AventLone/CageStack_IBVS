@@ -8,7 +8,7 @@ void getCloud(const SemanticCloud& semantic_cloud, const int label, pcl::PointCl
     {
         if (point.label == label)
         {
-            target_cloud.emplace_back(point.x, point.y, point.y);
+            target_cloud.emplace_back(point.x, point.y, point.z);
         }
     }
 }

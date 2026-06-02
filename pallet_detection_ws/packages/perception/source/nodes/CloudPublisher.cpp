@@ -7,7 +7,8 @@
 #include <tf2_eigen/tf2_eigen.hpp> // ROS 2 header
 #include "perception/tools/2d/rfdetr_segmentor.h"
 #include "perception/tools/3d/filter.h"
-#include <random>
+#include "perception/tools/2d/filter.h"
+#include <algorithm>
 
 enum
 {
@@ -100,13 +101,19 @@ void CloudBuild::segmentLoop()
 {
     const auto choose_front_instances = [](std::vector<Instance> instances, int front_num) -> std::vector<Instance>
         {
-            std::sort(instances.begin(), instances.end(), [](const Instance& a, const Instance& b) -> bool
-                          {
-                              return a.bbox.y > b.bbox.y;
-                          });
-
             front_num = std::min(front_num, static_cast<int>(instances.size()));
-            return {std::make_move_iterator(instances.begin()), std::make_move_iterator(instances.begin() + front_num)};
+            if (front_num <= 0)
+            {
+                return {};
+            }
+
+            const auto front_end = instances.begin() + front_num;
+            std::partial_sort(instances.begin(), front_end, instances.end(), [](const Instance& a, const Instance& b) -> bool
+                                  {
+                                      return a.bbox.y > b.bbox.y;
+                                  });
+            instances.resize(front_num);
+            return instances;
         };
 
     bool init_tracker = false;
@@ -135,29 +142,26 @@ void CloudBuild::segmentLoop()
         // std::optional<cv::Mat> matched_mask;
         cv::Rect* matched_bbox = nullptr;
         cv::Mat* matched_mask = nullptr;
+        size_t matched_idx = 0;
         if (not init_tracker)
         {
-            matched_bbox = &detections[2].bbox;
-            matched_mask = &detections[2].mask;
-            init_tracker = true;
+            if (detections.size() >= 3)
+            {
+                matched_bbox = &detections[2].bbox;
+                matched_mask = &detections[2].mask;
+                matched_idx = 2;
+                init_tracker = true;
+            }
         }
         else
         {
-            // const auto tracked_bbox = mInstanceTracker.getPredictedBbox();
-            // if (!tracked_bbox.has_value())
-            // {
-            //     RCLCPP_ERROR(get_logger(), "Failed to track the target!");
-            //     init_tracker = false;
-            //     continue;
-            // }
-
             float best_iou = 0.2f; // set a lower bound for the bast IoU
             int best_index = -1;
 
             for (int i = 0; i < static_cast<int>(detections.size()); ++i)
             {
                 // if (const float iou = SingleInstanceTracker::IoU(tracked_bbox.value(), detections[i].bbox); iou > best_iou)
-                if (const float iou = SingleInstanceTracker::IoU(mOpticalTracker.mPrevBBox, detections[i].bbox); iou > best_iou)
+                if (const float iou = feature2d::IoU(mFeatureTracker.getLastBBox(), detections[i].bbox); iou > best_iou)
                 {
                     best_iou = iou;
                     best_index = i;
@@ -167,24 +171,27 @@ void CloudBuild::segmentLoop()
             {
                 matched_bbox = &detections[best_index].bbox;
                 matched_mask = &detections[best_index].mask;
+                matched_idx = best_index;
             }
-            // else
-            // {
-            //     matched_bbox = std::nullopt;
-            //     matched_mask = std::nullopt;
-            // }
         }
 
         // if (const auto tracked_target = mInstanceTracker.update(matched_bbox, matched_mask); tracked_target.has_value())
-        if (const auto [tracked_bbox, tracked_mask] = mOpticalTracker.update(img_set.rgb_img, matched_bbox, matched_mask);
-            !tracked_bbox.empty() and !tracked_mask.empty())
+        cv::Mat vis_flow;
+        // if (auto tracking_result = mOpticalTracker.update(img_set.rgb_img, matched_bbox, matched_mask, &vis_flow);
+        if (auto tracking_result = mFeatureTracker.update(img_set.rgb_img, matched_bbox, matched_mask, &vis_flow);
+            tracking_result.has_value())
         {
+            auto [tracked_bbox, tracked_mask] = tracking_result.value();
             Instance detection;
             detection.class_id = 3;
             detection.score = 1.0;
             detection.bbox = tracked_bbox;
-            detection.mask = tracked_mask;
+            detection.mask = std::move(tracked_mask);
             detections.push_back(std::move(detection));
+        }
+        else
+        {
+            RCLCPP_ERROR(get_logger(), "The tracking target lost!");
         }
 
         cv::Mat visualization;
@@ -210,6 +217,15 @@ void CloudBuild::segmentLoop()
         img_bridge.toImageMsg(*ros_image);
         mSegImagePub->publish(std::move(ros_image));
 
+        if (!vis_flow.empty())
+        {
+            auto ros_image_vis = std::make_unique<sensor_msgs::msg::Image>();
+            img_bridge.header.stamp = this->now();
+            img_bridge.image = vis_flow;
+            img_bridge.toImageMsg(*ros_image_vis);
+            mFilteredImagePub->publish(std::move(ros_image_vis));
+        }
+
         InstanceData instance_data;
         instance_data.instances = std::move(detections);
         instance_data.depth_img = std::move(img_set.depth_img);
@@ -218,7 +234,7 @@ void CloudBuild::segmentLoop()
         std::lock_guard<std::mutex> lock(mInstanceBufferMutex);
         while (!mInstanceBuffer.empty())
         {
-            mImgsBuffer.pop();
+            mInstanceBuffer.pop();
         }
         mInstanceBuffer.push(std::move(instance_data));
         mTriggerCloudEvent.notify_one();
@@ -246,9 +262,8 @@ void CloudBuild::workerLoop()
         const auto& depth_img = instance_data.depth_img;
         const auto& instances = instance_data.instances;
 
-        std::vector<std::vector<InstancePoint>> local_clouds(instances.size());
-        ColoredCloud color_cloud;
-        color_cloud.reserve(depth_img.cols * depth_img.rows);
+        InstanceCloud cloud;
+        cloud.points.reserve(depth_img.cols * depth_img.rows / 4);
         for (size_t i = 0; i < instances.size(); ++i)
         {
             static constexpr int step = 2;
@@ -271,8 +286,6 @@ void CloudBuild::workerLoop()
                 mask_roi = mask_roi(roi);
             }
 
-            std::vector<InstancePoint>& current_local = local_clouds[i];
-            current_local.reserve(roi.width * roi.height / 4);
             for (int v_roi = 0; v_roi < roi.height; v_roi += step)
             {
                 const int v_global = roi.y + v_roi; // 全局图像坐标 v
@@ -290,44 +303,25 @@ void CloudBuild::workerLoop()
                         const float x = (static_cast<float>(u_global) - cx) * depth * fx_inv;
                         const float y = (static_cast<float>(v_global) - cy) * depth * fy_inv;
 
-                        current_local.emplace_back(depth, -x, -y,
-                                                   static_cast<uint16_t>(instance.class_id),
-                                                   static_cast<uint16_t>(i));
+                        cloud.points.emplace_back(depth, -x, -y,
+                                                  static_cast<uint16_t>(instance.class_id), static_cast<uint16_t>(i));
                     }
                 }
             }
         }
 
-        // 4. 合并所有局部点云（计算总大小后一次性分配，效率最高）
-        size_t total_points = 0;
-        for (const auto& lc : local_clouds)
-        {
-            total_points += lc.size();
-        }
-
-        InstanceCloud cloud;
-        cloud.points.resize(total_points);
-        cloud.width = total_points;
+        cloud.width = static_cast<uint32_t>(cloud.points.size());
         cloud.height = 1;
-        cloud.is_dense = false;
-
-        size_t offset = 0;
-        for (const auto& lc : local_clouds)
-        {
-            if (!lc.empty())
-            {
-                std::memcpy(&cloud.points[offset], lc.data(), lc.size() * sizeof(InstancePoint));
-                offset += lc.size();
-            }
-        }
+        cloud.is_dense = true;
 
         // ColoredCloud rgb_cloud_base; // This is the semantic cloud in the base link coordinate system.
         InstanceCloud cloud_base;
         // const Eigen::Isometry3f T_body2camera = img_set.T_body2fork * mT_fork2camera;
-        static const Eigen::Isometry3f T_body2camera = mT_fork2camera;
+        const Eigen::Isometry3f T_body2camera = mT_fork2camera;
         pcl::transformPointCloud(cloud, cloud_base, T_body2camera);
 
         ColoredCloud colored_cloud;
+        colored_cloud.reserve(cloud_base.size());
         getColorCloudFromInstanceCloud(cloud_base, colored_cloud);
         sensor_msgs::msg::PointCloud2 rgb_cloud_msg;
         pcl::toROSMsg(colored_cloud, rgb_cloud_msg);

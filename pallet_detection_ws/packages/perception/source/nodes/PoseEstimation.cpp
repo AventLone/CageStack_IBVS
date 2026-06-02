@@ -61,20 +61,10 @@ void PoseEstimation::initPublishers()
 
 void PoseEstimation::workerLoop()
 {
-    static constexpr std::string_view ns = "visualization";
-    static constexpr std::string_view frame_id = "map";
-    static constexpr float load_size_x = 1.2f;
-    static constexpr float load_size_y = 1.0f;
-    static constexpr float load_size_z = 1.5f;
-
-    cv::RNG rng(66);
-
-    static constexpr int pallet_label = 0;
     while (rclcpp::ok())
     {
         // sensor_msgs::msg::PointCloud2 cloud_msg;
         InstanceCloudPtr instance_cloud;
-        visualization_msgs::msg::MarkerArray visualization_msg;
 
         geometry_msgs::msg::PoseArray pose_array_msg;
         // visualization_msgs::msg::Marker delete_all_marker;
@@ -95,9 +85,6 @@ void PoseEstimation::workerLoop()
             mCloudBuffer.pop();
         }
 
-        const auto start = std::chrono::high_resolution_clock::now();
-
-
         /* Stage 1. Detect the pose of the load on the forks */
         /* Step 1. Get the pose of the forks */
         // Eigen::Isometry3f T_body2fork;
@@ -117,11 +104,7 @@ void PoseEstimation::workerLoop()
 
         const auto instance_clusters = getInstanceClusters(*instance_cloud, 0);
 
-        std::vector<Eigen::Vector3f> dimensions_list, poses;
-        dimensions_list.reserve(instance_clusters.size());
-        poses.reserve(instance_clusters.size());
-        visualization_msg.markers.reserve(instance_clusters.size());
-        int msg_id = 0;
+        pose_array_msg.poses.reserve(instance_clusters.size());
         for (const auto& cluster : instance_clusters)
         {
             // Eigen::Vector3f dimensions;
@@ -183,8 +166,6 @@ void PoseEstimation::workerLoop()
         pose_array_msg.header.stamp = this->now();
         mPosesPub->publish(pose_array_msg);
         // mVisualizationPub->publish(visualization_msg);
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
 
@@ -202,8 +183,8 @@ bool PoseEstimation::estimateLoadPose(const RawCloud::Ptr& cloud, Eigen::Vector3
     //
     {
         cv::Mat temp_img;
-        filter2d::close(projection, temp_img);
-        filter2d::removeIsolatedPoints(temp_img, closed_img);
+        feature2d::close(projection, temp_img);
+        feature2d::removeIsolatedPoints(temp_img, closed_img);
     }
     if (closed_img.empty() || cv::countNonZero(closed_img) < 10)
     {
@@ -275,8 +256,8 @@ bool PoseEstimation::estimateDimensionsAndPose(const RawCloud::Ptr& input_cloud,
     mProjector.setCloud(input_cloud);
     const cv::Mat projection = mProjector.projection();
     cv::Mat closed_img, denoised_img;
-    filter2d::close(projection, closed_img);
-    filter2d::removeIsolatedPoints(closed_img, denoised_img);
+    feature2d::close(projection, closed_img);
+    feature2d::removeIsolatedPoints(closed_img, denoised_img);
     if (denoised_img.empty() || cv::countNonZero(denoised_img) < 6)
     {
         return false;

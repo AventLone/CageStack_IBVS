@@ -154,9 +154,27 @@ inline void visualizeInstanceSeg(const cv::Mat& original_image, cv::Mat& output_
     for (const auto& [class_id, score, bbox, mask] : results)
     {
         cv::Scalar color = get_color(class_id);
-        cv::Mat overlay = output_image.clone();
-        overlay.setTo(color, mask);
-        cv::addWeighted(overlay, 0.4, output_image, 0.6, 0, output_image);
+        const cv::Rect roi = bbox & cv::Rect(0, 0, output_image.cols, output_image.rows);
+        if (roi.area() > 0 && !mask.empty())
+        {
+            cv::Mat mask_roi;
+            if (mask.size() == output_image.size())
+            {
+                mask_roi = mask(roi);
+            }
+            else if (mask.size() == roi.size())
+            {
+                mask_roi = mask;
+            }
+
+            if (!mask_roi.empty())
+            {
+                cv::Mat output_roi = output_image(roi);
+                cv::Mat overlay = output_roi.clone();
+                overlay.setTo(color, mask_roi);
+                cv::addWeighted(overlay, 0.4, output_roi, 0.6, 0, output_roi);
+            }
+        }
 
         // 2. 定义储存轮廓的容器
         std::vector<std::vector<cv::Point>> contours;
@@ -170,7 +188,7 @@ inline void visualizeInstanceSeg(const cv::Mat& original_image, cv::Mat& output_
             }
         }
 
-        cv::rectangle(output_image, bbox, color, 2);
+        cv::rectangle(output_image, roi, color, 2);
 
         std::ostringstream oss;
         oss << label_dict.at(class_id) << ": " << std::fixed << std::setprecision(2) << score;

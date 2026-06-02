@@ -14,6 +14,7 @@
 #include "perception/tools/2d/rfdetr_segmentor.h"
 #include "perception/tools/2d/SingleInstanceTracker.h"
 #include "perception/tools/2d/OpticalFlowTracking.h"
+#include "perception/tools/2d/FeatureMatchTracking.h"
 
 class CloudBuild final : public rclcpp::Node
 {
@@ -84,9 +85,7 @@ public:
     }
 
     ~CloudBuild() override
-    {
-        //
-        {
+    { {
             std::unique_lock<std::mutex> lock(mImgBufferMutex);
             mIsShutdown = true;
         }
@@ -117,8 +116,9 @@ private:
     Eigen::Isometry3f mT_fork2camera;
 
     std::unique_ptr<RfDetrSeg> mSegmentor;
-    SingleInstanceTracker mInstanceTracker{36}; // Set “MAX LOST FRAMES” to 16
-    OpticalFlowTracking mOpticalTracker;
+    // SingleInstanceTracker mInstanceTracker{36}; // Set “MAX LOST FRAMES” to 16
+    // OpticalFlowTracking mOpticalTracker;
+    FeatureMatchingTracking mFeatureTracker;
 
     /*** Synchronized Subsribers ***/
     using ImgMsg = sensor_msgs::msg::Image;

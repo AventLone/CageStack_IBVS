@@ -228,10 +228,10 @@ pcl::PointCloud<PointT> OrthographicProjector<PointT>::extractCloud(const cv::Ma
 
     for (int row = 0; row < mask.rows; ++row)
     {
-        const auto* mask_ptr = mask.ptr<bool>(row);
+        const auto* mask_ptr = mask.ptr<uchar>(row);
         for (int col = 0; col < mask.cols; ++col)
         {
-            if (mask_ptr[col])
+            if (mask_ptr[col] > 0)
             {
                 for (std::size_t idx : mIndicesInPixels[row][col])
                 {

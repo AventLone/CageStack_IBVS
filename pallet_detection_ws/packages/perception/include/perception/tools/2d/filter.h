@@ -6,14 +6,14 @@ namespace feature2d
 inline void open(const cv::Mat& src, cv::Mat& dst)
 {
     CV_Assert(!src.empty());
-    static const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(2, 2));
+    static const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5));
     cv::morphologyEx(src, dst, cv::MORPH_OPEN, kernel);
 }
 
 inline void close(const cv::Mat& src, cv::Mat& dst)
 {
     CV_Assert(!src.empty());
-    static const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(2, 2));
+    static const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
     cv::morphologyEx(src, dst, cv::MORPH_CLOSE, kernel, cv::Point(-1, -1), 2);
 }
 

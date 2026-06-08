@@ -118,7 +118,7 @@ void PoseEstimation::workerLoop()
             if (feature3d::measureDimensionsY(*cluster) > 0.5f)
             {
                 Eigen::Vector3f pose;
-                if (!estimateLoadPose(cluster, pose))
+                if (!this->estimatePose(cluster, pose))
                 {
                     continue;
                 }
@@ -127,23 +127,6 @@ void PoseEstimation::workerLoop()
                 {
                     continue;
                 }
-                // visualization_msgs::msg::Marker cube_msg;
-                // cube_msg.header.frame_id = "LOLA";
-                // cube_msg.header.stamp = this->now();
-                // cube_msg.ns = ns;
-                // cube_msg.id = msg_id++;
-                // cube_msg.type = visualization_msgs::msg::Marker::CUBE;
-                // cube_msg.action = visualization_msgs::msg::Marker::ADD;
-                // cube_msg.scale.x = 1.2;
-                // cube_msg.scale.y = 1.0;
-                // cube_msg.scale.z = 0.15;
-                // cube_msg.color.r = 0.9;
-                // cube_msg.color.g = 0.5;
-                // cube_msg.color.b = 0.5;
-                // cube_msg.color.a = 0.4;
-                // cube_msg.pose = targetToCubePose(pose, {1.2, 1.0, 0.15});
-                // cube_msg.pose.position.z = 0.5 * cube_msg.scale.z;
-                // visualization_msg.markers.push_back(cube_msg);
 
                 geometry_msgs::msg::Pose pose_msg;
                 pose_msg.position.x = pose[0];
@@ -169,52 +152,79 @@ void PoseEstimation::workerLoop()
     }
 }
 
-bool PoseEstimation::estimateLoadPose(const RawCloud::Ptr& cloud, Eigen::Vector3f& load_pose) const
+bool PoseEstimation::estimatePose(const RawCloud::Ptr& cloud, Eigen::Vector3f& load_pose) const
 {
     if (cloud->size() < 10)
     {
         return false;
     }
-    static OrthographicProjector<pcl::PointXYZ> projector(View::TOP, 0.02f);
+    static OrthographicProjector<pcl::PointXYZ> projector(View::TOP, 0.01f);
     projector.setCloud(cloud);
     const cv::Mat projection = projector.projection();
 
-    cv::Mat closed_img;
+    cv::Mat src_img;
     //
     {
-        cv::Mat temp_img;
-        feature2d::close(projection, temp_img);
-        feature2d::removeIsolatedPoints(temp_img, closed_img);
+        cv::Mat closed_img;
+        feature2d::close(projection, closed_img);
+        feature2d::open(closed_img, src_img);
     }
-    if (closed_img.empty() || cv::countNonZero(closed_img) < 10)
+    if (src_img.empty() || cv::countNonZero(src_img) < 10)
     {
         return false;
     }
+    std::vector<cv::Point> src_points, hull_points;
+    cv::findNonZero(src_img, src_points);
+    cv::convexHull(src_points, hull_points);
 
-    /* Step 1. Locate the boundary on x direction */
-    cv::Mat right_edge_img;
-    feature2d::detectEdge(closed_img, right_edge_img, feature2d::EdgeType::RIGHT);
-    if (right_edge_img.empty() || cv::countNonZero(right_edge_img) < 10)
+    cv::Mat debug_img;
+    cv::cvtColor(projection, debug_img, cv::COLOR_GRAY2BGR);
+    for (const auto& point : hull_points)
+    {
+        cv::circle(debug_img, point, 2, cv::Scalar(0, 0, 255), -1);
+    }
+
+    const auto convex_lines_result = feature2d::detectConvexHullEdge(src_img, feature2d::EdgeType::RIGHT);
+    if (!convex_lines_result.has_value())
     {
         return false;
     }
-    auto line = feature2d::detectRectEdge(right_edge_img, feature2d::EdgeType::RIGHT);
+    const auto& convex_lines = convex_lines_result.value();
+    const auto line_with_max_length = std::max_element(convex_lines.begin(), convex_lines.end(),
+                                                       [](const feature2d::Line& line1, const feature2d::Line& line2) -> bool
+                                                           {
+                                                               return line1.length() < line2.length();
+                                                           });
+    std::vector<feature2d::Line> filtered_lines;
+    for (const auto line : convex_lines)
+    {
+        if (line.length() > line_with_max_length->length() * 0.8)
+        {
+            filtered_lines.push_back(line);
+            cv::line(debug_img, line.p1, line.p2, cv::Scalar(255, 0, 0), 1);
+        }
+    }
+    const auto most_right_line = std::max_element(filtered_lines.begin(), filtered_lines.end(),
+                                                  [](const feature2d::Line& line1, const feature2d::Line& line2) -> bool
+                                                      {
+                                                          return line1.center().x < line2.center().x;
+                                                      });
+    cv::line(debug_img, most_right_line->p1, most_right_line->p2, cv::Scalar(255, 255, 0), 1);
 
-    // cv::Mat debug_img;
-    // cv::cvtColor(projection, debug_img, cv::COLOR_GRAY2BGR);
-    // cv::line(debug_img, line.p1, line.p2, cv::Scalar(0, 255, 0), 2);
+    // const feature2d::Line line = feature2d::detectRectEdge(hull_points, feature2d::EdgeType::RIGHT, &debug_img);
+    const feature2d::Line& line = *most_right_line;
 
-    cv::Mat mask = cv::Mat::zeros(closed_img.size(), CV_8UC1);
+    cv::Mat mask = cv::Mat::zeros(src_img.size(), CV_8UC1);
     try
     {
-        cv::line(mask, line.p1, line.p2, cv::Scalar(255), 50);
+        cv::line(mask, line.p1, line.p2, cv::Scalar(255), 12);
     }
     catch (const std::runtime_error& e)
     {
         RCLCPP_ERROR(get_logger(), "%s", e.what());
     }
     cv::Mat front_edge;
-    closed_img.copyTo(front_edge, mask);
+    src_img.copyTo(front_edge, mask);
     RawCloud front_edge_cloud = projector.extractCloud(front_edge);
     if (front_edge_cloud.size() < 10)
     {

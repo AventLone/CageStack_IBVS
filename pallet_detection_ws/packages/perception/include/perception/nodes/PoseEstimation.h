@@ -153,7 +153,7 @@ private:
     void workerLoop();
 
     /* Sub detection modules */
-    bool estimateLoadPose(const RawCloud::Ptr& cloud, Eigen::Vector3f& load_pose) const;
+    bool estimatePose(const RawCloud::Ptr& cloud, Eigen::Vector3f& load_pose) const;
 
     static bool estimateDimensionsAndPose(const RawCloud::Ptr& input_cloud, Eigen::Vector3f& pose, Eigen::Vector3f& dimensions);
 };

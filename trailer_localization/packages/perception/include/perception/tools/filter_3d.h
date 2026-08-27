@@ -8,19 +8,20 @@
 
 #include "../types/common.hpp"
 
-void getCloud(const SemanticCloud& semantic_cloud, const int label, pcl::PointCloud<pcl::PointXYZ>& target_cloud);
+namespace filter3d
+{
+void getCloud(const SemanticCloud& semantic_cloud, int label, pcl::PointCloud<pcl::PointXYZ>& target_cloud);
 
 void getCloud(const SemanticCloud& semantic_cloud, pcl::PointCloud<pcl::PointXYZRGB>& colored_cloud);
 
 template<class PointT>
 void getCloud(const pcl::PointCloud<PointT>& src_cloud, typename pcl::PointCloud<PointT>::Ptr inliers,
-              typename pcl::PointCloud<PointT>::Ptr outliers, const Eigen::Vector3f& base_position, const ROI& roi)
+              typename pcl::PointCloud<PointT>::Ptr outliers, const ROI& roi,
+              const Eigen::Vector3f& base_position = Eigen::Vector3f::Zero())
 {
-    const ROI roi_rebased{
-                roi.min_x + base_position[0], roi.max_x + base_position[0],
-                roi.min_y + base_position[1], roi.max_y + base_position[1],
-                roi.min_z + base_position[2], roi.max_z + base_position[2]
-            };
+    const ROI roi_rebased{roi.min_x + base_position[0], roi.max_x + base_position[0],
+                          roi.min_y + base_position[1], roi.max_y + base_position[1],
+                          roi.min_z + base_position[2], roi.max_z + base_position[2]};
 
     const size_t src_size = src_cloud.size();
 
@@ -238,4 +239,5 @@ bool normalFilter(const typename pcl::PointCloud<PointT>::Ptr& src_cloud,
 
 
     return true;
+}
 }

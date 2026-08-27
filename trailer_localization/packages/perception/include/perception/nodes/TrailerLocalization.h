@@ -2,17 +2,24 @@
 #include <pcl/point_cloud.h>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
 #include <pcl/point_types.h>
 #include <tf2_eigen/tf2_eigen.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 #include <pcl/common/transforms.h>
+#include <pcl/registration/icp.h>
+#include <pcl/registration/gicp.h>
+#include <pcl/registration/transformation_estimation_2D.h>
+#include <pcl/registration/impl/icp.hpp>
+#include <pcl/registration/impl/gicp.hpp>
+#include <pcl/filters/voxel_grid.h>
+#include "perception/types/common.hpp"
 
 class TrailerLocalization : public rclcpp::Node
 {
 public:
     explicit TrailerLocalization(const std::string& node_name) : Node(node_name), mTfBuffer(this->get_clock()), mTfListener(mTfBuffer)
-        // mTrailerTemplate(std::make_shared<pcl::PointCloud<pcl::PointXYZ>>())
     {
         initSubscribers();
         initPublisher();
@@ -40,6 +47,7 @@ private:
 
     /* Publishers */
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr mProcessedScanVisPub;
+    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr mTrailerPosePub;
 
     /* Data Buffers */
     std::queue<sensor_msgs::msg::PointCloud2> mScanBuffer;
@@ -54,8 +62,11 @@ private:
     tf2_ros::Buffer mTfBuffer;
     tf2_ros::TransformListener mTfListener;
 
-    /* ICP template */
+    /* ICP template, voxel map and estimated pose */
     pcl::PointCloud<pcl::PointXYZ>::Ptr mTrailerTemplate;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr mTrailerVoxelMap;
+    Eigen::Isometry3f mTrailerPose{Eigen::Isometry3f::Identity()};
+    ROI mTrailerRoi{};
 
     void initSubscribers()
     {
@@ -77,6 +88,7 @@ private:
     void initPublisher()
     {
         mProcessedScanVisPub = create_publisher<sensor_msgs::msg::PointCloud2>("/scan_vis", rclcpp::SensorDataQoS());
+        mTrailerPosePub = create_publisher<geometry_msgs::msg::PoseStamped>("/trailer_pose", rclcpp::SensorDataQoS());
     }
 
     /* Transform LiDAR scan to base truck frame */
@@ -89,7 +101,11 @@ private:
         pcl::transformPointCloud(src_scan, dst_scan, T_truck2lidar);
     }
 
-    void makeTemplate(const pcl::PointCloud<pcl::PointXYZ>::Ptr& src_scan);
+    void makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src_scan);
+
+    bool alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_scan, Eigen::Isometry3f& out_pose);
+
+    void updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan_in_truck);
 
     void workerLoop();
 };

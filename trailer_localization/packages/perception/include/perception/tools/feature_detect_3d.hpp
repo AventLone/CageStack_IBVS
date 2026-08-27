@@ -16,6 +16,8 @@ Eigen::Vector3f getCloudSize(const pcl::PointCloud<PointT>& cloud)
     return max_point.head<3>() - min_point.head<3>();
 }
 
+
+
 template<class PointT>
 float calculateLineAngle(const pcl::PointCloud<PointT>& cloud)
 {

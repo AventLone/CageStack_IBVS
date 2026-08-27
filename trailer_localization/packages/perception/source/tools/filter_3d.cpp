@@ -1,6 +1,8 @@
 #include "perception/tools/filter_3d.h"
 #include <random>
 
+namespace filter3d
+{
 void getCloud(const SemanticCloud& semantic_cloud, const int label, pcl::PointCloud<pcl::PointXYZ>& target_cloud)
 {
     target_cloud.reserve(semantic_cloud.size());
@@ -60,4 +62,5 @@ void getCloud(const SemanticCloud& semantic_cloud, pcl::PointCloud<pcl::PointXYZ
 
     colored_cloud.width = static_cast<uint32_t>(colored_cloud.points.size());
     colored_cloud.height = 1;
+}
 }

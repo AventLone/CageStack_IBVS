@@ -6,7 +6,6 @@
 #include <message_filters/sync_policies/approximate_time.h>
 #include <message_filters/synchronizer.h>
 #include "perception/types/common.hpp"
-#include "../tools/OrthographicProjector.hpp"
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
 #include <std_msgs/msg/string.hpp>
@@ -18,9 +17,6 @@
 
 class CloudBuild final : public rclcpp::Node
 {
-    // static constexpr float cx = 960.0f;
-    // static constexpr float cy = 600.0f;
-    // static constexpr float fx = 1920.0f;
     static constexpr float cx = 487.64654541015625f;
     static constexpr float cy = 366.9764709472656f;
     static constexpr float fx = 366.9764709472656f;
@@ -54,10 +50,10 @@ public:
         initSubscritions();
         initPublishers();
 
-        // mSegmentor = std::make_unique<RfDetrSeg>(
-        //     "/home/avent/Desktop/pretrained_weights/instance_segmentation/rfdetr-seg-medium-20260526.plan");
+        mSegmentor = std::make_unique<RfDetrSeg>(
+            "/media/avent/DATA/pretrained_weights/instance_segmentation/rfdetr-seg-medium-20260618.plan");
+        // mSegmentor = std::make_unique<RfDetrSeg>("/home/avent/Desktop/rfdetr-seg-medium.plan");
 
-        mSegmentor = std::make_unique<RfDetrSeg>("/home/avent/Desktop/rfdetr-seg-medium.plan");
         // mTfBuffer = std::make_unique<tf2_ros::Buffer>(this->get_clock());
         // mTfListener = std::make_shared<tf2_ros::TransformListener>(*mTfBuffer);
 
@@ -85,8 +81,10 @@ public:
     }
 
     ~CloudBuild() override
-    { {
-            std::unique_lock<std::mutex> lock(mImgBufferMutex);
+    {
+        //
+        {
+            std::unique_lock lock(mImgBufferMutex);
             mIsShutdown = true;
         }
         mTriggerSegEvent.notify_one();
@@ -122,7 +120,6 @@ private:
 
     /*** Synchronized Subsribers ***/
     using ImgMsg = sensor_msgs::msg::Image;
-    using StrMsg = std_msgs::msg::String;
     using SyncPolicy = message_filters::sync_policies::ApproximateTime<ImgMsg, ImgMsg>;
     message_filters::Subscriber<ImgMsg> mDepthSub, mSemanticSub;
     std::unique_ptr<message_filters::Synchronizer<SyncPolicy>> mSynchronizer;
@@ -130,6 +127,8 @@ private:
     /* Publishers */
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr mColoredCloudPub, mInstanceCloudPub;
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr mFilteredImagePub, mSegImagePub;
+
+    void initParams();
 
     void initSubscritions();
 
@@ -139,7 +138,7 @@ private:
 
     void pushInBuffer(ImgSet&& img_set)
     {
-        std::lock_guard<std::mutex> lock(mImgBufferMutex);
+        std::lock_guard lock(mImgBufferMutex);
         while (!mImgsBuffer.empty())
         {
             mImgsBuffer.pop();

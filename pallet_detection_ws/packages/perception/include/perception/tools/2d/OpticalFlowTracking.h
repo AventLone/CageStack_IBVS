@@ -1,8 +1,7 @@
 #pragma once
 #include <opencv2/opencv.hpp>
-#include <algorithm>
 #include <optional>
-#include <vector>
+// #include <vector>
 
 /* instance tracking based on optical flow */
 class OpticalFlowTracking
@@ -13,13 +12,13 @@ class OpticalFlowTracking
     static constexpr int BLOCK_SIZE = 3;
     static constexpr int WIN_SIZE = 21;
     static constexpr int PYRAMID_LEVEL = 3;
-    static constexpr int MIN_TRACKED_POINTS = 12;
+    static constexpr std::size_t MIN_TRACKED_POINTS = 12;
     static constexpr float FUSION_ALPHA = 0.65f;
 
     const uint16_t MAX_LOST_FRAMES;
 
 public:
-    explicit OpticalFlowTracking(const uint16_t max_lost_frames = 360) : MAX_LOST_FRAMES(max_lost_frames)
+    explicit OpticalFlowTracking(const uint16_t max_lost_frames = 10) : MAX_LOST_FRAMES(max_lost_frames)
     {
         mCriteria = cv::TermCriteria(cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 30, 0.01);
     }
@@ -58,7 +57,7 @@ public:
             return std::nullopt;
         }
 
-        if (mLastFeaturePoints.size() < static_cast<size_t>(MIN_TRACKED_POINTS))
+        if (mLastFeaturePoints.size() < MIN_TRACKED_POINTS)
         {
             return std::nullopt;
         }
@@ -143,13 +142,6 @@ public:
                                " | lost: " + std::to_string(mLostFrames);
             cv::putText(*flow_vis, text, cv::Point(20, 30), cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0, 255, 0), 2);
         }
-
-        // if (seg_mask != nullptr and seg_bbox != nullptr)
-        // {
-        //     mLostFrames = 0;
-        //     updateStates(toGray(rgb_frame), *seg_bbox, *seg_mask);
-        //     return std::make_pair(*seg_bbox, *seg_mask);
-        // }
 
         updateStates(curr_gray, bbox, warped_mask); // 更新内部状态，供下一帧继续用
         return std::make_pair(bbox, warped_mask);

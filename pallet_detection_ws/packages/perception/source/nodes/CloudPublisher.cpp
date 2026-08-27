@@ -22,7 +22,7 @@ void CloudBuild::initSubscritions()
     const std::string params_prefix = "TopicName.Sensor.Camera";
     this->declare_parameters<std::string>(params_prefix, {
                                               {"Mid.Depth", "/zed/zed_node/depth/depth_registered"},
-                                              {"Mid.Rgb", "/zed/zed_node/rgb/image_rect_color"}
+                                              {"Mid.Rgb", "/zed/zed_node/rgb/color/rect/image"}
                                               // {"Mid.Rgb", "/zed/zed_node/rgb/color/rect/image"}
                                           });
 
@@ -117,7 +117,7 @@ void CloudBuild::segmentLoop()
         };
 
     bool init_tracker = false;
-    const std::unordered_map<int, std::string> label_dict{{0, "pallet"}, {1, "storage_cage"}, {2, "goods"}, {3, "target"}};
+    const std::unordered_map<int, std::string> label_dict{{0, "pallet"}, {1, "KKP"}, {2, "goods"}, {3, "target"}};
 
     while (rclcpp::ok())
     {
@@ -135,11 +135,10 @@ void CloudBuild::segmentLoop()
         }
 
         /* Perform instance segmentation on rgb image and select the frontest 5 */
-        std::vector<Instance> detections = choose_front_instances(mSegmentor->seg(img_set.rgb_img, 0.6, 0.3, 8), 5);
+        // std::vector<Instance> detections = choose_front_instances(mSegmentor->seg(img_set.rgb_img, 0.6, 0.3), 5);
+        std::vector<Instance> detections = mSegmentor->seg(img_set.rgb_img, 0.8, 0.5);
 
         /* Track the target bbox */
-        // std::optional<cv::Rect> matched_bbox;
-        // std::optional<cv::Mat> matched_mask;
         cv::Rect* matched_bbox = nullptr;
         cv::Mat* matched_mask = nullptr;
         size_t matched_idx = 0;
@@ -231,7 +230,7 @@ void CloudBuild::segmentLoop()
         instance_data.depth_img = std::move(img_set.depth_img);
         instance_data.T_body2fork = std::move(img_set.T_body2fork);
 
-        std::lock_guard<std::mutex> lock(mInstanceBufferMutex);
+        std::lock_guard lock(mInstanceBufferMutex);
         while (!mInstanceBuffer.empty())
         {
             mInstanceBuffer.pop();
@@ -249,7 +248,7 @@ void CloudBuild::workerLoop()
         InstanceData instance_data;
         //
         {
-            std::unique_lock<std::mutex> lock(mInstanceBufferMutex);
+            std::unique_lock lock(mInstanceBufferMutex);
             mTriggerCloudEvent.wait(lock, [this]() -> bool { return !mInstanceBuffer.empty() || mIsShutdown; });
             if (mIsShutdown)
             {

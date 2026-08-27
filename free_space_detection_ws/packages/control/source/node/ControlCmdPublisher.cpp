@@ -55,11 +55,9 @@ void ControlCmdPublisher::initSubscriptions()
 
     mGoalPoseSub.subscribe(this, target_pose_topic, rclcpp::ServicesQoS().get_rmw_qos_profile());
     mSteerAngelSub.subscribe(this, "/lola/joint_states");
-    mSynchronizer = std::make_unique<message_filters::Synchronizer<SyncPolicy>>(SyncPolicy(10),
-                                                                                mGoalPoseSub, mSteerAngelSub);
+    mSynchronizer = std::make_unique<message_filters::Synchronizer<SyncPolicy>>(SyncPolicy(10), mGoalPoseSub, mSteerAngelSub);
     mSynchronizer->setMaxIntervalDuration(rclcpp::Duration(0, 20 * 100000)); // 设置时间容差（单位：秒）30ms 容差
-    mSynchronizer->registerCallback(std::bind(&ControlCmdPublisher::dataHandler, this,
-                                              std::placeholders::_1, std::placeholders::_2));
+    mSynchronizer->registerCallback(std::bind(&ControlCmdPublisher::dataHandler, this, std::placeholders::_1, std::placeholders::_2));
 
     // mGoalPoseSub = this->create_subscription<geometry_msgs::msg::Pose2D>(
     //     target_pose_topic, rclcpp::ServicesQoS(),
@@ -83,10 +81,7 @@ void ControlCmdPublisher::initSubscriptions()
 void ControlCmdPublisher::initPublishers()
 {
     const std::string params_prefix = "TopicName.Control";
-    this->declare_parameters<std::string>(params_prefix, {
-                                              {"Command", "/lola/joint_command"},
-                                              {"Path", "/control/path"}
-                                          });
+    this->declare_parameters<std::string>(params_prefix, {{"Command", "/lola/joint_command"}, {"Path", "/control/path"}});
     std::map<std::string, std::string> control_topics;
     if (!this->get_parameters(params_prefix, control_topics))
     {
@@ -113,16 +108,19 @@ void ControlCmdPublisher::cmdPubLoop()
 
 
     const rclcpp::Duration interval = rclcpp::Duration::from_seconds(mControllerParams.dt);
+
+    rclcpp::Rate control_rate(1.0 / mControllerParams.dt, this->get_clock());
     while (rclcpp::ok())
     {
         cmd_msg.velocity = std::vector(4, 0.0);
         cmd_msg.position[2] = 0.5;
         // mCmdPub->publish(cmd_msg);
-        state_path.poses.clear();
-        //
-        {
+        state_path.poses.clear(); {
             std::unique_lock<std::mutex> lock(mBufferMutex);
-            mTriggerEvent.wait(lock, [this]() -> bool { return !mDataBuffer.empty() || mIsShutdown; });
+            mTriggerEvent.wait(lock, [this]() -> bool
+                                   {
+                                       return !mDataBuffer.empty() || mIsShutdown;
+                                   });
             if (mIsShutdown)
             {
                 break;
@@ -131,7 +129,8 @@ void ControlCmdPublisher::cmdPubLoop()
             mDataBuffer.pop();
         }
         // next_tick = std::chrono::steady_clock::now() + interval;
-        rclcpp::Time next_tick = this->now() + interval;
+        // rclcpp::Time next_tick = this->now() + interval;
+        rclcpp::Time next_tick = this->get_clock()->now() + interval;
 
         // if (std::abs(data.goal[1]) < 0.15 && std::abs(data.goal[2]) < 0.03)
 
@@ -148,8 +147,7 @@ void ControlCmdPublisher::cmdPubLoop()
         //     cmd_msg.velocity[1] = 0.0;
         // }
         // else
-        if (const std::vector<double> stage1_goal{data.goal[0] + 1.6, 0.0, 0.0};
-            std::abs(stage1_goal[0]) > 0.1)
+        if (const std::vector<double> stage1_goal{data.goal[0] + 1.6, 0.0, 0.0}; std::abs(stage1_goal[0]) > 0.1)
         {
             mController->setGoal(stage1_goal, -data.steer_angle);
             std::pair<nmpc::Solution, nmpc::Solution> result;
@@ -238,19 +236,9 @@ void ControlCmdPublisher::cmdPubLoop()
         // }
         // mPathPub->publish(state_path);
 
-        if (const auto this_timepoint = this->now(); this_timepoint > next_tick)
+        if(!control_rate.sleep())
         {
-            RCLCPP_WARN(get_logger(), "Solving NMPC has exceeded 100 ms!");
-        }
-        else
-        {
-            // const auto latency =
-            //         std::chrono::duration_cast<std::chrono::milliseconds>(next_tick - this_timepoint);
-            // const rclcpp::Duration latency = next_tick - this_timepoint;
-            //
-            // std::cout << "Latency: " << latency.seconds() * 1000.0 << " ms." << std::endl;
-            // std::this_thread::sleep_until(next_tick);
-            this->get_clock()->sleep_until(next_tick);
+            RCLCPP_WARN(get_logger(), "Solving NMPC has exceeded %f s!", mControllerParams.dt);
         }
     }
 }

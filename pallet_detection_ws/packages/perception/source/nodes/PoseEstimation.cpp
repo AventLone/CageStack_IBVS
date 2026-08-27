@@ -102,7 +102,7 @@ void PoseEstimation::workerLoop()
         //     continue;
         // }
 
-        const auto instance_clusters = getInstanceClusters(*instance_cloud, 0);
+        const auto instance_clusters = getInstanceClusters(*instance_cloud, 1);
 
         pose_array_msg.poses.reserve(instance_clusters.size());
         for (const auto& cluster : instance_clusters)

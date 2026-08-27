@@ -220,24 +220,7 @@ void CloudBuild::workerLoop()
             mImgsBuffer.pop();
         }
 
-        // int pallet_label{}, ramp_label{}, goods_label{};
-        // auto it = mSemanticLabels.find("pallet");
-        // if (it != mSemanticLabels.end())
-        // {
-        //     pallet_label = it->second;
-        // }
-        // it = mSemanticLabels.find("ramp");
-        // if (it != mSemanticLabels.end())
-        // {
-        //     ramp_label = it->second;
-        // }
-        // it = mSemanticLabels.find("goods");
-        // if (it != mSemanticLabels.end())
-        // {
-        //     goods_label = it->second;
-        // }
-
-        RawCloud left_camera_cloud, right_camera_cloud; // This is the semantic cloud in the camera coordinate system.
+        RawCloud left_camera_cloud, right_camera_cloud; // This is the semantic cloud in the camera frame.
         left_camera_cloud.reserve(img_set.left_depth_img.total() / 6);
         right_camera_cloud.reserve(img_set.right_depth_img.total() / 6);
 
@@ -252,25 +235,6 @@ void CloudBuild::workerLoop()
             {
                 if (const float depth = left_depth_ptr[u] + noise(); depth > 0.1f && depth < depth_threshold)
                 {
-                    // int label{};
-
-                    // if (label_ptr[u] == pallet_label)
-                    // {
-                    //     label = 1;
-                    // }
-                    // else if (label_ptr[u] == goods_label)
-                    // {
-                    //     label = 2;
-                    // }
-                    // else if (label_ptr[u] == ramp_label)
-                    // {
-                    //     label = 3;
-                    // }
-                    // else
-                    // {
-                    //     label = 0;
-                    // }
-
                     const float x = (static_cast<float>(u) - cx) * depth * fx_inv;
                     const float y = (static_cast<float>(v) - cy) * depth * fy_inv;
                     left_camera_cloud.emplace_back(depth, -x, -y);
@@ -315,7 +279,7 @@ void CloudBuild::workerLoop()
         // RCLCPP_INFO(get_logger(), "downsampled_cloudo_truck size is %lu.", downsampled_cloud_truck.size());
 
         // ColoredCloud colored_cloud;
-        getCloud(left_cloud_truck, colored_cloud);
+        // getCloud(left_cloud_truck, colored_cloud);
 
         sensor_msgs::msg::PointCloud2 cloud_msg;
         pcl::toROSMsg(*cloud_truck, cloud_msg);
@@ -325,6 +289,5 @@ void CloudBuild::workerLoop()
         cloud_msg.header.frame_id = global_frame_id;
 
         mCloudPub->publish(cloud_msg);
-        // std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }

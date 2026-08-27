@@ -4,7 +4,6 @@
 #include <visualization_msgs/msg/marker.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
-#include <geometry_msgs/msg/pose2_d.hpp>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
 #include "perception/types/common.hpp"
@@ -40,7 +39,7 @@ public:
     {
         //
         {
-            std::unique_lock<std::mutex> lock(mBufferMutex);
+            std::unique_lock lock(mBufferMutex);
             mIsShutdown = true;
         }
         mTriggerEvent.notify_one();
@@ -90,7 +89,7 @@ private:
 
     void pushInBuffer(InstanceCloudPtr&& data)
     {
-        std::lock_guard<std::mutex> lock(mBufferMutex);
+        std::lock_guard lock(mBufferMutex);
         while (!mCloudBuffer.empty())
         {
             mCloudBuffer.pop();

@@ -10,7 +10,7 @@ extensions.enable_extension("isaacsim.ros2.bridge")
 simulation_app.update()
 
 simulation_context = SimulationContext(stage_units_in_meters=1.0)
-stage.open_stage("/home/avent/Desktop/IsaacAssets/Collected_warehouse_trailer/warehouse_trailer.usd")
+stage.open_stage("/media/avent/DATA/IsaacAssets/Collected_warehouse_trailer/warehouse_trailer.usd")
 # stage.open_stage("/home/avent/Desktop/IsaacAssets/Collected_warehouse_trailer/pallet_detection.usd")
 simulation_context.initialize_physics()   # Need to initialize physics getting any articulation..etc
 simulation_app.update()

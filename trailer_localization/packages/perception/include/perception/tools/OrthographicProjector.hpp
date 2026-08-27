@@ -27,7 +27,7 @@ class OrthographicProjector final
     using CloudPtr = typename Cloud::Ptr;
 
 public:
-    explicit OrthographicProjector(View view_direction, float resolution = 0.005f);
+    explicit OrthographicProjector(const View view_direction, const float resolution = 0.005f);
 
     void setResolution(const float resolution) noexcept
     {
@@ -55,24 +55,19 @@ public:
     /**
      * @brief Get world coordinate from a pixel
      */
-    [[nodiscard]] cv::Point2f getCoordinate(const cv::Point& pixel) const
+    cv::Point2f getCoordinate(const cv::Point& pixel) const
     {
         return static_cast<cv::Point2f>(pixel) * mResolution + mMinBound;
     }
 
-    [[nodiscard]] float getCoordinate0(const uint32_t pixel_x) const
+    float getCoordinate0(const uint32_t pixel_x) const
     {
         return static_cast<float>(pixel_x) * mResolution + mMinBound.x;
     }
 
-    [[nodiscard]] float getCoordinate1(const uint32_t pixel_y) const
+    float getCoordinate1(const uint32_t pixel_y) const
     {
         return static_cast<float>(pixel_y) * mResolution + mMinBound.y;
-    }
-
-    [[nodiscard]] float getResolution() const
-    {
-        return mResolution;
     }
 
     pcl::PointCloud<PointT> extractCloud(const cv::Mat& mask);
@@ -80,7 +75,7 @@ public:
     pcl::PointCloud<PointT> extractCloud(const std::vector<cv::Point>& pixels);
 
 private:
-    uint16_t mAxes[3]{};
+    uint16_t mAxes[3];
     float mResolution, mResolutionInverse;
     float mThickness{0.01f}, mThicknessInverse{100.0f};
 
@@ -228,10 +223,10 @@ pcl::PointCloud<PointT> OrthographicProjector<PointT>::extractCloud(const cv::Ma
 
     for (int row = 0; row < mask.rows; ++row)
     {
-        const auto* mask_ptr = mask.ptr<uchar>(row);
+        const auto* mask_ptr = mask.ptr<bool>(row);
         for (int col = 0; col < mask.cols; ++col)
         {
-            if (mask_ptr[col] > 0)
+            if (mask_ptr[col])
             {
                 for (std::size_t idx : mIndicesInPixels[row][col])
                 {

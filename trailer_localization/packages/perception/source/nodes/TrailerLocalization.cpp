@@ -102,7 +102,6 @@ void TrailerLocalization::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src
         }
     }
 
-    // for (const cv::Vec4i& line : lines)
     for (const auto candidate : candidate_indices)
     {
         const auto& line = lines[candidate];
@@ -170,11 +169,10 @@ void TrailerLocalization::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src
     const float angle = std::atan2(-mid_plane[0], mid_plane[1]);
 
     RawCloud side_walls = refined_side_wall_1 + refined_side_wall_2;
-    // Eigen::Isometry3f pose(Eigen::Isometry3f::Identity());
+
     // 1. Rotation transformation from truck frame to rotated frame
     Eigen::Isometry3f T_rot = Eigen::Isometry3f::Identity();
     T_rot.rotate(Eigen::AngleAxisf(-angle, Eigen::Vector3f::UnitZ()));
-    // pose.rotate(Eigen::AngleAxisf(-angle, Eigen::Vector3f::UnitZ()));
     pcl::transformPointCloud(side_walls, side_walls, T_rot);
 
     Eigen::Vector4f rotated_mid_plane;
@@ -189,20 +187,13 @@ void TrailerLocalization::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src
     }
     const float y_offset = -rotated_mid_plane[3] / rotated_mid_plane[1];
 
-    // pose = Eigen::Isometry3f::Identity();
-    // pose.translate(Eigen::Vector3f(-max_x, -y_offset, 0.0f));
     // 2. Translation transformation from rotated frame to template frame
     Eigen::Isometry3f T_trans = Eigen::Isometry3f::Identity();
     T_trans.translate(Eigen::Vector3f(-max_x, -y_offset, 0.0f));
-
-
     pcl::transformPointCloud(side_walls, side_walls, T_trans);
 
-    // Combined transformation: points_template = T_truck2template * points_truck
-    Eigen::Isometry3f T_truck2template = T_trans * T_rot;
-
-    // Trailer pose in truck frame
-    mTrailerPose = T_truck2template.inverse();
+    Eigen::Isometry3f T_truck2template = T_trans * T_rot;   // Combined transformation: points_template = T_truck2template * points_truck
+    mTrailerPose = T_truck2template.inverse();   // Trailer pose in truck frame
 
     mTrailerRoi = ROI::getBBox(side_walls);
     mTrailerRoi.min_x -= 9.9f;
@@ -236,7 +227,7 @@ void TrailerLocalization::updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& s
     pcl::transformPointCloud(scan_in_truck, scan_in_trailer, T_truck2trailer);
 
     // Filter points inside trailer ROI
-    auto scan_in_roi = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+    const auto scan_in_roi = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
     filter3d::getCloud(scan_in_trailer, scan_in_roi, nullptr, mTrailerRoi);
 
     // Merge into voxel map
@@ -247,7 +238,7 @@ void TrailerLocalization::updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& s
     voxel_filter.setLeafSize(0.01f, 0.01f, 0.01f);
     voxel_filter.setInputCloud(mTrailerVoxelMap);
 
-    auto filtered_map = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+    const auto filtered_map = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
     voxel_filter.filter(*filtered_map);
     mTrailerVoxelMap = filtered_map;
 
@@ -268,7 +259,7 @@ bool TrailerLocalization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cu
 
     // Downsample input clouds for fast and robust registration
     pcl::VoxelGrid<pcl::PointXYZ> voxel_filter;
-    voxel_filter.setLeafSize(0.05f, 0.05f, 0.05f);
+    voxel_filter.setLeafSize(0.01f, 0.01f, 0.01f);
 
     const auto src_downsampled = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
     voxel_filter.setInputCloud(mTrailerTemplate);
@@ -299,6 +290,18 @@ bool TrailerLocalization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cu
 
     if (icp.hasConverged())
     {
+        const double fitness_score = icp.getFitnessScore();
+        RCLCPP_INFO(get_logger(), "2D ICP fitness score: %.4f", fitness_score);
+
+        // Only update pose & map if the alignment quality is high (fitness score within threshold)
+        constexpr double max_acceptable_fitness = 0.05; // Mean squared distance threshold
+        if (fitness_score > max_acceptable_fitness)
+        {
+            RCLCPP_WARN(get_logger(), "ICP converged but fitness score (%.4f) > threshold (%.4f), skipping map update.",
+                        fitness_score, max_acceptable_fitness);
+            return false;
+        }
+
         out_pose = Eigen::Isometry3f(icp.getFinalTransformation());
         out_pose.translation().z() = 0.0f; // Ensure z is exactly 0 in 2D plane
         return true;
@@ -306,7 +309,6 @@ bool TrailerLocalization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cu
 
     return false;
 }
-
 
 void TrailerLocalization::workerLoop()
 {

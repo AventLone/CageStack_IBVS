@@ -2,6 +2,7 @@
 #include <pcl/point_cloud.h>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
+#include <sensor_msgs/msg/imu.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <pcl/point_types.h>
 #include <tf2_eigen/tf2_eigen.hpp>
@@ -9,10 +10,10 @@
 #include <tf2_ros/transform_listener.h>
 #include <pcl/common/transforms.h>
 #include <pcl/registration/icp.h>
-#include <pcl/registration/gicp.h>
-#include <pcl/registration/transformation_estimation_2D.h>
-#include <pcl/registration/impl/icp.hpp>
-#include <pcl/registration/impl/gicp.hpp>
+// #include <pcl/registration/gicp.h>
+// #include <pcl/registration/transformation_estimation_2D.h>
+// #include <pcl/registration/impl/icp.hpp>
+// #include <pcl/registration/impl/gicp.hpp>
 #include <pcl/filters/voxel_grid.h>
 #include "perception/types/common.hpp"
 
@@ -44,6 +45,7 @@ public:
 private:
     /* Subscribers */
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr mLidarScanSub;
+    rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr mImuSub;
 
     /* Publishers */
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr mProcessedScanVisPub;

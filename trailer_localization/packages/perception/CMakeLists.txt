@@ -37,22 +37,33 @@ set(BUILD_EXAMPLES OFF CACHE BOOL "Disable cuCollections examples" FORCE)
 set(INSTALL_CUCO OFF CACHE BOOL "Disable cuCollections install rules" FORCE)
 add_subdirectory(cuCollections EXCLUDE_FROM_ALL)
 
-file(GLOB_RECURSE SOURCE_FILES CONFIGURE_DEPENDS
-    ${CMAKE_CURRENT_SOURCE_DIR}/source/*.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/source/*.cu
+file(GLOB_RECURSE SOURCE_FILES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/source/*.cpp)
+list(REMOVE_ITEM SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/source/LIO/SophusPose.cpp)
+
+add_library(sparsity_aware_gicp STATIC
+    source/LIO/SparsityAwareGICP.cu
+    source/LIO/SophusPose.cpp
 )
+target_include_directories(sparsity_aware_gicp PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
+    ${PCL_INCLUDE_DIRS}
+)
+target_link_libraries(sparsity_aware_gicp PRIVATE ${PCL_LIBRARIES} CUDA::cudart Sophus::Sophus cuco::cuco)
+target_compile_features(sparsity_aware_gicp PUBLIC cxx_std_23 cuda_std_17)
+target_compile_options(sparsity_aware_gicp PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:--expt-extended-lambda>
+    $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
+)
+
 ament_auto_add_executable(perception ${SOURCE_FILES})
 target_include_directories(perception PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
     ${PCL_INCLUDE_DIRS}
 )
-target_link_libraries(perception ${PCL_LIBRARIES} CUDA::cudart Sophus::Sophus cuco::cuco)
-target_compile_features(perception PUBLIC c_std_99 cxx_std_23 cuda_std_17)  # Require C99, C++23 and CUDA C++17
-target_compile_options(perception PRIVATE
-    $<$<COMPILE_LANGUAGE:CUDA>:--expt-extended-lambda>
-    $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
-)
+target_link_libraries(perception ${PCL_LIBRARIES} sparsity_aware_gicp)
+target_compile_features(perception PUBLIC c_std_99 cxx_std_23)  # Require C99 and C++23
 
 if (BUILD_TESTING)
     find_package(ament_lint_auto REQUIRED)

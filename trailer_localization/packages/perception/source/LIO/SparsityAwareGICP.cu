@@ -1,23 +1,24 @@
 #include "perception/LIO/SparsityAwareGICP.hpp"
 
 #include <cuco/static_map.cuh>
-#include <cuda/iterator>
+// #include <cuda/iterator>
 #include <cuda/std/functional>
 #include <cuda_runtime.h>
-#include <thrust/copy.h>
+// #include <thrust/copy.h>
 #include <thrust/device_vector.h>
 #include <thrust/fill.h>
 #include <thrust/host_vector.h>
-#include <thrust/sequence.h>
+// #include <thrust/sequence.h>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <cstdint>
+// #include <cstdint>
 #include <limits>
 #include <numeric>
 #include <stdexcept>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -329,7 +330,7 @@ TargetLayout makeTargetLayout(const std::vector<SparsePoint>& points)
     return layout;
 }
 
-Eigen::Isometry3f expUpdate(Eigen::Matrix<float, 6, 1> delta, const bool constrain_to_se2)
+Eigen::Isometry3f expUpdate(const Eigen::Matrix<float, 6, 1>& delta, const bool constrain_to_se2)
 {
     return sophusExpUpdate(delta, constrain_to_se2);
 }
@@ -510,8 +511,7 @@ __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const 
 }
 
 template<class VoxelMapRef>
-void findCorrespondencesCuda(const std::vector<SparsePoint>& source_points,
-                             const thrust::device_vector<DevicePoint>& device_source,
+void findCorrespondencesCuda(const thrust::device_vector<DevicePoint>& device_source,
                              const thrust::device_vector<DevicePoint>& device_target,
                              const thrust::device_vector<DeviceVoxelEntry>& device_voxels,
                              VoxelMapRef target_voxels,
@@ -530,7 +530,7 @@ void findCorrespondencesCuda(const std::vector<SparsePoint>& source_points,
     thrust::copy(transform_array.begin(), transform_array.end(), device_transform.begin());
 
     constexpr int block_size = 256;
-    const int grid_size = std::max(1, std::min(1024, static_cast<int>((source_points.size() + block_size - 1) / block_size)));
+    const int grid_size = std::max(1, std::min(1024, static_cast<int>((device_source.size() + block_size - 1) / block_size)));
     const float max_distance2 = config.max_correspondence_distance * config.max_correspondence_distance;
     findCorrespondencesKernel<<<grid_size, block_size>>>(thrust::raw_pointer_cast(device_source.data()), static_cast<int>(device_source.size()),
                                                          thrust::raw_pointer_cast(device_target.data()),
@@ -602,8 +602,54 @@ DeviceLinearSystem buildLinearSystemCuda(const std::size_t num_source_points,
 
 } // namespace
 
-SparsityAwareGICP::SparsityAwareGICP(SparsityAwareGICPConfig config) : mConfig(config)
+static std::vector<cuco::pair<std::int64_t, int>> makeVoxelPairs(const TargetLayout& layout)
+{
+    std::vector<cuco::pair<std::int64_t, int>> pairs;
+    pairs.reserve(layout.voxel_keys.size());
+    for (int index = 0; index < static_cast<int>(layout.voxel_keys.size()); ++index)
+    {
+        pairs.emplace_back(layout.voxel_keys[index], index);
+    }
+    return pairs;
+}
+
+struct SparsityAwareGICP::TargetCache
+{
+    using VoxelMap = decltype(cuco::static_map{
+        std::size_t{2},
+        cuco::empty_key{std::numeric_limits<std::int64_t>::min()},
+        cuco::empty_value{-1},
+        cuda::std::equal_to<std::int64_t>{},
+        cuco::linear_probing<1, cuco::default_hash_function<std::int64_t>>{}});
+
+    TargetLayout layout;
+    std::unordered_set<std::int64_t> occupied_voxels;
+    thrust::device_vector<DevicePoint> points;
+    thrust::device_vector<DeviceVoxelEntry> voxels;
+    VoxelMap voxel_map;
+
+    TargetCache(TargetLayout target_layout, const std::size_t max_target_voxels)
+        : layout(std::move(target_layout)), points(layout.points.begin(), layout.points.end()),
+          voxels(layout.voxels.begin(), layout.voxels.end()),
+          voxel_map(std::max<std::size_t>(2, max_target_voxels * 2),
+                    cuco::empty_key{std::numeric_limits<std::int64_t>::min()},
+                    cuco::empty_value{-1},
+                    cuda::std::equal_to<std::int64_t>{},
+                    cuco::linear_probing<1, cuco::default_hash_function<std::int64_t>>{})
+    {
+        occupied_voxels.insert(layout.voxel_keys.begin(), layout.voxel_keys.end());
+        const auto host_voxel_pairs = makeVoxelPairs(layout);
+        thrust::device_vector<cuco::pair<std::int64_t, int>> voxel_pairs(host_voxel_pairs.begin(), host_voxel_pairs.end());
+        voxel_map.insert(voxel_pairs.begin(), voxel_pairs.end());
+    }
+};
+
+SparsityAwareGICP::SparsityAwareGICP(const SparsityAwareGICPConfig& config) : mConfig(config)
 {}
+
+SparsityAwareGICP::~SparsityAwareGICP() = default;
+SparsityAwareGICP::SparsityAwareGICP(SparsityAwareGICP&&) noexcept = default;
+SparsityAwareGICP& SparsityAwareGICP::operator=(SparsityAwareGICP&&) noexcept = default;
 
 const SparsityAwareGICPConfig& SparsityAwareGICP::config() const noexcept
 {
@@ -613,76 +659,122 @@ const SparsityAwareGICPConfig& SparsityAwareGICP::config() const noexcept
 void SparsityAwareGICP::setConfig(const SparsityAwareGICPConfig& config) noexcept
 {
     mConfig = config;
+    clearTarget();
+}
+
+void SparsityAwareGICP::initializeTarget(const pcl::PointCloud<pcl::PointXYZ>& target)
+{
+    std::vector<SparsePoint> target_sparse = makeSparseCloud(target, mConfig);
+    estimateCovariances(target_sparse, mConfig);
+    mTarget = std::make_unique<TargetCache>(makeTargetLayout(target_sparse), mConfig.max_target_voxels);
+}
+
+void SparsityAwareGICP::insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>& points)
+{
+    if (points.empty())
+    {
+        return;
+    }
+    if (!hasTarget())
+    {
+        initializeTarget(points);
+        return;
+    }
+
+    std::vector<SparsePoint> sparse_points = makeSparseCloud(points, mConfig);
+    sparse_points.erase(std::remove_if(sparse_points.begin(), sparse_points.end(), [this](const SparsePoint& point) {
+        return mTarget->occupied_voxels.find(packVoxelKey(point.key)) != mTarget->occupied_voxels.end();
+    }), sparse_points.end());
+    if (sparse_points.empty() || mTarget->layout.voxels.size() >= mConfig.max_target_voxels)
+    {
+        return;
+    }
+
+    estimateCovariances(sparse_points, mConfig);
+    TargetLayout new_layout = makeTargetLayout(sparse_points);
+    const std::size_t available_voxels = mConfig.max_target_voxels - mTarget->layout.voxels.size();
+    if (new_layout.voxels.size() > available_voxels)
+    {
+        return;
+    }
+
+    const int point_offset = static_cast<int>(mTarget->layout.points.size());
+    const int voxel_offset = static_cast<int>(mTarget->layout.voxels.size());
+    for (auto& voxel : new_layout.voxels)
+    {
+        voxel.start += point_offset;
+    }
+
+    std::vector<cuco::pair<std::int64_t, int>> host_voxel_pairs;
+    host_voxel_pairs.reserve(new_layout.voxel_keys.size());
+    for (int index = 0; index < static_cast<int>(new_layout.voxel_keys.size()); ++index)
+    {
+        host_voxel_pairs.emplace_back(new_layout.voxel_keys[index], voxel_offset + index);
+    }
+
+    mTarget->points.insert(mTarget->points.end(), new_layout.points.begin(), new_layout.points.end());
+    mTarget->voxels.insert(mTarget->voxels.end(), new_layout.voxels.begin(), new_layout.voxels.end());
+    thrust::device_vector<cuco::pair<std::int64_t, int>> voxel_pairs(host_voxel_pairs.begin(), host_voxel_pairs.end());
+    mTarget->voxel_map.insert(voxel_pairs.begin(), voxel_pairs.end());
+
+    mTarget->layout.points.insert(mTarget->layout.points.end(), new_layout.points.begin(), new_layout.points.end());
+    mTarget->layout.voxels.insert(mTarget->layout.voxels.end(), new_layout.voxels.begin(), new_layout.voxels.end());
+    mTarget->layout.voxel_keys.insert(mTarget->layout.voxel_keys.end(), new_layout.voxel_keys.begin(), new_layout.voxel_keys.end());
+    mTarget->occupied_voxels.insert(new_layout.voxel_keys.begin(), new_layout.voxel_keys.end());
+}
+
+void SparsityAwareGICP::clearTarget() noexcept
+{
+    mTarget.reset();
+}
+
+bool SparsityAwareGICP::hasTarget() const noexcept
+{
+    return mTarget != nullptr;
 }
 
 SparsityAwareGICPResult SparsityAwareGICP::align(const pcl::PointCloud<pcl::PointXYZ>& source,
-                                                 const pcl::PointCloud<pcl::PointXYZ>& target,
                                                  const Eigen::Isometry3f& initial_guess) const
 {
     SparsityAwareGICPResult result;
     result.transform = initial_guess;
 
-    if (source.empty() || target.empty())
+    if (source.empty() || !hasTarget())
     {
         return result;
     }
 
     std::vector<SparsePoint> source_sparse = makeSparseCloud(source, mConfig);
-    std::vector<SparsePoint> target_sparse = makeSparseCloud(target, mConfig);
     estimateCovariances(source_sparse, mConfig);
-    estimateCovariances(target_sparse, mConfig);
 
     result.num_source_points = source_sparse.size();
-    result.num_target_points = target_sparse.size();
-    if (source_sparse.empty() || target_sparse.empty())
+    result.num_target_points = mTarget->layout.points.size();
+    if (source_sparse.empty() || mTarget->layout.points.empty())
     {
         return result;
     }
 
-    const TargetLayout target_layout = makeTargetLayout(target_sparse);
     const std::vector<DevicePoint> source_device_points = toDevicePoints(source_sparse);
     thrust::device_vector<DevicePoint> device_source(source_device_points.begin(), source_device_points.end());
-    thrust::device_vector<DevicePoint> device_target(target_layout.points.begin(), target_layout.points.end());
-    thrust::device_vector<DeviceVoxelEntry> device_voxels(target_layout.voxels.begin(), target_layout.voxels.end());
     thrust::device_vector<DeviceCorrespondence> device_correspondences(source_sparse.size());
     thrust::device_vector<float> device_transform(12);
-
-    constexpr std::int64_t empty_key = std::numeric_limits<std::int64_t>::min();
-    constexpr int empty_value = -1;
-    constexpr double load_factor = 0.5;
-    const std::size_t map_capacity = std::max<std::size_t>(2, static_cast<std::size_t>(std::ceil(target_layout.voxels.size() / load_factor)));
-    cuco::static_map target_voxel_map{
-        map_capacity,
-        cuco::empty_key{empty_key},
-        cuco::empty_value{empty_value},
-        cuda::std::equal_to<std::int64_t>{},
-        cuco::linear_probing<1, cuco::default_hash_function<std::int64_t>>{}};
-
-    thrust::device_vector<std::int64_t> device_voxel_keys(target_layout.voxel_keys.begin(), target_layout.voxel_keys.end());
-    thrust::device_vector<int> device_voxel_indices(target_layout.voxels.size());
-    thrust::sequence(device_voxel_indices.begin(), device_voxel_indices.end(), 0);
-    auto voxel_pairs = cuda::make_transform_iterator(
-        cuda::counting_iterator<std::size_t>{0},
-        cuda::proclaim_return_type<cuco::pair<std::int64_t, int>>(
-            [keys = device_voxel_keys.begin(), values = device_voxel_indices.begin()] __device__(const auto index) {
-                return cuco::pair<std::int64_t, int>{keys[index], values[index]};
-            }));
-    target_voxel_map.insert(voxel_pairs, voxel_pairs + target_layout.voxels.size());
-    const auto target_voxel_ref = target_voxel_map.ref(cuco::find);
+    const auto target_voxel_ref = mTarget->voxel_map.ref(cuco::find);
 
     for (int iteration = 0; iteration < mConfig.max_iterations; ++iteration)
     {
-        findCorrespondencesCuda(source_sparse, device_source, device_target, device_voxels, target_voxel_ref, device_correspondences,
-                                device_transform, result.transform, mConfig);
-        DeviceLinearSystem linear_system = buildLinearSystemCuda(source_sparse.size(), device_source, device_target,
-                                                                 device_correspondences, device_transform, mConfig);
-        if (linear_system.valid_count == 0 || !linear_system.hessian.allFinite() || !linear_system.gradient.allFinite())
+        findCorrespondencesCuda(device_source, mTarget->points, mTarget->voxels, target_voxel_ref,
+                                device_correspondences, device_transform, result.transform, mConfig);
+        auto [hessian, gradient, valid_count, mean_squared_error] = buildLinearSystemCuda(source_sparse.size(),
+                                                                                          device_source, mTarget->points,
+                                                                                          device_correspondences,
+                                                                                          device_transform, mConfig);
+        if (valid_count == 0 || !hessian.allFinite() || !gradient.allFinite())
         {
             break;
         }
 
-        linear_system.hessian += Eigen::Matrix<float, 6, 6>::Identity() * mConfig.damping_factor;
-        Eigen::Matrix<float, 6, 1> delta = linear_system.hessian.ldlt().solve(-linear_system.gradient);
+        hessian += Eigen::Matrix<float, 6, 6>::Identity() * mConfig.damping_factor;
+        Eigen::Matrix<float, 6, 1> delta = hessian.ldlt().solve(-gradient);
         if (!delta.allFinite())
         {
             break;
@@ -697,12 +789,12 @@ SparsityAwareGICPResult SparsityAwareGICP::align(const pcl::PointCloud<pcl::Poin
 
         result.transform = expUpdate(delta, mConfig.constrain_to_se2) * result.transform;
         result.iterations = iteration + 1;
-        result.num_correspondences = linear_system.valid_count;
-        result.fitness_score = linear_system.mean_squared_error;
+        result.num_correspondences = valid_count;
+        result.fitness_score = mean_squared_error;
 
         const float translation_step = delta.head<3>().norm();
-        const float rotation_step = delta.tail<3>().norm();
-        if (translation_step < mConfig.convergence_translation && rotation_step < mConfig.convergence_rotation)
+        if (const float rotation_step = delta.tail<3>().norm();
+            translation_step < mConfig.convergence_translation && rotation_step < mConfig.convergence_rotation)
         {
             result.converged = true;
             break;

@@ -10,6 +10,9 @@
 #include <tf2_ros/transform_listener.h>
 #include <pcl/common/transforms.h>
 #include <pcl/filters/voxel_grid.h>
+#include <algorithm>
+#include <numeric>
+#include <vector>
 #include "perception/LIO/SparsityAwareGICP.hpp"
 #include "perception/types/common.hpp"
 
@@ -63,13 +66,14 @@ private:
     tf2_ros::Buffer mTfBuffer;
     tf2_ros::TransformListener mTfListener;
 
-    /* ICP template, voxel map and estimated pose */
-    pcl::PointCloud<pcl::PointXYZ>::Ptr mTrailerTemplate;
+    /* Trailer voxel map and estimated pose */
     pcl::PointCloud<pcl::PointXYZ>::Ptr mTrailerVoxelMap;
     Eigen::Isometry3f mTrailerPose{Eigen::Isometry3f::Identity()};
     ROI mTrailerRoi{};
     // IteratedESKF mLioFilter;
     perception::lio::SparsityAwareGICP mGicp;
+    std::vector<double> mGicpDurationsMs;
+    std::size_t mGicpDurationCount{0};
     // double mFilterTime{-1.0};
 
     void initSubscribers()
@@ -150,7 +154,9 @@ private:
 
     void makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src_scan);
 
-    bool alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_scan, Eigen::Isometry3f& out_pose) const;
+    bool alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_scan, Eigen::Isometry3f& out_pose);
+
+    void recordGicpDuration(double duration_ms);
 
     void updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan_in_truck);
 

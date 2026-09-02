@@ -4,7 +4,9 @@
 #include "perception/tools/feature_detect_3d.hpp"
 #include "perception/tools/filter_3d.h"
 #include <chrono>
+#include <numeric>
 #include <opencv2/opencv.hpp>
+
 #include "perception/types/common.hpp"
 
 void TrailerLocalization::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src_scan)
@@ -210,7 +212,7 @@ void TrailerLocalization::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src
     voxel_filter.setInputCloud(initial_cloud);
     voxel_filter.filter(*mTrailerVoxelMap);
 
-    mTrailerTemplate = mTrailerVoxelMap;
+    mGicp.initializeTarget(*mTrailerVoxelMap);
 }
 
 void TrailerLocalization::updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan_in_truck)
@@ -241,8 +243,7 @@ void TrailerLocalization::updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& s
     voxel_filter.filter(*filtered_map);
     mTrailerVoxelMap = filtered_map;
 
-    // Synchronize template with the updated voxel map
-    mTrailerTemplate = mTrailerVoxelMap;
+    mGicp.insertTargetPoints(*scan_in_roi);
 }
 
 // bool TrailerLocalization::updateLio(const Eigen::Isometry3f& lidar_pose, const rclcpp::Time& scan_stamp)
@@ -291,21 +292,62 @@ void TrailerLocalization::updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& s
 //     mTrailerPosePub->publish(pose_msg);
 // }
 
-bool TrailerLocalization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_scan, Eigen::Isometry3f& out_pose) const
+void TrailerLocalization::recordGicpDuration(const double duration_ms)
+{
+    if (constexpr std::size_t statistics_window_size = 200;
+        mGicpDurationsMs.size() == statistics_window_size)
+    {
+        mGicpDurationsMs.erase(mGicpDurationsMs.begin());
+    }
+    mGicpDurationsMs.push_back(duration_ms);
+    ++mGicpDurationCount;
+
+    if (constexpr std::size_t report_interval = 50;
+        mGicpDurationsMs.size() < report_interval || mGicpDurationCount % report_interval != 0)
+    {
+        return;
+    }
+
+    std::vector<double> sorted_durations = mGicpDurationsMs;
+    std::ranges::sort(sorted_durations);
+    const auto percentile = [&sorted_durations](const double fraction)
+        {
+            const std::size_t index = static_cast<std::size_t>(std::ceil(fraction * static_cast<double>(sorted_durations.size()))) - 1;
+            return sorted_durations[std::min(index, sorted_durations.size() - 1)];
+        };
+    const double mean = std::accumulate(mGicpDurationsMs.begin(), mGicpDurationsMs.end(), 0.0) /
+                        static_cast<double>(mGicpDurationsMs.size());
+
+    RCLCPP_INFO(get_logger(),
+                "CUDA sparse GICP latency (%zu-frame window): mean %.2f ms, P50 %.2f ms, P95 %.2f ms, P99 %.2f ms, max %.2f ms",
+                mGicpDurationsMs.size(), mean, percentile(0.50), percentile(0.95), percentile(0.99), sorted_durations.back());
+}
+
+bool TrailerLocalization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_scan, Eigen::Isometry3f& out_pose)
 {
     RCLCPP_INFO(get_logger(), "CUDA sparsity-aware GICP SE(3) start.");
-    if (mTrailerTemplate == nullptr || mTrailerTemplate->empty() || current_scan == nullptr || current_scan->empty())
+    if (mTrailerVoxelMap == nullptr || mTrailerVoxelMap->empty() || current_scan == nullptr || current_scan->empty())
     {
         RCLCPP_WARN(get_logger(), "GICP failed!");
         return false;
     }
 
     const auto start_time = std::chrono::high_resolution_clock::now();
-    const auto result = mGicp.align(*current_scan, *mTrailerTemplate, mTrailerPose.inverse());
+    perception::lio::SparsityAwareGICPResult result;
+    try
+    {
+        result = mGicp.align(*current_scan, mTrailerPose.inverse());
+    }
+    catch (const std::exception& exception)
+    {
+        RCLCPP_ERROR(get_logger(), "CUDA sparse GICP failed: %s", exception.what());
+        return false;
+    }
 
     const auto end_time = std::chrono::high_resolution_clock::now();
     const double duration_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
     RCLCPP_INFO(get_logger(), "CUDA sparse GICP computation time: %.2f ms", duration_ms);
+    recordGicpDuration(duration_ms);
 
     if (result.converged)
     {
@@ -356,7 +398,7 @@ void TrailerLocalization::workerLoop()
         pcl::fromROSMsg(scan_msg, lidar_points);
 
         const rclcpp::Time lidar_scan_stamp(scan_msg.header.stamp);
-        // if (mTrailerTemplate != nullptr)
+        // if (mTrailerVoxelMap != nullptr)
         // {
         //     std::lock_guard lock(mLioMutex);
         //     if (mFilterTime >= 0.0)
@@ -372,50 +414,46 @@ void TrailerLocalization::workerLoop()
         pcl::PointCloud<pcl::PointXYZ> lidar_points_truck;
         transformLidarScan(lidar_points, lidar_scan_stamp, lidar_points_truck);
 
-        /* 2. Get lidar scan within ROI */
-        auto scan_in_roi = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-        scan_in_roi->reserve(lidar_points_truck.size() / 2);
-        for (const auto& point : lidar_points_truck)
-        {
-            if (point.x < 1.0f && point.y > -10.0f && point.y < 10.0f && point.z > 0.1f)
-            {
-                scan_in_roi->emplace_back(point);
-            }
-        }
-
-        if (mTrailerTemplate == nullptr)
+        if (mTrailerVoxelMap == nullptr)
         {
             makeTemplate(lidar_points_truck);
+            continue;
         }
-        else
+
+        /* 2. Get lidar scan within ROI */
+        ROI scan_roi = mTrailerRoi;
+        scan_roi.min_x -= 1.0f;
+        scan_roi.max_x += 1.0f;
+        scan_roi.min_y -= 1.0f;
+        scan_roi.max_y += 1.0f;
+
+        auto scan_in_roi = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+        scan_in_roi->reserve(lidar_points_truck.size() / 3);
+        filter3d::getCloud(lidar_points_truck, scan_in_roi, nullptr, mTrailerPose, scan_roi);
+
+        if (alignICP(scan_in_roi, mTrailerPose))
         {
-            if (alignICP(scan_in_roi, mTrailerPose))
-            {
-                // if (!updateLio(mTrailerPose, lidar_scan_stamp))
-                // {
-                //     RCLCPP_WARN(get_logger(), "IESKF LiDAR update rejected.");
-                //     continue;
-                // }
-                updateVoxelMap(lidar_points_truck);
+            // if (!updateLio(mTrailerPose, lidar_scan_stamp))
+            // {
+            //     RCLCPP_WARN(get_logger(), "IESKF LiDAR update rejected.");
+            //     continue;
+            // }
+            updateVoxelMap(lidar_points_truck);
 
-                pcl::PointCloud<pcl::PointXYZ> aligned_map;
-                pcl::transformPointCloud(*mTrailerVoxelMap, aligned_map, mTrailerPose);
+            pcl::PointCloud<pcl::PointXYZ> aligned_map;
+            pcl::transformPointCloud(*mTrailerVoxelMap, aligned_map, mTrailerPose);
 
-                sensor_msgs::msg::PointCloud2 scan_vis_msg;
-                pcl::toROSMsg(aligned_map, scan_vis_msg);
-                scan_vis_msg.header = scan_msg.header;
-                scan_vis_msg.header.frame_id = "LOLA";
-                mProcessedScanVisPub->publish(scan_vis_msg);
-            }
+            sensor_msgs::msg::PointCloud2 scan_vis_msg;
+            pcl::toROSMsg(aligned_map, scan_vis_msg);
+            scan_vis_msg.header = scan_msg.header;
+            scan_vis_msg.header.frame_id = "LOLA";
+            mProcessedScanVisPub->publish(scan_vis_msg);
         }
 
-        if (mTrailerTemplate != nullptr)
-        {
-            geometry_msgs::msg::PoseStamped pose_msg;
-            pose_msg.header = scan_msg.header;
-            pose_msg.header.frame_id = "LOLA";
-            pose_msg.pose = tf2::toMsg(Eigen::Isometry3d(mTrailerPose.cast<double>()));
-            mTrailerPosePub->publish(pose_msg);
-        }
+        geometry_msgs::msg::PoseStamped pose_msg;
+        pose_msg.header = scan_msg.header;
+        pose_msg.header.frame_id = "LOLA";
+        pose_msg.pose = tf2::toMsg(Eigen::Isometry3d(mTrailerPose.cast<double>()));
+        mTrailerPosePub->publish(pose_msg);
     }
 }

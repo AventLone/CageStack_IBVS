@@ -1,8 +1,7 @@
 #pragma once
-
-#include <Eigen/Dense>
 #include <cstddef>
 #include <limits>
+#include <memory>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 
@@ -22,6 +21,7 @@ struct SparsityAwareGICPConfig
     float cauchy_kernel_scale{0.30f};
     float max_fitness_score{0.10f};
     std::size_t min_correspondences{80};
+    std::size_t max_target_voxels{20000};
     float damping_factor{1.0e-4f};
     int max_iterations{30};
     float convergence_translation{1.0e-4f};
@@ -43,17 +43,28 @@ struct SparsityAwareGICPResult
 class SparsityAwareGICP
 {
 public:
-    explicit SparsityAwareGICP(SparsityAwareGICPConfig config = {});
+    explicit SparsityAwareGICP(const SparsityAwareGICPConfig& config = {});
+    ~SparsityAwareGICP();
+
+    SparsityAwareGICP(const SparsityAwareGICP&) = delete;
+    SparsityAwareGICP& operator=(const SparsityAwareGICP&) = delete;
+    SparsityAwareGICP(SparsityAwareGICP&&) noexcept;
+    SparsityAwareGICP& operator=(SparsityAwareGICP&&) noexcept;
 
     [[nodiscard]] const SparsityAwareGICPConfig& config() const noexcept;
     void setConfig(const SparsityAwareGICPConfig& config) noexcept;
+    void initializeTarget(const pcl::PointCloud<pcl::PointXYZ>& target);
+    void insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>& points);
+    void clearTarget() noexcept;
+    [[nodiscard]] bool hasTarget() const noexcept;
 
-    [[nodiscard]] SparsityAwareGICPResult align(
-        const pcl::PointCloud<pcl::PointXYZ>& source,
-        const pcl::PointCloud<pcl::PointXYZ>& target,
-        const Eigen::Isometry3f& initial_guess) const;
+    [[nodiscard]] SparsityAwareGICPResult align(const pcl::PointCloud<pcl::PointXYZ>& source,
+                                                const Eigen::Isometry3f& initial_guess) const;
 
 private:
+    struct TargetCache;
+
     SparsityAwareGICPConfig mConfig;
+    std::unique_ptr<TargetCache> mTarget;
 };
 } // namespace perception::lio

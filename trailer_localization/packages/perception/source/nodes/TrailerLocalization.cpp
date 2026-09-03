@@ -332,11 +332,18 @@ bool TrailerLocalization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cu
         return false;
     }
 
+    // Eigen::Isometry3f initial_guess;
+    // {
+    //     std::lock_guard lock(mFusionMutex);
+    //     initial_guess = mFusionFilter.initialized() ? mFusionFilter.pose() : mTrailerPose.inverse();
+    // }
+    const Eigen::Isometry3f initial_guess = mTrailerPose.inverse();
+
     const auto start_time = std::chrono::high_resolution_clock::now();
     perception::lio::SparsityAwareGICPResult result;
     try
     {
-        result = mGicp.align(*current_scan, mTrailerPose.inverse());
+        result = mGicp.align(*current_scan, initial_guess);
     }
     catch (const std::exception& exception)
     {
@@ -412,7 +419,8 @@ void TrailerLocalization::workerLoop()
 
         /* 1. Get lidar scan in base truck frame */
         pcl::PointCloud<pcl::PointXYZ> lidar_points_truck;
-        transformLidarScan(lidar_points, lidar_scan_stamp, lidar_points_truck);
+        // transformLidarScan(lidar_points, lidar_scan_stamp, lidar_points_truck);
+        pcl::transformPointCloud(lidar_points, lidar_points_truck, T_truck2lidar);
 
         if (mTrailerVoxelMap == nullptr)
         {

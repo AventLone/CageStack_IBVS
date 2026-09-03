@@ -8,8 +8,8 @@
 template<class SystemModel, class MeasureModel, class StateT>
 class UKF
 {
-    using MeasurementT = typename MeasureModel::MeasurementT;
-    using ControlT = typename SystemModel::ControlT;
+    using MeasurementT = MeasureModel::MeasurementT;
+    using ControlT = SystemModel::ControlT;
 
     static_assert(StateT::RowsAtCompileTime > 0, "State vector must contain at least 1 element");
     static_assert(MeasurementT::RowsAtCompileTime > 0, "State vector must contain at least 1 element");
@@ -19,7 +19,7 @@ class UKF
     static_assert(std::is_same_v<typename StateT::Scalar, typename MeasurementT::Scalar>,
                   "State and Measurement scalar types must be identical");
 
-    using Type = typename StateT::Scalar;
+    using Type = StateT::Scalar;
     static constexpr auto N = StateT::RowsAtCompileTime;
     /* The number of sigma points (depending on state dimensionality) */
     static constexpr int SigmaPointsCount = 2 * N + 1;

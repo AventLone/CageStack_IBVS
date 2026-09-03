@@ -9,7 +9,7 @@ namespace perception::lio
 {
 struct SparsityAwareGICPConfig
 {
-    float voxel_size{0.20f};
+    float voxel_size{0.10f};
     float min_point_spacing{0.04f};
     int max_points_per_voxel{24};
     int adjacent_voxels{2};

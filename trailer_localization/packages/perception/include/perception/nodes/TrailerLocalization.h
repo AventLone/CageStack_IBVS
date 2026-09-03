@@ -2,8 +2,8 @@
 #include <pcl/point_cloud.h>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
-#include <sensor_msgs/msg/imu.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/twist_stamped.hpp>
 #include <pcl/point_types.h>
 #include <tf2_eigen/tf2_eigen.hpp>
 #include <tf2_ros/buffer.h>
@@ -14,6 +14,7 @@
 #include <numeric>
 #include <vector>
 #include "perception/LIO/SparsityAwareGICP.hpp"
+// #include "perception/kalman_filter/EKF.hpp"
 #include "perception/types/common.hpp"
 
 class TrailerLocalization : public rclcpp::Node
@@ -21,6 +22,20 @@ class TrailerLocalization : public rclcpp::Node
 public:
     explicit TrailerLocalization(const std::string& node_name) : Node(node_name), mTfBuffer(this->get_clock()), mTfListener(mTfBuffer)
     {
+        /* Lookup transform */
+        while (rclcpp::ok())
+        {
+            try
+            {
+                T_truck2lidar = tf2::transformToEigen(mTfBuffer.lookupTransform("LOLA", "JT128", tf2::TimePointZero)).cast<float>();
+                break;
+            }
+            catch (const tf2::TransformException& ex)
+            {
+                RCLCPP_ERROR(this->get_logger(), "Could not transform fork to body: %s", ex.what());
+            }
+        }
+
         initSubscribers();
         initPublisher();
         mWorker = std::thread(&TrailerLocalization::workerLoop, this);
@@ -44,7 +59,7 @@ public:
 private:
     /* Subscribers */
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr mLidarScanSub;
-    // rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr mImuSub;
+    // rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr mWheelOdomSub;
 
     /* Publishers */
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr mProcessedScanVisPub;
@@ -58,19 +73,19 @@ private:
     bool mIsShutdown{false};
     std::thread mWorker;
     std::mutex mScanBufferMutex;
-    // std::mutex mImuBufferMutex;
-    // std::mutex mLioMutex;
+    // std::mutex mFusionMutex;
     std::condition_variable mTrigger;
 
     /* TF tree utilities */
     tf2_ros::Buffer mTfBuffer;
     tf2_ros::TransformListener mTfListener;
+    Eigen::Isometry3f T_truck2lidar;
 
     /* Trailer voxel map and estimated pose */
     pcl::PointCloud<pcl::PointXYZ>::Ptr mTrailerVoxelMap;
     Eigen::Isometry3f mTrailerPose{Eigen::Isometry3f::Identity()};
     ROI mTrailerRoi{};
-    // IteratedESKF mLioFilter;
+    // perception::kalman::AckermannLidarEKF mFusionFilter;
     perception::lio::SparsityAwareGICP mGicp;
     std::vector<double> mGicpDurationsMs;
     std::size_t mGicpDurationCount{0};
@@ -92,49 +107,33 @@ private:
                     mTrigger.notify_one();
                 });
 
-        // mImuSub = create_subscription<sensor_msgs::msg::Imu>("/imu", rclcpp::SensorDataQoS(),
-        //     [this](const sensor_msgs::msg::Imu::ConstSharedPtr& imu_msg)
+        // mWheelOdomSub = create_subscription<geometry_msgs::msg::TwistStamped>("/wheel_odometry", rclcpp::SensorDataQoS(),
+        //     [this](const geometry_msgs::msg::TwistStamped::ConstSharedPtr& odometry_msg)
         //     {
-        //         IMUSample sample;
-        //         sample.gyro = Eigen::Vector3f(
-        //             static_cast<float>(imu_msg->angular_velocity.x),
-        //             static_cast<float>(imu_msg->angular_velocity.y),
-        //             static_cast<float>(imu_msg->angular_velocity.z));
-        //         sample.acceleration = Eigen::Vector3f(
-        //             static_cast<float>(imu_msg->linear_acceleration.x),
-        //             static_cast<float>(imu_msg->linear_acceleration.y),
-        //             static_cast<float>(imu_msg->linear_acceleration.z));
-
-        //         const rclcpp::Time stamp(imu_msg->header.stamp);
-        //         const double imu_time = stamp.seconds();
+        //         perception::kalman::AckermannMeasurement measurement;
+        //         // Temporary topic contract: linear.x is wheel speed [m/s], angular.z is steering angle [rad].
+        //         measurement.speed = static_cast<float>(odometry_msg->twist.linear.x);
+        //         measurement.steering_angle = static_cast<float>(odometry_msg->twist.angular.z);
+        //
+        //         const double odometry_time = rclcpp::Time(odometry_msg->header.stamp).seconds();
+        //         std::lock_guard lock(mFusionMutex);
+        //         if (!mFusionFilter.initialized())
         //         {
-        //             std::lock_guard lock(mImuBufferMutex);
-        //             mImuBuffer.emplace_back(imu_time, sample);
-        //             while (mImuBuffer.size() > 4000)
-        //             {
-        //                 mImuBuffer.pop_front();
-        //             }
+        //             return;
         //         }
-
+        //         if (mFilterTime >= 0.0 && odometry_time > mFilterTime)
         //         {
-        //             std::lock_guard lock(mLioMutex);
-        //             if (mFilterTime < 0.0)
-        //             {
-        //                 mFilterTime = imu_time;
-        //             }
-        //             else if (imu_time > mFilterTime)
-        //             {
-        //                 mLioFilter.predict(sample, static_cast<float>(imu_time - mFilterTime));
-        //                 mFilterTime = imu_time;
-        //             }
-        //             else
-        //             {
-        //                 return;
-        //             }
+        //             mFusionFilter.predict(measurement, static_cast<float>(odometry_time - mFilterTime));
+        //             mTrailerPose = mFusionFilter.pose().inverse();
         //         }
-        //         publishLioPose(stamp);
+        //         mFilterTime = odometry_time;
+        //
+        //         geometry_msgs::msg::PoseStamped pose_msg;
+        //         pose_msg.header = odometry_msg->header;
+        //         pose_msg.header.frame_id = "LOLA";
+        //         pose_msg.pose = tf2::toMsg(Eigen::Isometry3d(mTrailerPose.cast<double>()));
+        //         mTrailerPosePub->publish(pose_msg);
         //     });
-
     }
 
     void initPublisher()
@@ -144,13 +143,13 @@ private:
     }
 
     /* Transform LiDAR scan to base truck frame */
-    void transformLidarScan(const pcl::PointCloud<pcl::PointXYZ>& src_scan, const rclcpp::Time& stamp,
-                            pcl::PointCloud<pcl::PointXYZ>& dst_scan) const
-    {
-        const auto T_truck2lidar = tf2::transformToEigen(mTfBuffer.lookupTransform("LOLA", "JT128",
-                                                         stamp, tf2::durationFromSec(0.05))).cast<float>();
-        pcl::transformPointCloud(src_scan, dst_scan, T_truck2lidar);
-    }
+    // void transformLidarScan(const pcl::PointCloud<pcl::PointXYZ>& src_scan, const rclcpp::Time& stamp,
+    //                         pcl::PointCloud<pcl::PointXYZ>& dst_scan) const
+    // {
+    //     const auto T_truck2lidar = tf2::transformToEigen(mTfBuffer.lookupTransform("LOLA", "JT128",
+    //                                                      stamp, tf2::durationFromSec(0.05))).cast<float>();
+    //     pcl::transformPointCloud(src_scan, dst_scan, T_truck2lidar);
+    // }
 
     void makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src_scan);
 

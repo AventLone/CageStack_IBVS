@@ -2,7 +2,7 @@
 
 #include <cuco/static_map.cuh>
 // #include <cuda/iterator>
-#include <cuda/std/functional>
+// #include <cuda/std/functional>
 #include <cuda_runtime.h>
 // #include <thrust/copy.h>
 #include <thrust/device_vector.h>
@@ -165,9 +165,11 @@ std::vector<SparsePoint> makeSparseCloud(const pcl::PointCloud<pcl::PointXYZ>& c
             continue;
         }
 
-        const bool too_close = std::any_of(voxel_points.cbegin(), voxel_points.cend(), [&](const std::size_t index) {
-            return (points[index].position - point.position).squaredNorm() < min_spacing2;
-        });
+        const bool too_close = std::any_of(voxel_points.cbegin(), voxel_points.cend(), [&](const std::size_t index)
+            {
+                return (points[index].position - point.position).squaredNorm() < min_spacing2;
+            });
+
         if (too_close)
         {
             continue;
@@ -343,8 +345,8 @@ __global__ void findCorrespondencesKernel(const DevicePoint* source_points, cons
                                           const float voxel_size, const int adjacent_voxels,
                                           const float max_correspondence_distance2, const float* transform)
 {
-    int index = blockIdx.x * blockDim.x + threadIdx.x;
-    const int stride = blockDim.x * gridDim.x;
+    int index = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
+    const int stride = static_cast<int>(blockDim.x * gridDim.x);
 
     while (index < num_source_points)
     {
@@ -378,8 +380,8 @@ __global__ void findCorrespondencesKernel(const DevicePoint* source_points, cons
                         const float diff_x = transformed_x - target.x;
                         const float diff_y = transformed_y - target.y;
                         const float diff_z = transformed_z - target.z;
-                        const float distance2 = diff_x * diff_x + diff_y * diff_y + diff_z * diff_z;
-                        if (distance2 < best_distance2)
+                        if (const float distance2 = diff_x * diff_x + diff_y * diff_y + diff_z * diff_z;
+                            distance2 < best_distance2)
                         {
                             best_distance2 = distance2;
                             best_target = target_index;
@@ -480,8 +482,8 @@ __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const 
                 const float weight = cauchy_kernel_scale > 0.0f ? 1.0f / (1.0f + mahalanobis_error / kernel_scale2) : 1.0f;
 
                 Eigen::Matrix<float, 3, 6> jacobian;
-                jacobian.template block<3, 3>(0, 0) = Eigen::Matrix3f::Identity();
-                jacobian.template block<3, 3>(0, 3) = -skewMatrix(transformed_source);
+                jacobian.block<3, 3>(0, 0) = Eigen::Matrix3f::Identity();
+                jacobian.block<3, 3>(0, 3) = -skewMatrix(transformed_source);
 
                 const Eigen::Matrix<float, 6, 6> local_hessian = jacobian.transpose() * weight * precision * jacobian;
                 const Eigen::Matrix<float, 6, 1> local_gradient = jacobian.transpose() * weight * precision_residual;
@@ -522,11 +524,10 @@ void findCorrespondencesCuda(const thrust::device_vector<DevicePoint>& device_so
 {
     const Eigen::Matrix3f rotation = transform.rotation();
     const Eigen::Vector3f translation = transform.translation();
-    const std::array<float, 12> transform_array{
-        rotation(0, 0), rotation(0, 1), rotation(0, 2),
-        rotation(1, 0), rotation(1, 1), rotation(1, 2),
-        rotation(2, 0), rotation(2, 1), rotation(2, 2),
-        translation.x(), translation.y(), translation.z()};
+    const std::array<float, 12> transform_array{rotation(0, 0), rotation(0, 1), rotation(0, 2),
+                                                rotation(1, 0), rotation(1, 1), rotation(1, 2),
+                                                rotation(2, 0), rotation(2, 1), rotation(2, 2),
+                                                translation.x(), translation.y(), translation.z()};
     thrust::copy(transform_array.begin(), transform_array.end(), device_transform.begin());
 
     constexpr int block_size = 256;
@@ -682,9 +683,11 @@ void SparsityAwareGICP::insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>&
     }
 
     std::vector<SparsePoint> sparse_points = makeSparseCloud(points, mConfig);
-    sparse_points.erase(std::remove_if(sparse_points.begin(), sparse_points.end(), [this](const SparsePoint& point) {
-        return mTarget->occupied_voxels.find(packVoxelKey(point.key)) != mTarget->occupied_voxels.end();
-    }), sparse_points.end());
+    sparse_points.erase(std::remove_if(sparse_points.begin(), sparse_points.end(), [this](const SparsePoint& point)
+        {
+            return mTarget->occupied_voxels.find(packVoxelKey(point.key)) != mTarget->occupied_voxels.end();
+        }), sparse_points.end());
+
     if (sparse_points.empty() || mTarget->layout.voxels.size() >= mConfig.max_target_voxels)
     {
         return;
@@ -692,8 +695,8 @@ void SparsityAwareGICP::insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>&
 
     estimateCovariances(sparse_points, mConfig);
     TargetLayout new_layout = makeTargetLayout(sparse_points);
-    const std::size_t available_voxels = mConfig.max_target_voxels - mTarget->layout.voxels.size();
-    if (new_layout.voxels.size() > available_voxels)
+    if (const std::size_t available_voxels = mConfig.max_target_voxels - mTarget->layout.voxels.size();
+        new_layout.voxels.size() > available_voxels)
     {
         return;
     }
@@ -755,7 +758,7 @@ SparsityAwareGICPResult SparsityAwareGICP::align(const pcl::PointCloud<pcl::Poin
     }
 
     const std::vector<DevicePoint> source_device_points = toDevicePoints(source_sparse);
-    thrust::device_vector<DevicePoint> device_source(source_device_points.begin(), source_device_points.end());
+    const thrust::device_vector<DevicePoint> device_source(source_device_points.begin(), source_device_points.end());
     thrust::device_vector<DeviceCorrespondence> device_correspondences(source_sparse.size());
     thrust::device_vector<float> device_transform(12);
     const auto target_voxel_ref = mTarget->voxel_map.ref(cuco::find);

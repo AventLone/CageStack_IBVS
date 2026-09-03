@@ -62,7 +62,7 @@ target_include_directories(perception PUBLIC
     $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
     ${PCL_INCLUDE_DIRS}
 )
-target_link_libraries(perception ${PCL_LIBRARIES} sparsity_aware_gicp)
+target_link_libraries(perception ${PCL_LIBRARIES} Sophus::Sophus sparsity_aware_gicp)
 target_compile_features(perception PUBLIC c_std_99 cxx_std_23)  # Require C99 and C++23
 
 if (BUILD_TESTING)

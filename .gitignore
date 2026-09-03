@@ -2,6 +2,7 @@
 data/
 install/
 build/
+build-verify/
 log/
 __pycache__/
 

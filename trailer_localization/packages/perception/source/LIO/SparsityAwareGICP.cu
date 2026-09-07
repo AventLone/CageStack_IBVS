@@ -1,6 +1,7 @@
 #include "perception/LIO/SparsityAwareGICP.hpp"
 #include <cuco/static_map.cuh>
 #include <cuda_runtime.h>
+#include <math_constants.h>
 #include <thrust/device_vector.h>
 #include <thrust/fill.h>
 #include <thrust/host_vector.h>
@@ -17,7 +18,7 @@
 
 namespace perception::lio
 {
-Eigen::Isometry3f sophusExpUpdate(Eigen::Matrix<float, 6, 1> delta);
+Eigen::Isometry3f sophusExpUpdate(const Eigen::Matrix<float, 6, 1>& delta);
 
 namespace
 {
@@ -102,13 +103,21 @@ struct TargetLayout
     std::vector<std::int64_t> voxel_keys;
 };
 
-struct DeviceLinearSystem
+struct DeviceAlignmentState
 {
-    Eigen::Matrix<float, 6, 6> hessian{Eigen::Matrix<float, 6, 6>::Zero()};
-    Eigen::Matrix<float, 6, 1> gradient{Eigen::Matrix<float, 6, 1>::Zero()};
-    std::size_t valid_count{0};
-    float mean_squared_error{std::numeric_limits<float>::infinity()};
+    float fitness_score{std::numeric_limits<float>::infinity()};
+    int raw_correspondences{0};
+    int num_correspondences{0};
+    int iterations{0};
+    int active{1};
+    int converged{0};
 };
+
+using DeviceVoxelMap = decltype(cuco::static_map{std::size_t{2},
+                                                   cuco::empty_key{std::numeric_limits<std::int64_t>::min()},
+                                                   cuco::empty_value{-1},
+                                                   cuda::std::equal_to<std::int64_t>{},
+                                                   cuco::linear_probing<1, cuco::default_hash_function<std::int64_t>>{}});
 
 HostVoxelKey pointToVoxel(const Eigen::Vector3f& point, const float voxel_size)
 {
@@ -174,105 +183,194 @@ std::vector<SparsePoint> makeSparseCloud(const pcl::PointCloud<pcl::PointXYZ>& c
     return points;
 }
 
-void estimateCovariances(std::vector<SparsePoint>& points, const SparsityAwareGICPConfig& config)
+template<class VoxelMapRef>
+__global__ void estimateCovariancesKernel(DevicePoint* points, const int num_points,
+                                          const DeviceVoxelEntry* voxel_entries, VoxelMapRef voxels,
+                                          const float voxel_size, const int voxel_radius,
+                                          const int min_neighbors, const int max_neighbors,
+                                          const float regularization)
 {
-    std::unordered_map<HostVoxelKey, std::vector<std::size_t>, HostVoxelKeyHash> voxel_index;
-    voxel_index.reserve(points.size());
-    for (std::size_t index = 0; index < points.size(); ++index)
+    constexpr int neighbor_capacity = 64;
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index >= num_points)
     {
-        voxel_index[points[index].key].push_back(index);
+        return;
     }
 
-    const int min_neighbors = std::max(3, config.min_covariance_neighbors);
-    const int max_neighbors = std::max(min_neighbors, config.max_covariance_neighbors);
-    const float regularization = std::max(1.0e-6f, config.covariance_regularization);
-    const auto fallback_covariance = Eigen::Matrix3f::Identity();
-    std::vector<std::pair<float, std::size_t>> candidates;
-    for (auto& point : points)
+    const DevicePoint point = points[index];
+    const int base_x = static_cast<int>(floorf(point.x / voxel_size));
+    const int base_y = static_cast<int>(floorf(point.y / voxel_size));
+    const int base_z = static_cast<int>(floorf(point.z / voxel_size));
+    float distances[neighbor_capacity];
+    int neighbor_indices[neighbor_capacity];
+    int neighbor_count = 0;
+
+    for (int dx = -voxel_radius; dx <= voxel_radius; ++dx)
     {
-        candidates.clear();
-        for (int dx = -config.covariance_voxel_radius; dx <= config.covariance_voxel_radius; ++dx)
+        for (int dy = -voxel_radius; dy <= voxel_radius; ++dy)
         {
-            for (int dy = -config.covariance_voxel_radius; dy <= config.covariance_voxel_radius; ++dy)
+            for (int dz = -voxel_radius; dz <= voxel_radius; ++dz)
             {
-                for (int dz = -config.covariance_voxel_radius; dz <= config.covariance_voxel_radius; ++dz)
+                const auto found = voxels.find(packVoxelKey(base_x + dx, base_y + dy, base_z + dz));
+                if (found == voxels.end())
                 {
-                    const HostVoxelKey neighbor_key{point.key.x + dx, point.key.y + dy, point.key.z + dz};
-                    const auto search = voxel_index.find(neighbor_key);
-                    if (search == voxel_index.end())
+                    continue;
+                }
+                const DeviceVoxelEntry voxel = voxel_entries[found->second];
+                for (int offset = 0; offset < voxel.count; ++offset)
+                {
+                    const int candidate_index = voxel.start + offset;
+                    const DevicePoint candidate = points[candidate_index];
+                    const float x_difference = candidate.x - point.x;
+                    const float y_difference = candidate.y - point.y;
+                    const float z_difference = candidate.z - point.z;
+                    const float distance = x_difference * x_difference + y_difference * y_difference + z_difference * z_difference;
+                    if (neighbor_count == max_neighbors && distance >= distances[max_neighbors - 1])
                     {
                         continue;
                     }
-                    for (const std::size_t neighbor_index : search->second)
+                    const int insertion_limit = min(neighbor_count, max_neighbors - 1);
+                    int insertion_index = insertion_limit;
+                    while (insertion_index > 0 && distance < distances[insertion_index - 1])
                     {
-                        candidates.emplace_back((points[neighbor_index].position - point.position).squaredNorm(), neighbor_index);
+                        if (insertion_index < max_neighbors)
+                        {
+                            distances[insertion_index] = distances[insertion_index - 1];
+                            neighbor_indices[insertion_index] = neighbor_indices[insertion_index - 1];
+                        }
+                        --insertion_index;
                     }
+                    if (insertion_index < max_neighbors)
+                    {
+                        distances[insertion_index] = distance;
+                        neighbor_indices[insertion_index] = candidate_index;
+                    }
+                    neighbor_count = min(neighbor_count + 1, max_neighbors);
                 }
             }
         }
-
-        if (static_cast<int>(candidates.size()) < min_neighbors)
-        {
-            point.covariance = fallback_covariance;
-            point.covariance_valid = false;
-            continue;
-        }
-
-        const int neighbor_count = std::min<int>(max_neighbors, static_cast<int>(candidates.size()));
-        if (neighbor_count < static_cast<int>(candidates.size()))
-        {
-            std::nth_element(candidates.begin(), candidates.begin() + neighbor_count, candidates.end(),
-                             [](const auto& first, const auto& second) { return first.first < second.first; });
-        }
-
-        Eigen::Vector3f mean = Eigen::Vector3f::Zero();
-        for (int i = 0; i < neighbor_count; ++i)
-        {
-            mean += points[candidates[i].second].position;
-        }
-        mean /= static_cast<float>(neighbor_count);
-
-        Eigen::Matrix3f covariance = Eigen::Matrix3f::Zero();
-        for (int i = 0; i < neighbor_count; ++i)
-        {
-            const Eigen::Vector3f centered = points[candidates[i].second].position - mean;
-            covariance += centered * centered.transpose();
-        }
-        covariance /= static_cast<float>(neighbor_count - 1);
-
-        covariance += Eigen::Matrix3f::Identity() * regularization;
-        const Eigen::Matrix3f inverse_covariance = covariance.inverse();
-        const float frobenius_norm = inverse_covariance.norm();
-        if (!std::isfinite(frobenius_norm) || frobenius_norm <= 0.0f)
-        {
-            point.covariance = fallback_covariance;
-            point.covariance_valid = false;
-            continue;
-        }
-
-        point.covariance = covariance * frobenius_norm;
-        point.covariance_valid = point.covariance.allFinite();
     }
+
+    DevicePoint result = point;
+    result.covariance_valid = 0;
+    for (int element = 0; element < 9; ++element)
+    {
+        result.covariance[element] = element % 4 == 0 ? 1.0f : 0.0f;
+    }
+    if (neighbor_count < min_neighbors)
+    {
+        points[index] = result;
+        return;
+    }
+
+    float mean_x = 0.0f;
+    float mean_y = 0.0f;
+    float mean_z = 0.0f;
+    for (int neighbor = 0; neighbor < neighbor_count; ++neighbor)
+    {
+        const DevicePoint candidate = points[neighbor_indices[neighbor]];
+        mean_x += candidate.x;
+        mean_y += candidate.y;
+        mean_z += candidate.z;
+    }
+    mean_x /= static_cast<float>(neighbor_count);
+    mean_y /= static_cast<float>(neighbor_count);
+    mean_z /= static_cast<float>(neighbor_count);
+
+    float covariance[9]{};
+    for (int neighbor = 0; neighbor < neighbor_count; ++neighbor)
+    {
+        const DevicePoint candidate = points[neighbor_indices[neighbor]];
+        const float x = candidate.x - mean_x;
+        const float y = candidate.y - mean_y;
+        const float z = candidate.z - mean_z;
+        covariance[0] += x * x;
+        covariance[1] += x * y;
+        covariance[2] += x * z;
+        covariance[4] += y * y;
+        covariance[5] += y * z;
+        covariance[8] += z * z;
+    }
+    const float scale = 1.0f / static_cast<float>(neighbor_count - 1);
+    covariance[0] = covariance[0] * scale + regularization;
+    covariance[1] *= scale;
+    covariance[2] *= scale;
+    covariance[3] = covariance[1];
+    covariance[4] = covariance[4] * scale + regularization;
+    covariance[5] *= scale;
+    covariance[6] = covariance[2];
+    covariance[7] = covariance[5];
+    covariance[8] = covariance[8] * scale + regularization;
+
+    const float determinant = covariance[0] * (covariance[4] * covariance[8] - covariance[5] * covariance[7]) -
+                              covariance[1] * (covariance[3] * covariance[8] - covariance[5] * covariance[6]) +
+                              covariance[2] * (covariance[3] * covariance[7] - covariance[4] * covariance[6]);
+    if (!isfinite(determinant) || fabsf(determinant) <= 1.0e-12f)
+    {
+        points[index] = result;
+        return;
+    }
+
+    const float inverse_norm_squared =
+        (covariance[4] * covariance[8] - covariance[5] * covariance[7]) * (covariance[4] * covariance[8] - covariance[5] * covariance[7]) +
+        (covariance[2] * covariance[7] - covariance[1] * covariance[8]) * (covariance[2] * covariance[7] - covariance[1] * covariance[8]) +
+        (covariance[1] * covariance[5] - covariance[2] * covariance[4]) * (covariance[1] * covariance[5] - covariance[2] * covariance[4]) +
+        (covariance[5] * covariance[6] - covariance[3] * covariance[8]) * (covariance[5] * covariance[6] - covariance[3] * covariance[8]) +
+        (covariance[0] * covariance[8] - covariance[2] * covariance[6]) * (covariance[0] * covariance[8] - covariance[2] * covariance[6]) +
+        (covariance[2] * covariance[3] - covariance[0] * covariance[5]) * (covariance[2] * covariance[3] - covariance[0] * covariance[5]) +
+        (covariance[3] * covariance[7] - covariance[4] * covariance[6]) * (covariance[3] * covariance[7] - covariance[4] * covariance[6]) +
+        (covariance[1] * covariance[6] - covariance[0] * covariance[7]) * (covariance[1] * covariance[6] - covariance[0] * covariance[7]) +
+        (covariance[0] * covariance[4] - covariance[1] * covariance[3]) * (covariance[0] * covariance[4] - covariance[1] * covariance[3]);
+    const float inverse_norm = sqrtf(inverse_norm_squared) / fabsf(determinant);
+    if (!isfinite(inverse_norm) || inverse_norm <= 0.0f)
+    {
+        points[index] = result;
+        return;
+    }
+
+    for (int element = 0; element < 9; ++element)
+    {
+        result.covariance[element] = covariance[element] * inverse_norm;
+    }
+    result.covariance_valid = 1;
+    points[index] = result;
 }
 
-std::vector<DevicePoint> toDevicePoints(const std::vector<SparsePoint>& points)
+thrust::device_vector<DevicePoint> estimateCovariancesCuda(const TargetLayout& layout, const SparsityAwareGICPConfig& config)
 {
-    std::vector<DevicePoint> device_points(points.size());
-    std::transform(points.cbegin(), points.cend(), device_points.begin(), [](const SparsePoint& point) {
-        DevicePoint device_point;
-        device_point.x = point.position.x();
-        device_point.y = point.position.y();
-        device_point.z = point.position.z();
-        device_point.covariance_valid = point.covariance_valid ? 1 : 0;
-        for (int row = 0; row < 3; ++row)
-        {
-            for (int col = 0; col < 3; ++col)
-            {
-                device_point.covariance[row * 3 + col] = point.covariance(row, col);
-            }
-        }
-        return device_point;
-    });
+    constexpr int neighbor_capacity = 64;
+    const int min_neighbors = std::max(3, config.min_covariance_neighbors);
+    const int max_neighbors = std::max(min_neighbors, config.max_covariance_neighbors);
+    if (max_neighbors > neighbor_capacity)
+    {
+        throw std::invalid_argument("max_covariance_neighbors must not exceed 64 for CUDA covariance estimation");
+    }
+
+    thrust::device_vector<DevicePoint> device_points(layout.points.begin(), layout.points.end());
+    thrust::device_vector<DeviceVoxelEntry> device_voxels(layout.voxels.begin(), layout.voxels.end());
+    std::vector<cuco::pair<std::int64_t, int>> host_pairs;
+    host_pairs.reserve(layout.voxel_keys.size());
+    for (int index = 0; index < static_cast<int>(layout.voxel_keys.size()); ++index)
+    {
+        host_pairs.emplace_back(layout.voxel_keys[index], index);
+    }
+    thrust::device_vector<cuco::pair<std::int64_t, int>> device_pairs(host_pairs.begin(), host_pairs.end());
+    DeviceVoxelMap voxel_map(std::max<std::size_t>(2, layout.voxel_keys.size() * 2),
+                             cuco::empty_key{std::numeric_limits<std::int64_t>::min()}, cuco::empty_value{-1},
+                             cuda::std::equal_to<std::int64_t>{},
+                             cuco::linear_probing<1, cuco::default_hash_function<std::int64_t>>{});
+    voxel_map.insert(device_pairs.begin(), device_pairs.end());
+
+    constexpr int block_size = 128;
+    const int grid_size = std::max(1, static_cast<int>((device_points.size() + block_size - 1) / block_size));
+    estimateCovariancesKernel<<<grid_size, block_size>>>(thrust::raw_pointer_cast(device_points.data()), static_cast<int>(device_points.size()),
+                                                         thrust::raw_pointer_cast(device_voxels.data()), voxel_map.ref(cuco::find),
+                                                         config.voxel_size, std::max(0, config.covariance_voxel_radius), min_neighbors,
+                                                         max_neighbors, std::max(1.0e-6f, config.covariance_regularization));
+    if (cudaDeviceSynchronize() != cudaSuccess)
+    {
+        throw std::runtime_error("CUDA GICP covariance estimation failed");
+    }
     return device_points;
 }
 
@@ -323,11 +421,6 @@ TargetLayout makeTargetLayout(const std::vector<SparsePoint>& points)
         }
     }
     return layout;
-}
-
-Eigen::Isometry3f expUpdate(const Eigen::Matrix<float, 6, 1>& delta)
-{
-    return sophusExpUpdate(delta);
 }
 
 template<class VoxelMapRef>
@@ -438,7 +531,7 @@ __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const 
                                         const DeviceCorrespondence* correspondences, const int num_correspondences,
                                         const float* transform, const float cauchy_kernel_scale, float* partials)
 {
-    constexpr int linear_system_size = 44;
+    constexpr int linear_system_size = 45;
     __shared__ float block_sum[linear_system_size];
     if (threadIdx.x < linear_system_size)
     {
@@ -452,6 +545,7 @@ __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const 
     {
         if (const DeviceCorrespondence correspondence = correspondences[index]; correspondence.valid != 0)
         {
+            atomicAdd(&block_sum[44], 1.0f);
             const DevicePoint source = source_points[correspondence.source_index];
             const DevicePoint target = target_points[correspondence.target_index];
             const Eigen::Vector3f transformed_source(correspondence.transformed_x, correspondence.transformed_y, correspondence.transformed_z);
@@ -511,17 +605,8 @@ void findCorrespondencesCuda(const thrust::device_vector<DevicePoint>& device_so
                              VoxelMapRef target_voxels,
                              thrust::device_vector<DeviceCorrespondence>& device_correspondences,
                              thrust::device_vector<float>& device_transform,
-                             const Eigen::Isometry3f& transform,
                              const SparsityAwareGICPConfig& config)
 {
-    const Eigen::Matrix3f rotation = transform.rotation();
-    const Eigen::Vector3f translation = transform.translation();
-    const std::array<float, 12> transform_array{rotation(0, 0), rotation(0, 1), rotation(0, 2),
-                                                rotation(1, 0), rotation(1, 1), rotation(1, 2),
-                                                rotation(2, 0), rotation(2, 1), rotation(2, 2),
-                                                translation.x(), translation.y(), translation.z()};
-    thrust::copy(transform_array.begin(), transform_array.end(), device_transform.begin());
-
     constexpr int block_size = 256;
     const int grid_size = std::max(1, std::min(1024, static_cast<int>((device_source.size() + block_size - 1) / block_size)));
     const float max_distance2 = config.max_correspondence_distance * config.max_correspondence_distance;
@@ -531,24 +616,23 @@ void findCorrespondencesCuda(const thrust::device_vector<DevicePoint>& device_so
                                                          thrust::raw_pointer_cast(device_correspondences.data()), config.voxel_size,
                                                          config.adjacent_voxels, max_distance2,
                                                          thrust::raw_pointer_cast(device_transform.data()));
-    if (cudaDeviceSynchronize() != cudaSuccess)
+    if (cudaGetLastError() != cudaSuccess)
     {
-        throw std::runtime_error("CUDA GICP correspondence search failed");
+        throw std::runtime_error("CUDA GICP correspondence-search launch failed");
     }
 }
 
-DeviceLinearSystem buildLinearSystemCuda(const std::size_t num_source_points,
-                                         const thrust::device_vector<DevicePoint>& device_source,
-                                         const thrust::device_vector<DevicePoint>& device_target,
-                                         const thrust::device_vector<DeviceCorrespondence>& device_correspondences,
-                                         const thrust::device_vector<float>& device_transform,
-                                         const SparsityAwareGICPConfig& config)
+void buildLinearSystemCuda(const std::size_t num_source_points,
+                           const thrust::device_vector<DevicePoint>& device_source,
+                           const thrust::device_vector<DevicePoint>& device_target,
+                           const thrust::device_vector<DeviceCorrespondence>& device_correspondences,
+                           const thrust::device_vector<float>& device_transform,
+                           const SparsityAwareGICPConfig& config,
+                           thrust::device_vector<float>& device_partials)
 {
     constexpr int block_size = 256;
-    constexpr int linear_system_size = 44;
     const int grid_size = std::max(1, std::min(1024, static_cast<int>((num_source_points + block_size - 1) / block_size)));
 
-    thrust::device_vector<float> device_partials(static_cast<std::size_t>(grid_size * linear_system_size));
     thrust::fill(device_partials.begin(), device_partials.end(), 0.0f);
 
     buildLinearSystemKernel<<<grid_size, block_size>>>(thrust::raw_pointer_cast(device_source.data()),
@@ -558,39 +642,157 @@ DeviceLinearSystem buildLinearSystemCuda(const std::size_t num_source_points,
                                                        thrust::raw_pointer_cast(device_transform.data()),
                                                        config.cauchy_kernel_scale,
                                                        thrust::raw_pointer_cast(device_partials.data()));
-    if (cudaDeviceSynchronize() != cudaSuccess)
+    if (cudaGetLastError() != cudaSuccess)
     {
-        throw std::runtime_error("CUDA GICP linear-system reduction failed");
+        throw std::runtime_error("CUDA GICP linear-system launch failed");
+    }
+}
+
+__global__ void solveAndUpdateKernel(const float* partials, const int num_blocks, const float damping_factor,
+                                     const float convergence_translation, const float convergence_rotation,
+                                     float* transform, DeviceAlignmentState* state)
+{
+    if (threadIdx.x != 0 || state->active == 0)
+    {
+        return;
     }
 
-    thrust::host_vector<float> partials = device_partials;
-
-    DeviceLinearSystem linear_system;
-    linear_system.hessian.setZero();
-    linear_system.gradient.setZero();
+    float augmented[6][7]{};
+    float raw_correspondence_count = 0.0f;
     float valid_count = 0.0f;
     float squared_error_sum = 0.0f;
-    for (int block = 0; block < grid_size; ++block)
+    for (int block = 0; block < num_blocks; ++block)
     {
-        const int offset = block * linear_system_size;
+        const float* partial = partials + block * 45;
         for (int row = 0; row < 6; ++row)
         {
             for (int col = 0; col < 6; ++col)
             {
-                linear_system.hessian(row, col) += partials[offset + row * 6 + col];
+                augmented[row][col] += partial[row * 6 + col];
             }
+            augmented[row][6] -= partial[36 + row];
+        }
+        raw_correspondence_count += partial[44];
+        valid_count += partial[42];
+        squared_error_sum += partial[43];
+    }
+    state->raw_correspondences = static_cast<int>(raw_correspondence_count);
+    state->num_correspondences = static_cast<int>(valid_count);
+    state->fitness_score = valid_count > 0.0f ? squared_error_sum / valid_count : CUDART_INF_F;
+    if (valid_count <= 0.0f || !isfinite(squared_error_sum))
+    {
+        state->active = 0;
+        return;
+    }
+    for (int diagonal = 0; diagonal < 6; ++diagonal)
+    {
+        augmented[diagonal][diagonal] += damping_factor;
+    }
+    for (int diagonal = 0; diagonal < 6; ++diagonal)
+    {
+        int pivot_row = diagonal;
+        for (int row = diagonal + 1; row < 6; ++row)
+        {
+            if (fabsf(augmented[row][diagonal]) > fabsf(augmented[pivot_row][diagonal]))
+            {
+                pivot_row = row;
+            }
+        }
+        if (!isfinite(augmented[pivot_row][diagonal]) || fabsf(augmented[pivot_row][diagonal]) <= 1.0e-12f)
+        {
+            state->active = 0;
+            return;
+        }
+        for (int col = diagonal; col < 7; ++col)
+        {
+            const float temporary = augmented[diagonal][col];
+            augmented[diagonal][col] = augmented[pivot_row][col];
+            augmented[pivot_row][col] = temporary;
+        }
+        const float pivot = augmented[diagonal][diagonal];
+        for (int col = diagonal; col < 7; ++col)
+        {
+            augmented[diagonal][col] /= pivot;
         }
         for (int row = 0; row < 6; ++row)
         {
-            linear_system.gradient(row) += partials[offset + 36 + row];
+            if (row == diagonal)
+            {
+                continue;
+            }
+            const float factor = augmented[row][diagonal];
+            for (int col = diagonal; col < 7; ++col)
+            {
+                augmented[row][col] -= factor * augmented[diagonal][col];
+            }
         }
-        valid_count += partials[offset + 42];
-        squared_error_sum += partials[offset + 43];
     }
 
-    linear_system.valid_count = static_cast<std::size_t>(valid_count);
-    linear_system.mean_squared_error = valid_count > 0.0f ? squared_error_sum / valid_count : std::numeric_limits<float>::infinity();
-    return linear_system;
+    float delta[6];
+    for (int row = 0; row < 6; ++row)
+    {
+        delta[row] = augmented[row][6];
+        if (!isfinite(delta[row]))
+        {
+            state->active = 0;
+            return;
+        }
+    }
+    const float theta = sqrtf(delta[3] * delta[3] + delta[4] * delta[4] + delta[5] * delta[5]);
+    const float theta2 = theta * theta;
+    const float sin_over_theta = theta > 1.0e-5f ? sinf(theta) / theta : 1.0f - theta2 / 6.0f;
+    const float one_minus_cos_over_theta2 = theta > 1.0e-5f ? (1.0f - cosf(theta)) / theta2 : 0.5f - theta2 / 24.0f;
+    const float theta_minus_sin_over_theta3 = theta > 1.0e-5f ? (theta - sinf(theta)) / (theta2 * theta) : 1.0f / 6.0f - theta2 / 120.0f;
+    const float skew[9]{0.0f, -delta[5], delta[4], delta[5], 0.0f, -delta[3], -delta[4], delta[3], 0.0f};
+    float skew_squared[9]{};
+    for (int row = 0; row < 3; ++row)
+    {
+        for (int col = 0; col < 3; ++col)
+        {
+            for (int inner = 0; inner < 3; ++inner)
+            {
+                skew_squared[row * 3 + col] += skew[row * 3 + inner] * skew[inner * 3 + col];
+            }
+        }
+    }
+    float rotation[9]{};
+    float translation[3]{};
+    for (int row = 0; row < 3; ++row)
+    {
+        for (int col = 0; col < 3; ++col)
+        {
+            rotation[row * 3 + col] = (row == col ? 1.0f : 0.0f) + sin_over_theta * skew[row * 3 + col] + one_minus_cos_over_theta2 * skew_squared[row * 3 + col];
+            translation[row] += ((row == col ? 1.0f : 0.0f) + one_minus_cos_over_theta2 * skew[row * 3 + col] +
+                                 theta_minus_sin_over_theta3 * skew_squared[row * 3 + col]) * delta[col];
+        }
+    }
+    float updated_transform[12]{};
+    for (int row = 0; row < 3; ++row)
+    {
+        for (int col = 0; col < 3; ++col)
+        {
+            for (int inner = 0; inner < 3; ++inner)
+            {
+                updated_transform[row * 3 + col] += rotation[row * 3 + inner] * transform[inner * 3 + col];
+            }
+            updated_transform[9 + row] += rotation[row * 3 + col] * transform[9 + col];
+        }
+        updated_transform[9 + row] += translation[row];
+    }
+    for (int element = 0; element < 12; ++element)
+    {
+        transform[element] = updated_transform[element];
+    }
+    state->iterations += 1;
+    state->raw_correspondences = static_cast<int>(raw_correspondence_count);
+    state->num_correspondences = static_cast<int>(valid_count);
+    state->fitness_score = squared_error_sum / valid_count;
+    if (sqrtf(delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]) < convergence_translation &&
+        theta < convergence_rotation)
+    {
+        state->converged = 1;
+        state->active = 0;
+    }
 }
 
 } // namespace
@@ -608,17 +810,11 @@ static std::vector<cuco::pair<std::int64_t, int>> makeVoxelPairs(const TargetLay
 
 struct SparsityAwareGICP::TargetCache
 {
-    using VoxelMap = decltype(cuco::static_map{std::size_t{2},
-                              cuco::empty_key{std::numeric_limits<std::int64_t>::min()},
-                              cuco::empty_value{-1},
-                              cuda::std::equal_to<std::int64_t>{},
-                              cuco::linear_probing<1, cuco::default_hash_function<std::int64_t>>{}});
-
     TargetLayout layout;
     std::unordered_set<std::int64_t> occupied_voxels;
     thrust::device_vector<DevicePoint> points;
     thrust::device_vector<DeviceVoxelEntry> voxels;
-    VoxelMap voxel_map;
+    DeviceVoxelMap voxel_map;
 
     TargetCache(TargetLayout target_layout, const std::size_t max_target_voxels)
         : layout(std::move(target_layout)), points(layout.points.begin(), layout.points.end()),
@@ -657,8 +853,10 @@ void SparsityAwareGICP::setConfig(const SparsityAwareGICPConfig& config) noexcep
 void SparsityAwareGICP::initializeTarget(const pcl::PointCloud<pcl::PointXYZ>& target)
 {
     std::vector<SparsePoint> target_sparse = makeSparseCloud(target, mConfig);
-    estimateCovariances(target_sparse, mConfig);
-    mTarget = std::make_unique<TargetCache>(makeTargetLayout(target_sparse), mConfig.max_target_voxels);
+    TargetLayout target_layout = makeTargetLayout(target_sparse);
+    thrust::device_vector<DevicePoint> device_points = estimateCovariancesCuda(target_layout, mConfig);
+    mTarget = std::make_unique<TargetCache>(std::move(target_layout), mConfig.max_target_voxels);
+    mTarget->points = std::move(device_points);
 }
 
 void SparsityAwareGICP::insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>& points)
@@ -684,8 +882,8 @@ void SparsityAwareGICP::insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>&
         return;
     }
 
-    estimateCovariances(sparse_points, mConfig);
     TargetLayout new_layout = makeTargetLayout(sparse_points);
+    thrust::device_vector<DevicePoint> device_points = estimateCovariancesCuda(new_layout, mConfig);
     if (const std::size_t available_voxels = mConfig.max_target_voxels - mTarget->layout.voxels.size();
         new_layout.voxels.size() > available_voxels)
     {
@@ -706,7 +904,7 @@ void SparsityAwareGICP::insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>&
         host_voxel_pairs.emplace_back(new_layout.voxel_keys[index], voxel_offset + index);
     }
 
-    mTarget->points.insert(mTarget->points.end(), new_layout.points.begin(), new_layout.points.end());
+    mTarget->points.insert(mTarget->points.end(), device_points.begin(), device_points.end());
     mTarget->voxels.insert(mTarget->voxels.end(), new_layout.voxels.begin(), new_layout.voxels.end());
     thrust::device_vector<cuco::pair<std::int64_t, int>> voxel_pairs(host_voxel_pairs.begin(), host_voxel_pairs.end());
     mTarget->voxel_map.insert(voxel_pairs.begin(), voxel_pairs.end());
@@ -739,62 +937,60 @@ SparsityAwareGICPResult SparsityAwareGICP::align(const pcl::PointCloud<pcl::Poin
     }
 
     std::vector<SparsePoint> source_sparse = makeSparseCloud(source, mConfig);
-    estimateCovariances(source_sparse, mConfig);
+    TargetLayout source_layout = makeTargetLayout(source_sparse);
 
-    result.num_source_points = source_sparse.size();
+    result.num_source_points = source_layout.points.size();
     result.num_target_points = mTarget->layout.points.size();
-    if (source_sparse.empty() || mTarget->layout.points.empty())
+    if (source_layout.points.empty() || mTarget->layout.points.empty())
     {
         return result;
     }
 
-    const std::vector<DevicePoint> source_device_points = toDevicePoints(source_sparse);
-    const thrust::device_vector<DevicePoint> device_source(source_device_points.begin(), source_device_points.end());
-    thrust::device_vector<DeviceCorrespondence> device_correspondences(source_sparse.size());
+    const thrust::device_vector<DevicePoint> device_source = estimateCovariancesCuda(source_layout, mConfig);
+    thrust::device_vector<DeviceCorrespondence> device_correspondences(source_layout.points.size());
     thrust::device_vector<float> device_transform(12);
+    const Eigen::Matrix3f initial_rotation = initial_guess.rotation();
+    const Eigen::Vector3f initial_translation = initial_guess.translation();
+    const std::array<float, 12> initial_transform{initial_rotation(0, 0), initial_rotation(0, 1), initial_rotation(0, 2),
+                                                   initial_rotation(1, 0), initial_rotation(1, 1), initial_rotation(1, 2),
+                                                   initial_rotation(2, 0), initial_rotation(2, 1), initial_rotation(2, 2),
+                                                   initial_translation.x(), initial_translation.y(), initial_translation.z()};
+    thrust::copy(initial_transform.begin(), initial_transform.end(), device_transform.begin());
+    thrust::device_vector<DeviceAlignmentState> device_state(1);
+    thrust::fill(device_state.begin(), device_state.end(), DeviceAlignmentState{});
     const auto target_voxel_ref = mTarget->voxel_map.ref(cuco::find);
+    constexpr int block_size = 256;
+    constexpr int linear_system_size = 45;
+    const int grid_size = std::max(1, std::min(1024, static_cast<int>((source_layout.points.size() + block_size - 1) / block_size)));
+    thrust::device_vector<float> device_partials(static_cast<std::size_t>(grid_size * linear_system_size));
 
     for (int iteration = 0; iteration < mConfig.max_iterations; ++iteration)
     {
         findCorrespondencesCuda(device_source, mTarget->points, mTarget->voxels, target_voxel_ref,
-                                device_correspondences, device_transform, result.transform, mConfig);
-        auto [hessian, gradient, valid_count, mean_squared_error] = buildLinearSystemCuda(source_sparse.size(),
-                                                                                          device_source, mTarget->points,
-                                                                                          device_correspondences,
-                                                                                          device_transform, mConfig);
-        if (valid_count == 0 || !hessian.allFinite() || !gradient.allFinite())
+                                device_correspondences, device_transform, mConfig);
+        buildLinearSystemCuda(source_layout.points.size(), device_source, mTarget->points, device_correspondences,
+                              device_transform, mConfig, device_partials);
+        solveAndUpdateKernel<<<1, 1>>>(thrust::raw_pointer_cast(device_partials.data()), grid_size, mConfig.damping_factor,
+                                       mConfig.convergence_translation, mConfig.convergence_rotation,
+                                       thrust::raw_pointer_cast(device_transform.data()), thrust::raw_pointer_cast(device_state.data()));
+        if (cudaGetLastError() != cudaSuccess)
         {
-            break;
-        }
-
-        hessian += Eigen::Matrix<float, 6, 6>::Identity() * mConfig.damping_factor;
-        Eigen::Matrix<float, 6, 1> delta = hessian.ldlt().solve(-gradient);
-        if (!delta.allFinite())
-        {
-            break;
-        }
-        // if (mConfig.constrain_to_se2)
-        // {
-        //     delta.y() = 0.0f;
-        //     delta.z() = 0.0f;
-        //     delta(3) = 0.0f;
-        //     delta(4) = 0.0f;
-        // }
-
-        result.transform = expUpdate(delta) * result.transform;
-        result.iterations = iteration + 1;
-        result.num_correspondences = valid_count;
-        result.fitness_score = mean_squared_error;
-
-        const float translation_step = delta.head<3>().norm();
-        if (const float rotation_step = delta.tail<3>().norm();
-            translation_step < mConfig.convergence_translation && rotation_step < mConfig.convergence_rotation)
-        {
-            result.converged = true;
-            break;
+            throw std::runtime_error("CUDA GICP solve-and-update launch failed");
         }
     }
 
+    thrust::host_vector<DeviceAlignmentState> host_state = device_state;
+    thrust::host_vector<float> host_transform = device_transform;
+    const DeviceAlignmentState& final_state = host_state.front();
+    result.iterations = final_state.iterations;
+    result.num_raw_correspondences = static_cast<std::size_t>(std::max(0, final_state.raw_correspondences));
+    result.num_correspondences = static_cast<std::size_t>(std::max(0, final_state.num_correspondences));
+    result.fitness_score = final_state.fitness_score;
+    result.transform.matrix() << host_transform[0], host_transform[1], host_transform[2], host_transform[9],
+                                 host_transform[3], host_transform[4], host_transform[5], host_transform[10],
+                                 host_transform[6], host_transform[7], host_transform[8], host_transform[11],
+                                 0.0f, 0.0f, 0.0f, 1.0f;
+    result.converged = final_state.converged != 0;
     if (!result.converged && result.iterations > 0)
     {
         result.converged = std::isfinite(result.fitness_score);

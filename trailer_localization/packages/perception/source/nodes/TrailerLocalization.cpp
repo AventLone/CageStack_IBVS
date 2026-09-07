@@ -284,7 +284,10 @@ bool TrailerLocalization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cu
     RCLCPP_INFO(get_logger(), "CUDA sparsity-aware GICP SE(3) start.");
     if (mTrailerVoxelMap == nullptr || mTrailerVoxelMap->empty() || current_scan == nullptr || current_scan->empty())
     {
-        RCLCPP_WARN(get_logger(), "GICP failed!");
+        const std::size_t target_point_count = mTrailerVoxelMap == nullptr ? 0 : mTrailerVoxelMap->size();
+        const std::size_t source_point_count = current_scan == nullptr ? 0 : current_scan->size();
+        RCLCPP_WARN(get_logger(), "GICP skipped: target map has %zu points; source ROI has %zu points.",
+                    target_point_count, source_point_count);
         return false;
     }
 
@@ -321,8 +324,6 @@ bool TrailerLocalization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cu
             return false;
         }
 
-
-
         out_pose = result.transform.inverse();
 
         if (fitness_score > gicp_config.max_fitness_score)
@@ -335,6 +336,9 @@ bool TrailerLocalization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cu
         return true;
     }
 
+    RCLCPP_WARN(get_logger(), "CUDA sparse GICP did not converge: iter: %d, raw matches: %zu/%zu, valid correspondences: %zu, fitness: %.6f.",
+                result.iterations, result.num_raw_correspondences, result.num_source_points,
+                result.num_correspondences, result.fitness_score);
     return false;
 }
 
@@ -380,6 +384,21 @@ void TrailerLocalization::workerLoop()
         auto scan_in_roi = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
         scan_in_roi->reserve(lidar_points_truck.size() / 3);
         filter3d::getCloud(lidar_points_truck, scan_in_roi, nullptr, mTrailerPose, scan_roi);
+        // auto scan_in_roi = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+        // scan_in_roi->reserve(lidar_points_truck.size() / 2);
+        // for (const auto& point : lidar_points_truck)
+        // {
+        //     if (point.x < 1.0f && point.y > -10.0f && point.y < 10.0f && point.z > 0.1f)
+        //     {
+        //         scan_in_roi->emplace_back(point);
+        //     }
+        // }
+
+        if (scan_in_roi->empty())
+        {
+            RCLCPP_WARN(get_logger(), "Skipping GICP: current scan has no points inside the trailer ROI.");
+            continue;
+        }
 
         if (alignICP(scan_in_roi, mTrailerPose))
         {

@@ -10,8 +10,6 @@
 #include <tf2_ros/transform_listener.h>
 #include <pcl/common/transforms.h>
 #include <pcl/filters/voxel_grid.h>
-#include <algorithm>
-#include <numeric>
 #include <vector>
 #include "perception/LIO/SparsityAwareGICP.hpp"
 // #include "perception/kalman_filter/EKF.hpp"

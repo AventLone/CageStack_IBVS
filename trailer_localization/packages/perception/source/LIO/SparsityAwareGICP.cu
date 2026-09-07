@@ -245,6 +245,7 @@ __global__ void estimateCovariancesKernel(DevicePoint* points, const int num_poi
                     }
                     const int insertion_limit = min(neighbor_count, max_neighbors - 1);
                     int insertion_index = insertion_limit;
+
                     while (insertion_index > 0 && distance < distances[insertion_index - 1])
                     {
                         if (insertion_index < max_neighbors)
@@ -254,6 +255,7 @@ __global__ void estimateCovariancesKernel(DevicePoint* points, const int num_poi
                         }
                         --insertion_index;
                     }
+
                     if (insertion_index < max_neighbors)
                     {
                         distances[insertion_index] = distance;
@@ -352,10 +354,9 @@ __global__ void estimateCovariancesKernel(DevicePoint* points, const int num_poi
 
 thrust::device_vector<DevicePoint> estimateCovariancesCuda(const TargetLayout& layout, const SparsityAwareGICPConfig& config)
 {
-    constexpr int neighbor_capacity = 64;
     const int min_neighbors = std::max(3, config.min_covariance_neighbors);
     const int max_neighbors = std::max(min_neighbors, config.max_covariance_neighbors);
-    if (max_neighbors > neighbor_capacity)
+    if (constexpr int neighbor_capacity = 64; max_neighbors > neighbor_capacity)
     {
         throw std::invalid_argument("max_covariance_neighbors must not exceed 64 for CUDA covariance estimation");
     }
@@ -407,18 +408,18 @@ TargetLayout makeTargetLayout(const std::vector<SparsePoint>& points)
     for (int ordered_index = 0; ordered_index < static_cast<int>(original_indices.size()); ++ordered_index)
     {
         const int original_index = original_indices[ordered_index];
-        const auto& point = points[original_index];
+        const auto& [position, key] = points[original_index];
         DevicePoint device_point;
-        device_point.x = point.position.x();
-        device_point.y = point.position.y();
-        device_point.z = point.position.z();
+        device_point.x = position.x();
+        device_point.y = position.y();
+        device_point.z = position.z();
         layout.points.push_back(device_point);
 
-        if (!have_current_key || !(point.key == current_key))
+        if (!have_current_key || !(key == current_key))
         {
             layout.voxels.push_back(DeviceVoxelEntry{ordered_index, 1});
-            layout.voxel_keys.push_back(packVoxelKey(point.key));
-            current_key = point.key;
+            layout.voxel_keys.push_back(packVoxelKey(key));
+            current_key = key;
             have_current_key = true;
         }
         else
@@ -469,6 +470,7 @@ __global__ void findCorrespondencesKernel(const DevicePoint* source_points, cons
                     {
                         continue;
                     }
+
                     const DeviceVoxelEntry voxel = target_voxel_entries[found->second];
                     for (int i = 0; i < voxel.count; ++i)
                     {
@@ -547,7 +549,7 @@ __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const 
         return;
     }
     using BlockReduce = cub::BlockReduce<LinearSystemPartial, linear_system_block_size, cub::BLOCK_REDUCE_WARP_REDUCTIONS>;
-    __shared__ typename BlockReduce::TempStorage reduction_storage;
+    __shared__ BlockReduce::TempStorage reduction_storage;
     LinearSystemPartial thread_sum;
 
     uint32_t index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -585,6 +587,7 @@ __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const 
                 const Eigen::Matrix<float, 6, 6> local_hessian = jacobian.transpose() * weight * precision * jacobian;
                 const Eigen::Matrix<float, 6, 1> local_gradient = jacobian.transpose() * weight * precision_residual;
                 int packed_index = 0;
+
                 #pragma unroll
                 for (int row = 0; row < 6; ++row)
                 {
@@ -594,6 +597,7 @@ __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const 
                         thread_sum.values[packed_index++] += local_hessian(row, col);
                     }
                 }
+
                 #pragma unroll
                 for (int element = 0; element < 6; ++element)
                 {
@@ -725,28 +729,33 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
                 pivot_row = row;
             }
         }
+
         if (!isfinite(augmented[pivot_row][diagonal]) || fabsf(augmented[pivot_row][diagonal]) <= 1.0e-12f)
         {
             state->active = 0;
             return;
         }
+
         for (int col = diagonal; col < 7; ++col)
         {
             const float temporary = augmented[diagonal][col];
             augmented[diagonal][col] = augmented[pivot_row][col];
             augmented[pivot_row][col] = temporary;
         }
+
         const float pivot = augmented[diagonal][diagonal];
         for (int col = diagonal; col < 7; ++col)
         {
             augmented[diagonal][col] /= pivot;
         }
+
         for (int row = 0; row < 6; ++row)
         {
             if (row == diagonal)
             {
                 continue;
             }
+
             const float factor = augmented[row][diagonal];
             for (int col = diagonal; col < 7; ++col)
             {
@@ -782,6 +791,7 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
             }
         }
     }
+
     float rotation[9]{};
     float translation[3]{};
     for (int row = 0; row < 3; ++row)
@@ -793,6 +803,7 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
                                  theta_minus_sin_over_theta3 * skew_squared[row * 3 + col]) * delta[col];
         }
     }
+
     float updated_transform[12]{};
     for (int row = 0; row < 3; ++row)
     {
@@ -806,6 +817,7 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
         }
         updated_transform[9 + row] += translation[row];
     }
+
     for (int element = 0; element < 12; ++element)
     {
         transform[element] = updated_transform[element];
@@ -878,7 +890,7 @@ void SparsityAwareGICP::setConfig(const SparsityAwareGICPConfig& config) noexcep
 
 void SparsityAwareGICP::initializeTarget(const pcl::PointCloud<pcl::PointXYZ>& target)
 {
-    std::vector<SparsePoint> target_sparse = makeSparseCloud(target, mConfig);
+    const std::vector<SparsePoint> target_sparse = makeSparseCloud(target, mConfig);
     TargetLayout target_layout = makeTargetLayout(target_sparse);
     if (mConfig.max_target_voxels == 0 || target_layout.voxels.size() > mConfig.max_target_voxels)
     {
@@ -925,9 +937,9 @@ void SparsityAwareGICP::insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>&
     thrust::device_vector<DevicePoint> device_points = estimateCovariancesCuda(new_layout, mConfig);
     const int point_offset = static_cast<int>(mTarget->points.size());
     const int voxel_offset = static_cast<int>(mTarget->voxels.size());
-    for (auto& voxel : new_layout.voxels)
+    for (auto& [start, count] : new_layout.voxels)
     {
-        voxel.start += point_offset;
+        start += point_offset;
     }
 
     std::vector<cuco::pair<std::int64_t, int>> host_voxel_pairs;

@@ -3,10 +3,7 @@
 #include "perception/tools/OrthographicProjector.hpp"
 #include "perception/tools/feature_detect_3d.hpp"
 #include "perception/tools/filter_3d.h"
-#include <chrono>
-#include <numeric>
 #include <opencv2/opencv.hpp>
-
 #include "perception/types/common.hpp"
 
 void TrailerLocalization::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src_scan)
@@ -24,6 +21,9 @@ void TrailerLocalization::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src
 
     /* Get the top-down view image */
     constexpr float resolution = 0.03f;
+    // Trailer side walls must be 1-5 m apart; convert the limits to image pixels.
+    constexpr float min_side_separation = 1.0f / resolution;
+    constexpr float max_side_separation = 5.0f / resolution;
     OrthographicProjector<pcl::PointXYZ> projector(View::TOP, resolution);
     projector.setCloud(scan_in_roi);
 
@@ -78,7 +78,7 @@ void TrailerLocalization::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src
             const cv::Point2f midpoint_delta = second_midpoint - first_midpoint;
 
             if (const double separation = std::abs(first_unit.x * midpoint_delta.y - first_unit.y * midpoint_delta.x);
-                separation < 10.0)
+                separation < min_side_separation || separation > max_side_separation)
             {
                 continue;
             }
@@ -143,8 +143,6 @@ void TrailerLocalization::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src
     const cv::Point2f rear_start = first_end;
     const cv::Point2f rear_end = second_end;
 
-    // cv::line(debug_img, cv::Point(cvRound(rear_start.x), cvRound(rear_start.y)),
-    //     cv::Point(cvRound(rear_end.x), cvRound(rear_end.y)), cv::Scalar(255, 0, 0), 3, cv::LINE_AA);
     cv::line(debug_img, first_start, second_start, cv::Scalar(255, 0, 0), 2, cv::LINE_AA);
 
     /* Get 2 side wall point cloud */
@@ -197,7 +195,10 @@ void TrailerLocalization::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src
     mTrailerPose = T_truck2template.inverse();   // Trailer pose in truck frame
 
     mTrailerRoi = ROI::getBBox(side_walls);
+    mTrailerRoi.max_x += 0.5f;
     mTrailerRoi.min_x -= 9.9f;
+    mTrailerRoi.max_y += 1.0f;
+    mTrailerRoi.min_y -= 1.0f;
     mTrailerRoi.min_z = -0.1f;
     mTrailerRoi.max_z += 3.1f;
 
@@ -231,66 +232,21 @@ void TrailerLocalization::updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& s
     const auto scan_in_roi = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
     filter3d::getCloud(scan_in_trailer, scan_in_roi, nullptr, mTrailerRoi);
 
-    // Merge into voxel map
-    *mTrailerVoxelMap += *scan_in_roi;
+    *mTrailerVoxelMap += *scan_in_roi;   // Merge into voxel map
 
-    // Apply 0.01m voxel grid filter to update voxel map
+    const auto filtered_map = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+    // Apply 0.05m voxel grid filter to update voxel map
     pcl::VoxelGrid<pcl::PointXYZ> voxel_filter;
     voxel_filter.setLeafSize(0.05f, 0.05f, 0.05f);
     voxel_filter.setInputCloud(mTrailerVoxelMap);
-
-    const auto filtered_map = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
     voxel_filter.filter(*filtered_map);
+
+    // filter3d::downsampleCloud(*mTrailerVoxelMap, 0.05f, *filtered_map);
+
     mTrailerVoxelMap = filtered_map;
 
     mGicp.insertTargetPoints(*scan_in_roi);
 }
-
-// bool TrailerLocalization::updateLio(const Eigen::Isometry3f& lidar_pose, const rclcpp::Time& scan_stamp)
-// {
-//     std::lock_guard lock(mLioMutex);
-//     const Eigen::Isometry3f truck_pose = lidar_pose.inverse();
-//     if (mFilterTime < 0.0)
-//     {
-//         ESKFState initial_state = mLioFilter.state();
-//         initial_state.position = truck_pose.translation();
-//         initial_state.orientation = Eigen::Quaternionf(truck_pose.rotation()).normalized();
-//         mLioFilter.setState(initial_state);
-//         mFilterTime = scan_stamp.seconds();
-//         return true;
-//     }
-//
-//     Eigen::Matrix<float, 6, 6> measurement_noise = Eigen::Matrix<float, 6, 6>::Zero();
-//     measurement_noise.diagonal() << 0.02f * 0.02f, 0.02f * 0.02f, 0.02f * 0.02f,
-//                                     0.05f * 0.05f, 0.05f * 0.05f, 0.05f * 0.05f;
-//     if (!mLioFilter.updatePose(truck_pose.translation(), Eigen::Quaternionf(truck_pose.rotation()),
-//                                measurement_noise, 4))
-//     {
-//         return false;
-//     }
-//
-//     mTrailerPose = Eigen::Isometry3f::Identity();
-//     mTrailerPose.translation() = -(mLioFilter.state().orientation.conjugate() * mLioFilter.state().position);
-//     mTrailerPose.linear() = mLioFilter.state().orientation.conjugate().toRotationMatrix();
-//     return true;
-// }
-
-// void TrailerLocalization::publishLioPose(const rclcpp::Time& stamp)
-// {
-//     Eigen::Isometry3f trailer_pose = Eigen::Isometry3f::Identity();
-//     {
-//         std::lock_guard lock(mLioMutex);
-//         const auto& state = mLioFilter.state();
-//         trailer_pose.translation() = -(state.orientation.conjugate() * state.position);
-//         trailer_pose.linear() = state.orientation.conjugate().toRotationMatrix();
-//     }
-//
-//     geometry_msgs::msg::PoseStamped pose_msg;
-//     pose_msg.header.stamp = stamp;
-//     pose_msg.header.frame_id = "LOLA";
-//     pose_msg.pose = tf2::toMsg(Eigen::Isometry3d(trailer_pose.cast<double>()));
-//     mTrailerPosePub->publish(pose_msg);
-// }
 
 void TrailerLocalization::recordGicpDuration(const double duration_ms)
 {
@@ -332,11 +288,6 @@ bool TrailerLocalization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cu
         return false;
     }
 
-    // Eigen::Isometry3f initial_guess;
-    // {
-    //     std::lock_guard lock(mFusionMutex);
-    //     initial_guess = mFusionFilter.initialized() ? mFusionFilter.pose() : mTrailerPose.inverse();
-    // }
     const Eigen::Isometry3f initial_guess = mTrailerPose.inverse();
 
     const auto start_time = std::chrono::high_resolution_clock::now();
@@ -370,6 +321,10 @@ bool TrailerLocalization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cu
             return false;
         }
 
+
+
+        out_pose = result.transform.inverse();
+
         if (fitness_score > gicp_config.max_fitness_score)
         {
             RCLCPP_WARN(get_logger(), "GICP converged but fitness score (%.4f) > threshold (%.4f), skipping map update.",
@@ -377,7 +332,6 @@ bool TrailerLocalization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cu
             return false;
         }
 
-        out_pose = result.transform.inverse();
         return true;
     }
 
@@ -405,21 +359,9 @@ void TrailerLocalization::workerLoop()
         pcl::fromROSMsg(scan_msg, lidar_points);
 
         const rclcpp::Time lidar_scan_stamp(scan_msg.header.stamp);
-        // if (mTrailerVoxelMap != nullptr)
-        // {
-        //     std::lock_guard lock(mLioMutex);
-        //     if (mFilterTime >= 0.0)
-        //     {
-        //         const auto& state = mLioFilter.state();
-        //         mTrailerPose = Eigen::Isometry3f::Identity();
-        //         mTrailerPose.translation() = -(state.orientation.conjugate() * state.position);
-        //         mTrailerPose.linear() = state.orientation.conjugate().toRotationMatrix();
-        //     }
-        // }
 
         /* 1. Get lidar scan in base truck frame */
         pcl::PointCloud<pcl::PointXYZ> lidar_points_truck;
-        // transformLidarScan(lidar_points, lidar_scan_stamp, lidar_points_truck);
         pcl::transformPointCloud(lidar_points, lidar_points_truck, T_truck2lidar);
 
         if (mTrailerVoxelMap == nullptr)
@@ -441,22 +383,16 @@ void TrailerLocalization::workerLoop()
 
         if (alignICP(scan_in_roi, mTrailerPose))
         {
-            // if (!updateLio(mTrailerPose, lidar_scan_stamp))
-            // {
-            //     RCLCPP_WARN(get_logger(), "IESKF LiDAR update rejected.");
-            //     continue;
-            // }
             updateVoxelMap(lidar_points_truck);
-
-            pcl::PointCloud<pcl::PointXYZ> aligned_map;
-            pcl::transformPointCloud(*mTrailerVoxelMap, aligned_map, mTrailerPose);
-
-            sensor_msgs::msg::PointCloud2 scan_vis_msg;
-            pcl::toROSMsg(aligned_map, scan_vis_msg);
-            scan_vis_msg.header = scan_msg.header;
-            scan_vis_msg.header.frame_id = "LOLA";
-            mProcessedScanVisPub->publish(scan_vis_msg);
         }
+        pcl::PointCloud<pcl::PointXYZ> aligned_map;
+        pcl::transformPointCloud(*mTrailerVoxelMap, aligned_map, mTrailerPose);
+
+        sensor_msgs::msg::PointCloud2 scan_vis_msg;
+        pcl::toROSMsg(aligned_map, scan_vis_msg);
+        scan_vis_msg.header = scan_msg.header;
+        scan_vis_msg.header.frame_id = "LOLA";
+        mProcessedScanVisPub->publish(scan_vis_msg);
 
         geometry_msgs::msg::PoseStamped pose_msg;
         pose_msg.header = scan_msg.header;

@@ -4,7 +4,9 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/features/normal_3d.h>   // Core normal estimation header
 #include <pcl/search/impl/kdtree.hpp>
-#include <pcl/kdtree/kdtree_flann.h>
+// #include <pcl/kdtree/kdtree_flann.h>
+#include <pcl/common/common.h>
+// #include <pcl/common/impl/common.hpp>
 
 #include "../types/common.hpp"
 
@@ -240,4 +242,47 @@ bool normalFilter(const typename pcl::PointCloud<PointT>::Ptr& src_cloud,
 
     return true;
 }
+
+template<class PointT>
+void downsampleCloud(const pcl::PointCloud<PointT>& input_cloud, const float resolution, pcl::PointCloud<pcl::PointXYZ>& output_cloud)
+{
+    output_cloud.clear();
+    if (input_cloud.empty() || resolution <= 0.0f)
+    {
+        return;
+    }
+    const float resolution_inverse = 1.0f / resolution;
+
+    Eigen::Vector4f min_p, max_p;
+    pcl::getMinMax3D(input_cloud, min_p, max_p);
+
+    const Eigen::Array3f min_point = min_p.head<3>().array();
+    const Eigen::Array3f max_point = max_p.head<3>().array();
+
+    const Eigen::Array<uint32_t, 3, 1> layers = ((max_point - min_point) * resolution_inverse).floor().cast<uint32_t>() + 1;
+
+    const std::size_t layer_x = layers[0];
+    const std::size_t layer_y = layers[1];
+    const std::size_t layer_z = layers[2];
+    const std::size_t total_voxel_cell_num = layer_x * layer_y * layer_z;
+    std::vector<bool> flags(total_voxel_cell_num, false);
+
+    output_cloud.reserve(std::min(input_cloud.size(), total_voxel_cell_num));
+
+    for (const auto& point : input_cloud.points)
+    {
+        const size_t i = (point.x - min_point[0]) * resolution_inverse;
+        const size_t j = (point.y - min_point[1]) * resolution_inverse;
+        const size_t k = (point.z - min_point[2]) * resolution_inverse;
+
+        if (const std::size_t voxel_index = (i * layer_y + j) * layer_z + k; !flags[voxel_index])
+        {
+            flags[voxel_index] = true;
+            output_cloud.emplace_back(min_point[0] + (i + 0.5f) * resolution,
+                                      min_point[1] + (j + 0.5f) * resolution,
+                                      min_point[2] + (k + 0.5f) * resolution);
+        }
+    }
+}
+
 }

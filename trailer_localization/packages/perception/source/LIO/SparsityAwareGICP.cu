@@ -1,19 +1,12 @@
 #include "perception/LIO/SparsityAwareGICP.hpp"
-
 #include <cuco/static_map.cuh>
-// #include <cuda/iterator>
-// #include <cuda/std/functional>
 #include <cuda_runtime.h>
-// #include <thrust/copy.h>
 #include <thrust/device_vector.h>
 #include <thrust/fill.h>
 #include <thrust/host_vector.h>
-// #include <thrust/sequence.h>
-
 #include <algorithm>
 #include <array>
 #include <cmath>
-// #include <cstdint>
 #include <limits>
 #include <numeric>
 #include <stdexcept>
@@ -24,7 +17,7 @@
 
 namespace perception::lio
 {
-Eigen::Isometry3f sophusExpUpdate(Eigen::Matrix<float, 6, 1> delta, bool constrain_to_se2);
+Eigen::Isometry3f sophusExpUpdate(Eigen::Matrix<float, 6, 1> delta);
 
 namespace
 {
@@ -332,9 +325,9 @@ TargetLayout makeTargetLayout(const std::vector<SparsePoint>& points)
     return layout;
 }
 
-Eigen::Isometry3f expUpdate(const Eigen::Matrix<float, 6, 1>& delta, const bool constrain_to_se2)
+Eigen::Isometry3f expUpdate(const Eigen::Matrix<float, 6, 1>& delta)
 {
-    return sophusExpUpdate(delta, constrain_to_se2);
+    return sophusExpUpdate(delta);
 }
 
 template<class VoxelMapRef>
@@ -345,8 +338,8 @@ __global__ void findCorrespondencesKernel(const DevicePoint* source_points, cons
                                           const float voxel_size, const int adjacent_voxels,
                                           const float max_correspondence_distance2, const float* transform)
 {
-    int index = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
-    const int stride = static_cast<int>(blockDim.x * gridDim.x);
+    uint32_t index = blockIdx.x * blockDim.x + threadIdx.x;
+    const uint32_t stride = blockDim.x * gridDim.x;
 
     while (index < num_source_points)
     {
@@ -391,7 +384,7 @@ __global__ void findCorrespondencesKernel(const DevicePoint* source_points, cons
             }
         }
 
-        correspondences[index] = DeviceCorrespondence{index, best_target, transformed_x, transformed_y, transformed_z,
+        correspondences[index] = DeviceCorrespondence{static_cast<int>(index), best_target, transformed_x, transformed_y, transformed_z,
                                                       best_distance2, best_target >= 0 ? 1 : 0};
         index += stride;
     }
@@ -453,8 +446,8 @@ __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const 
     }
     __syncthreads();
 
-    int index = blockIdx.x * blockDim.x + threadIdx.x;
-    const int stride = blockDim.x * gridDim.x;
+    uint32_t index = blockIdx.x * blockDim.x + threadIdx.x;
+    const uint32_t stride = blockDim.x * gridDim.x;
     while (index < num_correspondences)
     {
         if (const DeviceCorrespondence correspondence = correspondences[index]; correspondence.valid != 0)
@@ -473,8 +466,7 @@ __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const 
                 covariance = target_covariance + rotation * covarianceMatrix(source) * rotation.transpose();
             }
 
-            const Eigen::Matrix3f precision = covariance.inverse();
-            if (matrixAllFinite(precision))
+            if (const Eigen::Matrix3f precision = covariance.inverse(); matrixAllFinite(precision))
             {
                 const Eigen::Vector3f precision_residual = precision * residual;
                 const float mahalanobis_error = residual.dot(precision_residual);
@@ -616,12 +608,11 @@ static std::vector<cuco::pair<std::int64_t, int>> makeVoxelPairs(const TargetLay
 
 struct SparsityAwareGICP::TargetCache
 {
-    using VoxelMap = decltype(cuco::static_map{
-        std::size_t{2},
-        cuco::empty_key{std::numeric_limits<std::int64_t>::min()},
-        cuco::empty_value{-1},
-        cuda::std::equal_to<std::int64_t>{},
-        cuco::linear_probing<1, cuco::default_hash_function<std::int64_t>>{}});
+    using VoxelMap = decltype(cuco::static_map{std::size_t{2},
+                              cuco::empty_key{std::numeric_limits<std::int64_t>::min()},
+                              cuco::empty_value{-1},
+                              cuda::std::equal_to<std::int64_t>{},
+                              cuco::linear_probing<1, cuco::default_hash_function<std::int64_t>>{}});
 
     TargetLayout layout;
     std::unordered_set<std::int64_t> occupied_voxels;
@@ -782,15 +773,15 @@ SparsityAwareGICPResult SparsityAwareGICP::align(const pcl::PointCloud<pcl::Poin
         {
             break;
         }
-        if (mConfig.constrain_to_se2)
-        {
-            delta.y() = 0.0f;
-            delta.z() = 0.0f;
-            delta(3) = 0.0f;
-            delta(4) = 0.0f;
-        }
+        // if (mConfig.constrain_to_se2)
+        // {
+        //     delta.y() = 0.0f;
+        //     delta.z() = 0.0f;
+        //     delta(3) = 0.0f;
+        //     delta(4) = 0.0f;
+        // }
 
-        result.transform = expUpdate(delta, mConfig.constrain_to_se2) * result.transform;
+        result.transform = expUpdate(delta) * result.transform;
         result.iterations = iteration + 1;
         result.num_correspondences = valid_count;
         result.fitness_score = mean_squared_error;

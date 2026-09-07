@@ -9,24 +9,23 @@ namespace perception::lio
 {
 struct SparsityAwareGICPConfig
 {
-    float voxel_size{0.10f};
-    float min_point_spacing{0.04f};
-    int max_points_per_voxel{24};
+    float voxel_size{0.05f};
+    float min_point_spacing{0.01f};
+    int max_points_per_voxel{15};
     int adjacent_voxels{2};
     int covariance_voxel_radius{2};
     int min_covariance_neighbors{8};
     int max_covariance_neighbors{20};
     float covariance_regularization{1.0e-3f};
-    float max_correspondence_distance{0.45f};
+    float max_correspondence_distance{0.2f};
     float cauchy_kernel_scale{0.30f};
-    float max_fitness_score{0.10f};
+    float max_fitness_score{0.001f};
     std::size_t min_correspondences{80};
     std::size_t max_target_voxels{20000};
     float damping_factor{1.0e-4f};
     int max_iterations{30};
-    float convergence_translation{1.0e-4f};
-    float convergence_rotation{1.0e-4f};
-    bool constrain_to_se2{false};
+    float convergence_translation{1.0e-5f};
+    float convergence_rotation{1.0e-5f};
 };
 
 struct SparsityAwareGICPResult

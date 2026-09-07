@@ -60,7 +60,7 @@ struct SparsityAwareGICPConfig
 
     // 目标地图体素容量预算，要求 > 0；不是点数上限，也没有自动淘汰旧体素。
     // 增大允许地图增长，但占用更多显存；减小更早停止增量插入，新增体素超出剩余容量时整批拒绝。
-    // 当前初始化不会按此值裁剪输入，需确保初始地图不超预算，以免超过固定哈希表容量。
+    // 初始化体素数超过预算或预算为 0 时抛出 std::invalid_argument，已有目标保持不变。
     std::size_t max_target_voxels{20000};
 
     // 求解 (H + lambda*I)*delta = -g 的固定阻尼，建议 > 0；不是自适应 LM 阻尼。
@@ -68,7 +68,7 @@ struct SparsityAwareGICPConfig
     float damping_factor{1.0e-4f};
 
     // 最大迭代轮数，正常使用应 > 0；增大允许更多更新但增加计算预算，减小更快但可能未充分对齐。
-    // 当前 CPU 固定提交这么多轮，GPU 求解停止后对应搜索和 Hessian 构建仍会执行，因此仍有额外开销。
+    // CPU 固定提交这么多轮；GPU 停止后搜索和 Hessian 构建直接返回，仍有 kernel launch 开销。
     int max_iterations{50};
 
     // SE(3) 增量中平移分量的范数阈值，单位 m，要求 > 0；需与旋转阈值同时满足才停止更新。

@@ -54,6 +54,8 @@ target_compile_features(sparsity_aware_gicp PUBLIC cxx_std_23 cuda_std_17)
 target_compile_options(sparsity_aware_gicp PRIVATE
     $<$<COMPILE_LANGUAGE:CUDA>:--expt-extended-lambda>
     $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
+    $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Release>>:-O3>
+    $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Release>>:-DNDEBUG>
 )
 
 ament_auto_add_executable(perception ${SOURCE_FILES})
@@ -66,6 +68,15 @@ target_link_libraries(perception ${PCL_LIBRARIES} Sophus::Sophus sparsity_aware_
 target_compile_features(perception PUBLIC c_std_99 cxx_std_23)  # Require C99 and C++23
 
 if (BUILD_TESTING)
+    add_executable(gicp_solver_regression tests/GicpSolverRegression.cu)
+    target_link_libraries(gicp_solver_regression PRIVATE sparsity_aware_gicp cuco::cuco)
+    target_compile_options(gicp_solver_regression PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:--expt-extended-lambda>
+        $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
+        $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Release>>:-O3>
+        $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<CONFIG:Release>>:-DNDEBUG>
+    )
+    add_test(NAME gicp_solver_regression COMMAND gicp_solver_regression)
     find_package(ament_lint_auto REQUIRED)
     set(ament_cmake_copyright_FOUND TRUE)
     set(ament_cmake_cpplint_FOUND TRUE)

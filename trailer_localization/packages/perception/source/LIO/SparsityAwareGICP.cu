@@ -1,9 +1,9 @@
 #include "perception/LIO/SparsityAwareGICP.hpp"
+#include <cub/block/block_reduce.cuh>
 #include <cuco/static_map.cuh>
 #include <cuda_runtime.h>
 #include <math_constants.h>
 #include <thrust/device_vector.h>
-#include <thrust/fill.h>
 #include <thrust/host_vector.h>
 #include <algorithm>
 #include <array>
@@ -22,6 +22,29 @@ Eigen::Isometry3f sophusExpUpdate(const Eigen::Matrix<float, 6, 1>& delta);
 
 namespace
 {
+constexpr int linear_system_block_size = 256;
+constexpr int hessian_size = 21;
+constexpr int valid_count_offset = hessian_size + 6;
+constexpr int squared_error_offset = valid_count_offset + 1;
+constexpr int raw_count_offset = squared_error_offset + 1;
+constexpr int linear_system_size = raw_count_offset + 1;
+
+struct LinearSystemPartial
+{
+    float values[linear_system_size]{};
+
+    __device__ LinearSystemPartial operator+(const LinearSystemPartial& other) const
+    {
+        LinearSystemPartial result;
+        #pragma unroll
+        for (int element = 0; element < linear_system_size; ++element)
+        {
+            result.values[element] = values[element] + other.values[element];
+        }
+        return result;
+    }
+};
+
 struct HostVoxelKey
 {
     int x{0};
@@ -61,9 +84,7 @@ struct HostVoxelKeyHash
 struct SparsePoint
 {
     Eigen::Vector3f position{Eigen::Vector3f::Zero()};
-    Eigen::Matrix3f covariance{Eigen::Matrix3f::Identity()};
     HostVoxelKey key{};
-    bool covariance_valid{false};
 };
 
 struct DevicePoint
@@ -77,28 +98,21 @@ struct DevicePoint
 
 struct DeviceVoxelEntry
 {
-    int x{0};
-    int y{0};
-    int z{0};
     int start{0};
     int count{0};
 };
 
 struct DeviceCorrespondence
 {
-    int source_index{-1};
     int target_index{-1};
     float transformed_x{0.0f};
     float transformed_y{0.0f};
     float transformed_z{0.0f};
-    float distance_squared{0.0f};
-    int valid{0};
 };
 
 struct TargetLayout
 {
     std::vector<DevicePoint> points;
-    std::vector<int> original_indices;
     std::vector<DeviceVoxelEntry> voxels;
     std::vector<std::int64_t> voxel_keys;
 };
@@ -378,9 +392,9 @@ TargetLayout makeTargetLayout(const std::vector<SparsePoint>& points)
 {
     TargetLayout layout;
     layout.points.reserve(points.size());
-    layout.original_indices.resize(points.size());
-    std::iota(layout.original_indices.begin(), layout.original_indices.end(), 0);
-    std::sort(layout.original_indices.begin(), layout.original_indices.end(), [&](const int first, const int second) {
+    std::vector<int> original_indices(points.size());
+    std::iota(original_indices.begin(), original_indices.end(), 0);
+    std::sort(original_indices.begin(), original_indices.end(), [&](const int first, const int second) {
         if (points[first].key == points[second].key)
         {
             return first < second;
@@ -390,27 +404,19 @@ TargetLayout makeTargetLayout(const std::vector<SparsePoint>& points)
 
     HostVoxelKey current_key;
     bool have_current_key = false;
-    for (int ordered_index = 0; ordered_index < static_cast<int>(layout.original_indices.size()); ++ordered_index)
+    for (int ordered_index = 0; ordered_index < static_cast<int>(original_indices.size()); ++ordered_index)
     {
-        const int original_index = layout.original_indices[ordered_index];
+        const int original_index = original_indices[ordered_index];
         const auto& point = points[original_index];
         DevicePoint device_point;
         device_point.x = point.position.x();
         device_point.y = point.position.y();
         device_point.z = point.position.z();
-        device_point.covariance_valid = point.covariance_valid ? 1 : 0;
-        for (int row = 0; row < 3; ++row)
-        {
-            for (int col = 0; col < 3; ++col)
-            {
-                device_point.covariance[row * 3 + col] = point.covariance(row, col);
-            }
-        }
         layout.points.push_back(device_point);
 
         if (!have_current_key || !(point.key == current_key))
         {
-            layout.voxels.push_back(DeviceVoxelEntry{point.key.x, point.key.y, point.key.z, ordered_index, 1});
+            layout.voxels.push_back(DeviceVoxelEntry{ordered_index, 1});
             layout.voxel_keys.push_back(packVoxelKey(point.key));
             current_key = point.key;
             have_current_key = true;
@@ -429,8 +435,13 @@ __global__ void findCorrespondencesKernel(const DevicePoint* source_points, cons
                                           VoxelMapRef target_voxels,
                                           DeviceCorrespondence* correspondences,
                                           const float voxel_size, const int adjacent_voxels,
-                                          const float max_correspondence_distance2, const float* transform)
+                                          const float max_correspondence_distance2, const float* transform,
+                                          const DeviceAlignmentState* state)
 {
+    if (state->active == 0)
+    {
+        return;
+    }
     uint32_t index = blockIdx.x * blockDim.x + threadIdx.x;
     const uint32_t stride = blockDim.x * gridDim.x;
 
@@ -477,8 +488,7 @@ __global__ void findCorrespondencesKernel(const DevicePoint* source_points, cons
             }
         }
 
-        correspondences[index] = DeviceCorrespondence{static_cast<int>(index), best_target, transformed_x, transformed_y, transformed_z,
-                                                      best_distance2, best_target >= 0 ? 1 : 0};
+        correspondences[index] = DeviceCorrespondence{best_target, transformed_x, transformed_y, transformed_z};
         index += stride;
     }
 }
@@ -529,24 +539,25 @@ __device__ bool matrixAllFinite(const Eigen::Matrix3f& matrix)
 
 __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const DevicePoint* target_points,
                                         const DeviceCorrespondence* correspondences, const int num_correspondences,
-                                        const float* transform, const float cauchy_kernel_scale, float* partials)
+                                        const float* transform, const float cauchy_kernel_scale, float* partials,
+                                        const DeviceAlignmentState* state)
 {
-    constexpr int linear_system_size = 45;
-    __shared__ float block_sum[linear_system_size];
-    if (threadIdx.x < linear_system_size)
+    if (state->active == 0)
     {
-        block_sum[threadIdx.x] = 0.0f;
+        return;
     }
-    __syncthreads();
+    using BlockReduce = cub::BlockReduce<LinearSystemPartial, linear_system_block_size, cub::BLOCK_REDUCE_WARP_REDUCTIONS>;
+    __shared__ typename BlockReduce::TempStorage reduction_storage;
+    LinearSystemPartial thread_sum;
 
     uint32_t index = blockIdx.x * blockDim.x + threadIdx.x;
     const uint32_t stride = blockDim.x * gridDim.x;
     while (index < num_correspondences)
     {
-        if (const DeviceCorrespondence correspondence = correspondences[index]; correspondence.valid != 0)
+        if (const DeviceCorrespondence correspondence = correspondences[index]; correspondence.target_index >= 0)
         {
-            atomicAdd(&block_sum[44], 1.0f);
-            const DevicePoint source = source_points[correspondence.source_index];
+            thread_sum.values[raw_count_offset] += 1.0f;
+            const DevicePoint source = source_points[index];
             const DevicePoint target = target_points[correspondence.target_index];
             const Eigen::Vector3f transformed_source(correspondence.transformed_x, correspondence.transformed_y, correspondence.transformed_z);
             const Eigen::Vector3f target_position(target.x, target.y, target.z);
@@ -573,28 +584,36 @@ __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const 
 
                 const Eigen::Matrix<float, 6, 6> local_hessian = jacobian.transpose() * weight * precision * jacobian;
                 const Eigen::Matrix<float, 6, 1> local_gradient = jacobian.transpose() * weight * precision_residual;
+                int packed_index = 0;
+                #pragma unroll
                 for (int row = 0; row < 6; ++row)
                 {
-                    for (int col = 0; col < 6; ++col)
+                    #pragma unroll
+                    for (int col = row; col < 6; ++col)
                     {
-                        atomicAdd(&block_sum[row * 6 + col], local_hessian(row, col));
+                        thread_sum.values[packed_index++] += local_hessian(row, col);
                     }
                 }
-                for (int i = 0; i < 6; ++i)
+                #pragma unroll
+                for (int element = 0; element < 6; ++element)
                 {
-                    atomicAdd(&block_sum[36 + i], local_gradient(i));
+                    thread_sum.values[hessian_size + element] += local_gradient(element);
                 }
-                atomicAdd(&block_sum[42], 1.0f);
-                atomicAdd(&block_sum[43], residual.squaredNorm());
+                thread_sum.values[valid_count_offset] += 1.0f;
+                thread_sum.values[squared_error_offset] += residual.squaredNorm();
             }
         }
         index += stride;
     }
 
-    __syncthreads();
-    if (threadIdx.x < linear_system_size)
+    const LinearSystemPartial block_sum = BlockReduce(reduction_storage).Sum(thread_sum);
+    if (threadIdx.x == 0)
     {
-        partials[blockIdx.x * linear_system_size + threadIdx.x] = block_sum[threadIdx.x];
+        #pragma unroll
+        for (int element = 0; element < linear_system_size; ++element)
+        {
+            partials[blockIdx.x * linear_system_size + element] = block_sum.values[element];
+        }
     }
 }
 
@@ -605,9 +624,10 @@ void findCorrespondencesCuda(const thrust::device_vector<DevicePoint>& device_so
                              VoxelMapRef target_voxels,
                              thrust::device_vector<DeviceCorrespondence>& device_correspondences,
                              thrust::device_vector<float>& device_transform,
-                             const SparsityAwareGICPConfig& config)
+                             const SparsityAwareGICPConfig& config,
+                             const thrust::device_vector<DeviceAlignmentState>& device_state)
 {
-    constexpr int block_size = 256;
+    constexpr int block_size = linear_system_block_size;
     const int grid_size = std::max(1, std::min(1024, static_cast<int>((device_source.size() + block_size - 1) / block_size)));
     const float max_distance2 = config.max_correspondence_distance * config.max_correspondence_distance;
     findCorrespondencesKernel<<<grid_size, block_size>>>(thrust::raw_pointer_cast(device_source.data()), static_cast<int>(device_source.size()),
@@ -615,7 +635,8 @@ void findCorrespondencesCuda(const thrust::device_vector<DevicePoint>& device_so
                                                          thrust::raw_pointer_cast(device_voxels.data()), target_voxels,
                                                          thrust::raw_pointer_cast(device_correspondences.data()), config.voxel_size,
                                                          config.adjacent_voxels, max_distance2,
-                                                         thrust::raw_pointer_cast(device_transform.data()));
+                                                         thrust::raw_pointer_cast(device_transform.data()),
+                                                         thrust::raw_pointer_cast(device_state.data()));
     if (cudaGetLastError() != cudaSuccess)
     {
         throw std::runtime_error("CUDA GICP correspondence-search launch failed");
@@ -628,12 +649,11 @@ void buildLinearSystemCuda(const std::size_t num_source_points,
                            const thrust::device_vector<DeviceCorrespondence>& device_correspondences,
                            const thrust::device_vector<float>& device_transform,
                            const SparsityAwareGICPConfig& config,
-                           thrust::device_vector<float>& device_partials)
+                           thrust::device_vector<float>& device_partials,
+                           const thrust::device_vector<DeviceAlignmentState>& device_state)
 {
     constexpr int block_size = 256;
     const int grid_size = std::max(1, std::min(1024, static_cast<int>((num_source_points + block_size - 1) / block_size)));
-
-    thrust::fill(device_partials.begin(), device_partials.end(), 0.0f);
 
     buildLinearSystemKernel<<<grid_size, block_size>>>(thrust::raw_pointer_cast(device_source.data()),
                                                        thrust::raw_pointer_cast(device_target.data()),
@@ -641,7 +661,8 @@ void buildLinearSystemCuda(const std::size_t num_source_points,
                                                        static_cast<int>(num_source_points),
                                                        thrust::raw_pointer_cast(device_transform.data()),
                                                        config.cauchy_kernel_scale,
-                                                       thrust::raw_pointer_cast(device_partials.data()));
+                                                       thrust::raw_pointer_cast(device_partials.data()),
+                                                       thrust::raw_pointer_cast(device_state.data()));
     if (cudaGetLastError() != cudaSuccess)
     {
         throw std::runtime_error("CUDA GICP linear-system launch failed");
@@ -663,18 +684,24 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
     float squared_error_sum = 0.0f;
     for (int block = 0; block < num_blocks; ++block)
     {
-        const float* partial = partials + block * 45;
+        const float* partial = partials + block * linear_system_size;
+        int packed_index = 0;
         for (int row = 0; row < 6; ++row)
         {
-            for (int col = 0; col < 6; ++col)
+            for (int col = row; col < 6; ++col)
             {
-                augmented[row][col] += partial[row * 6 + col];
+                const float value = partial[packed_index++];
+                augmented[row][col] += value;
+                if (row != col)
+                {
+                    augmented[col][row] += value;
+                }
             }
-            augmented[row][6] -= partial[36 + row];
+            augmented[row][6] -= partial[hessian_size + row];
         }
-        raw_correspondence_count += partial[44];
-        valid_count += partial[42];
-        squared_error_sum += partial[43];
+        raw_correspondence_count += partial[raw_count_offset];
+        valid_count += partial[valid_count_offset];
+        squared_error_sum += partial[squared_error_offset];
     }
     state->raw_correspondences = static_cast<int>(raw_correspondence_count);
     state->num_correspondences = static_cast<int>(valid_count);
@@ -810,14 +837,13 @@ static std::vector<cuco::pair<std::int64_t, int>> makeVoxelPairs(const TargetLay
 
 struct SparsityAwareGICP::TargetCache
 {
-    TargetLayout layout;
     std::unordered_set<std::int64_t> occupied_voxels;
     thrust::device_vector<DevicePoint> points;
     thrust::device_vector<DeviceVoxelEntry> voxels;
     DeviceVoxelMap voxel_map;
 
-    TargetCache(TargetLayout target_layout, const std::size_t max_target_voxels)
-        : layout(std::move(target_layout)), points(layout.points.begin(), layout.points.end()),
+    TargetCache(const TargetLayout& layout, thrust::device_vector<DevicePoint> device_points, const std::size_t max_target_voxels)
+        : points(std::move(device_points)),
           voxels(layout.voxels.begin(), layout.voxels.end()),
           voxel_map(std::max<std::size_t>(2, max_target_voxels * 2),
                     cuco::empty_key{std::numeric_limits<std::int64_t>::min()},
@@ -854,9 +880,12 @@ void SparsityAwareGICP::initializeTarget(const pcl::PointCloud<pcl::PointXYZ>& t
 {
     std::vector<SparsePoint> target_sparse = makeSparseCloud(target, mConfig);
     TargetLayout target_layout = makeTargetLayout(target_sparse);
+    if (mConfig.max_target_voxels == 0 || target_layout.voxels.size() > mConfig.max_target_voxels)
+    {
+        throw std::invalid_argument("Initial target exceeds max_target_voxels or the voxel budget is zero");
+    }
     thrust::device_vector<DevicePoint> device_points = estimateCovariancesCuda(target_layout, mConfig);
-    mTarget = std::make_unique<TargetCache>(std::move(target_layout), mConfig.max_target_voxels);
-    mTarget->points = std::move(device_points);
+    mTarget = std::make_unique<TargetCache>(target_layout, std::move(device_points), mConfig.max_target_voxels);
 }
 
 void SparsityAwareGICP::insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>& points)
@@ -870,6 +899,10 @@ void SparsityAwareGICP::insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>&
         initializeTarget(points);
         return;
     }
+    if (mTarget->voxels.size() >= mConfig.max_target_voxels)
+    {
+        return;
+    }
 
     std::vector<SparsePoint> sparse_points = makeSparseCloud(points, mConfig);
     sparse_points.erase(std::remove_if(sparse_points.begin(), sparse_points.end(), [this](const SparsePoint& point)
@@ -877,21 +910,21 @@ void SparsityAwareGICP::insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>&
             return mTarget->occupied_voxels.find(packVoxelKey(point.key)) != mTarget->occupied_voxels.end();
         }), sparse_points.end());
 
-    if (sparse_points.empty() || mTarget->layout.voxels.size() >= mConfig.max_target_voxels)
+    if (sparse_points.empty())
     {
         return;
     }
 
     TargetLayout new_layout = makeTargetLayout(sparse_points);
-    thrust::device_vector<DevicePoint> device_points = estimateCovariancesCuda(new_layout, mConfig);
-    if (const std::size_t available_voxels = mConfig.max_target_voxels - mTarget->layout.voxels.size();
+    if (const std::size_t available_voxels = mConfig.max_target_voxels - mTarget->voxels.size();
         new_layout.voxels.size() > available_voxels)
     {
         return;
     }
 
-    const int point_offset = static_cast<int>(mTarget->layout.points.size());
-    const int voxel_offset = static_cast<int>(mTarget->layout.voxels.size());
+    thrust::device_vector<DevicePoint> device_points = estimateCovariancesCuda(new_layout, mConfig);
+    const int point_offset = static_cast<int>(mTarget->points.size());
+    const int voxel_offset = static_cast<int>(mTarget->voxels.size());
     for (auto& voxel : new_layout.voxels)
     {
         voxel.start += point_offset;
@@ -909,9 +942,6 @@ void SparsityAwareGICP::insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>&
     thrust::device_vector<cuco::pair<std::int64_t, int>> voxel_pairs(host_voxel_pairs.begin(), host_voxel_pairs.end());
     mTarget->voxel_map.insert(voxel_pairs.begin(), voxel_pairs.end());
 
-    mTarget->layout.points.insert(mTarget->layout.points.end(), new_layout.points.begin(), new_layout.points.end());
-    mTarget->layout.voxels.insert(mTarget->layout.voxels.end(), new_layout.voxels.begin(), new_layout.voxels.end());
-    mTarget->layout.voxel_keys.insert(mTarget->layout.voxel_keys.end(), new_layout.voxel_keys.begin(), new_layout.voxel_keys.end());
     mTarget->occupied_voxels.insert(new_layout.voxel_keys.begin(), new_layout.voxel_keys.end());
 }
 
@@ -940,36 +970,33 @@ SparsityAwareGICPResult SparsityAwareGICP::align(const pcl::PointCloud<pcl::Poin
     TargetLayout source_layout = makeTargetLayout(source_sparse);
 
     result.num_source_points = source_layout.points.size();
-    result.num_target_points = mTarget->layout.points.size();
-    if (source_layout.points.empty() || mTarget->layout.points.empty())
+    result.num_target_points = mTarget->points.size();
+    if (source_layout.points.empty() || mTarget->points.empty())
     {
         return result;
     }
 
     const thrust::device_vector<DevicePoint> device_source = estimateCovariancesCuda(source_layout, mConfig);
     thrust::device_vector<DeviceCorrespondence> device_correspondences(source_layout.points.size());
-    thrust::device_vector<float> device_transform(12);
     const Eigen::Matrix3f initial_rotation = initial_guess.rotation();
     const Eigen::Vector3f initial_translation = initial_guess.translation();
     const std::array<float, 12> initial_transform{initial_rotation(0, 0), initial_rotation(0, 1), initial_rotation(0, 2),
                                                    initial_rotation(1, 0), initial_rotation(1, 1), initial_rotation(1, 2),
                                                    initial_rotation(2, 0), initial_rotation(2, 1), initial_rotation(2, 2),
                                                    initial_translation.x(), initial_translation.y(), initial_translation.z()};
-    thrust::copy(initial_transform.begin(), initial_transform.end(), device_transform.begin());
-    thrust::device_vector<DeviceAlignmentState> device_state(1);
-    thrust::fill(device_state.begin(), device_state.end(), DeviceAlignmentState{});
+    thrust::device_vector<float> device_transform(initial_transform.begin(), initial_transform.end());
+    thrust::device_vector<DeviceAlignmentState> device_state(1, DeviceAlignmentState{});
     const auto target_voxel_ref = mTarget->voxel_map.ref(cuco::find);
-    constexpr int block_size = 256;
-    constexpr int linear_system_size = 45;
+    constexpr int block_size = linear_system_block_size;
     const int grid_size = std::max(1, std::min(1024, static_cast<int>((source_layout.points.size() + block_size - 1) / block_size)));
     thrust::device_vector<float> device_partials(static_cast<std::size_t>(grid_size * linear_system_size));
 
     for (int iteration = 0; iteration < mConfig.max_iterations; ++iteration)
     {
         findCorrespondencesCuda(device_source, mTarget->points, mTarget->voxels, target_voxel_ref,
-                                device_correspondences, device_transform, mConfig);
+                                                                device_correspondences, device_transform, mConfig, device_state);
         buildLinearSystemCuda(source_layout.points.size(), device_source, mTarget->points, device_correspondences,
-                              device_transform, mConfig, device_partials);
+                                                            device_transform, mConfig, device_partials, device_state);
         solveAndUpdateKernel<<<1, 1>>>(thrust::raw_pointer_cast(device_partials.data()), grid_size, mConfig.damping_factor,
                                        mConfig.convergence_translation, mConfig.convergence_rotation,
                                        thrust::raw_pointer_cast(device_transform.data()), thrust::raw_pointer_cast(device_state.data()));

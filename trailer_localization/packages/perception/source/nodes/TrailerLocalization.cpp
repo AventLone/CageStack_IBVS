@@ -218,34 +218,27 @@ void TrailerLocalization::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src
 
 void TrailerLocalization::updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan_in_truck)
 {
-    if (mTrailerVoxelMap == nullptr)
-    {
-        mTrailerVoxelMap = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-    }
-
     // Transform scan into trailer local template frame
     const Eigen::Isometry3f T_truck2trailer = mTrailerPose.inverse();
     pcl::PointCloud<pcl::PointXYZ> scan_in_trailer;
     pcl::transformPointCloud(scan_in_truck, scan_in_trailer, T_truck2trailer);
 
     // Filter points inside trailer ROI
-    const auto scan_in_roi = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-    filter3d::getCloud(scan_in_trailer, scan_in_roi, nullptr, mTrailerRoi);
+    // const auto scan_in_roi = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+    // filter3d::getCloud(scan_in_trailer, scan_in_roi, nullptr, mTrailerRoi);
 
-    *mTrailerVoxelMap += *scan_in_roi;   // Merge into voxel map
+    *mTrailerVoxelMap += scan_in_trailer;   // Merge into voxel map
 
     const auto filtered_map = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
     // Apply 0.05m voxel grid filter to update voxel map
     pcl::VoxelGrid<pcl::PointXYZ> voxel_filter;
-    voxel_filter.setLeafSize(0.05f, 0.05f, 0.05f);
+    voxel_filter.setLeafSize(MAP_RESOLUTION, MAP_RESOLUTION, MAP_RESOLUTION);
     voxel_filter.setInputCloud(mTrailerVoxelMap);
     voxel_filter.filter(*filtered_map);
 
-    // filter3d::downsampleCloud(*mTrailerVoxelMap, 0.05f, *filtered_map);
-
     mTrailerVoxelMap = filtered_map;
 
-    mGicp.insertTargetPoints(*scan_in_roi);
+    mGicp.insertTargetPoints(scan_in_trailer);
 }
 
 void TrailerLocalization::recordGicpDuration(const double duration_ms)
@@ -359,64 +352,90 @@ void TrailerLocalization::workerLoop()
             mScanBuffer.pop();
         }
 
-        pcl::PointCloud<pcl::PointXYZ> lidar_points;
+        pcl::PointCloud<pcl::PointXYZI> lidar_points;
         pcl::fromROSMsg(scan_msg, lidar_points);
+
+        /* Preprocess the cloud */
+        const auto processed_cloud = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+        processed_cloud->reserve(lidar_points.size());
+        for (const auto& point : lidar_points)
+        {
+            if ((point.x > 0.05f || point.x < -0.05f) &&
+                (point.y > 0.05f || point.y < -0.05f) &&
+                point.z > -1.1f)
+            {
+                processed_cloud->emplace_back(point.x, point.y, point.z);
+            }
+        }
 
         const rclcpp::Time lidar_scan_stamp(scan_msg.header.stamp);
 
         /* 1. Get lidar scan in base truck frame */
-        pcl::PointCloud<pcl::PointXYZ> lidar_points_truck;
-        pcl::transformPointCloud(lidar_points, lidar_points_truck, T_truck2lidar);
+        // pcl::PointCloud<pcl::PointXYZ> lidar_points_truck;
+        // pcl::transformPointCloud(lidar_points, lidar_points_truck, T_truck2lidar);
 
         if (mTrailerVoxelMap == nullptr)
         {
-            makeTemplate(lidar_points_truck);
+            if (processed_cloud->size() > 100)
+            {
+                mTrailerVoxelMap = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+                // mTrailerVoxelMap = processed_cloud;
+
+                pcl::VoxelGrid<pcl::PointXYZ> voxel_filter;
+                voxel_filter.setLeafSize(MAP_RESOLUTION, MAP_RESOLUTION, MAP_RESOLUTION);
+                voxel_filter.setInputCloud(processed_cloud);
+                voxel_filter.filter(*mTrailerVoxelMap);
+
+                mGicp.initializeTarget(*mTrailerVoxelMap);
+            }
+            else
+            {
+                RCLCPP_WARN(get_logger(), "processed_cloud is empty!");
+            }
             continue;
         }
 
         /* 2. Get lidar scan within ROI */
-        ROI scan_roi = mTrailerRoi;
-        scan_roi.min_x -= 1.0f;
-        scan_roi.max_x += 1.0f;
-        scan_roi.min_y -= 1.0f;
-        scan_roi.max_y += 1.0f;
-
-        auto scan_in_roi = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-        scan_in_roi->reserve(lidar_points_truck.size() / 3);
-        filter3d::getCloud(lidar_points_truck, scan_in_roi, nullptr, mTrailerPose, scan_roi);
+        // ROI scan_roi = mTrailerRoi;
+        // scan_roi.min_x -= 1.0f;
+        // scan_roi.max_x += 1.0f;
+        // scan_roi.min_y -= 1.0f;
+        // scan_roi.max_y += 1.0f;
+        //
         // auto scan_in_roi = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-        // scan_in_roi->reserve(lidar_points_truck.size() / 2);
-        // for (const auto& point : lidar_points_truck)
-        // {
-        //     if (point.x < 1.0f && point.y > -10.0f && point.y < 10.0f && point.z > 0.1f)
-        //     {
-        //         scan_in_roi->emplace_back(point);
-        //     }
-        // }
+        // scan_in_roi->reserve(lidar_points_truck.size() / 3);
+        // filter3d::getCloud(lidar_points_truck, scan_in_roi, nullptr, mTrailerPose, scan_roi);
 
-        if (scan_in_roi->empty())
+        if (processed_cloud->empty())
         {
             RCLCPP_WARN(get_logger(), "Skipping GICP: current scan has no points inside the trailer ROI.");
             continue;
         }
 
-        if (alignICP(scan_in_roi, mTrailerPose))
+        if (alignICP(processed_cloud, mTrailerPose))
         {
-            updateVoxelMap(lidar_points_truck);
+            updateVoxelMap(*processed_cloud);
         }
-        pcl::PointCloud<pcl::PointXYZ> aligned_map;
-        pcl::transformPointCloud(*mTrailerVoxelMap, aligned_map, mTrailerPose);
+
+        pcl::PointCloud<pcl::PointXYZ> transformed_scan;
+        pcl::transformPointCloud(*processed_cloud, transformed_scan, mTrailerPose.inverse());
 
         sensor_msgs::msg::PointCloud2 scan_vis_msg;
-        pcl::toROSMsg(aligned_map, scan_vis_msg);
-        scan_vis_msg.header = scan_msg.header;
-        scan_vis_msg.header.frame_id = "LOLA";
+        pcl::toROSMsg(transformed_scan, scan_vis_msg);
+        scan_vis_msg.header.stamp = this->now();
+        scan_vis_msg.header.frame_id = "map";
         mProcessedScanVisPub->publish(scan_vis_msg);
 
-        geometry_msgs::msg::PoseStamped pose_msg;
-        pose_msg.header = scan_msg.header;
-        pose_msg.header.frame_id = "LOLA";
-        pose_msg.pose = tf2::toMsg(Eigen::Isometry3d(mTrailerPose.cast<double>()));
-        mTrailerPosePub->publish(pose_msg);
+        sensor_msgs::msg::PointCloud2 map_msg;
+        pcl::toROSMsg(*mTrailerVoxelMap, map_msg);
+        map_msg.header.stamp = this->now();
+        map_msg.header.frame_id = "map";
+        mVoxelMapPub->publish(map_msg);
+
+        // geometry_msgs::msg::PoseStamped pose_msg;
+        // pose_msg.header = scan_msg.header;
+        // pose_msg.header.frame_id = "LOLA";
+        // pose_msg.pose = tf2::toMsg(Eigen::Isometry3d(mTrailerPose.cast<double>()));
+        // mTrailerPosePub->publish(pose_msg);
     }
 }

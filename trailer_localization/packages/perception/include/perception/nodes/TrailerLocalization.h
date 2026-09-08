@@ -17,22 +17,29 @@
 
 class TrailerLocalization : public rclcpp::Node
 {
+    static constexpr float MAP_RESOLUTION = 0.05f;
 public:
     explicit TrailerLocalization(const std::string& node_name) : Node(node_name), mTfBuffer(this->get_clock()), mTfListener(mTfBuffer)
     {
         /* Lookup transform */
-        while (rclcpp::ok())
-        {
-            try
-            {
-                T_truck2lidar = tf2::transformToEigen(mTfBuffer.lookupTransform("LOLA", "JT128", tf2::TimePointZero)).cast<float>();
-                break;
-            }
-            catch (const tf2::TransformException& ex)
-            {
-                RCLCPP_ERROR(this->get_logger(), "Could not transform fork to body: %s", ex.what());
-            }
-        }
+        // while (rclcpp::ok())
+        // {
+        //     try
+        //     {
+        //         T_truck2lidar = tf2::transformToEigen(mTfBuffer.lookupTransform("LOLA", "JT128", tf2::TimePointZero)).cast<float>();
+        //         break;
+        //     }
+        //     catch (const tf2::TransformException& ex)
+        //     {
+        //         RCLCPP_ERROR(this->get_logger(), "Could not transform fork to body: %s", ex.what());
+        //     }
+        // }
+
+        perception::lio::SparsityAwareGICPConfig config{};
+        config.voxel_size = MAP_RESOLUTION;
+        config.max_points_per_voxel = 26;
+        config.max_fitness_score = 0.1;
+        mGicp.setConfig(config);
 
         initSubscribers();
         initPublisher();
@@ -60,7 +67,7 @@ private:
     rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr mWheelOdomSub;
 
     /* Publishers */
-    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr mProcessedScanVisPub;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr mProcessedScanVisPub, mVoxelMapPub;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr mTrailerPosePub;
 
     /* Data Buffers */
@@ -89,7 +96,8 @@ private:
 
     void initSubscribers()
     {
-        mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/sim_scan", rclcpp::SensorDataQoS(),
+        // mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/iv_points", rclcpp::SensorDataQoS(),
+        mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/iv_points", 10,
             [this](const sensor_msgs::msg::PointCloud2::ConstSharedPtr& scan_msg)
                 {
                     {
@@ -107,6 +115,7 @@ private:
     void initPublisher()
     {
         mProcessedScanVisPub = create_publisher<sensor_msgs::msg::PointCloud2>("/scan_vis", rclcpp::SensorDataQoS());
+        mVoxelMapPub = create_publisher<sensor_msgs::msg::PointCloud2>("/voxel_map", rclcpp::SensorDataQoS());
         mTrailerPosePub = create_publisher<geometry_msgs::msg::PoseStamped>("/trailer_pose", rclcpp::SensorDataQoS());
     }
 

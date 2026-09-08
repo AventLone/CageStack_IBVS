@@ -49,7 +49,6 @@ void testSolver(const bool zero_gradient, const bool singular)
         }
         partials[block * linear_system_size + valid_count_offset] = 10.0f;
         partials[block * linear_system_size + squared_error_offset] = 0.1f;
-        partials[block * linear_system_size + raw_count_offset] = 12.0f;
     }
     Eigen::Isometry3f initial = Eigen::Isometry3f::Identity();
     initial.linear() = Eigen::AngleAxisf(0.3f, Eigen::Vector3f::UnitY()).toRotationMatrix();
@@ -72,7 +71,6 @@ void testSolver(const bool zero_gradient, const bool singular)
     require(cudaDeviceSynchronize() == cudaSuccess, "Solver CUDA execution failed");
     const thrust::host_vector<DeviceAlignmentState> state = device_state;
     const thrust::host_vector<float> actual = device_transform;
-    require(state[0].raw_correspondences == 24, "Raw-match reduction or failure diagnostics incorrect");
     require(state[0].num_correspondences == 20, "Valid-match reduction or failure diagnostics incorrect");
     require(std::abs(state[0].fitness_score - 0.01f) < 1.0e-6f, "Fitness reduction incorrect");
     if (singular)
@@ -139,7 +137,6 @@ void testLinearSystem(const int num_points, const int num_blocks, const bool all
                                         rotation(2, 0), rotation(2, 1), rotation(2, 2), 0.1f, -0.2f, 0.3f};
     Eigen::Matrix<double, 6, 6> expected_hessian = Eigen::Matrix<double, 6, 6>::Zero();
     Eigen::Matrix<double, 6, 1> expected_gradient = Eigen::Matrix<double, 6, 1>::Zero();
-    int raw_count = 0;
     int valid_count = 0;
     double squared_error = 0.0;
     for (int index = 0; index < num_points; ++index)
@@ -173,7 +170,6 @@ void testLinearSystem(const int num_points, const int num_blocks, const bool all
         {
             continue;
         }
-        ++raw_count;
         Eigen::Matrix3f covariance = Eigen::Matrix3f::Identity();
         if (source[index].covariance_valid != 0)
         {
@@ -224,7 +220,7 @@ void testLinearSystem(const int num_points, const int num_blocks, const bool all
         require(std::abs(sum[hessian_size + row] - expected_gradient(row)) < 5.0e-5 * std::max(1.0, std::abs(expected_gradient(row))),
                 "Reduced gradient differs from CPU reference");
     }
-    require(sum[raw_count_offset] == raw_count && sum[valid_count_offset] == valid_count, "Reduced correspondence counts incorrect");
+    require(sum[valid_count_offset] == valid_count, "Reduced correspondence count incorrect");
     require(std::abs(sum[squared_error_offset] - squared_error) < 1.0e-6, "Reduced fitness sum incorrect");
 }
 
@@ -248,7 +244,7 @@ void testTargetCapacity()
     excess.resize(1);
     gicp.insertTargetPoints(excess);
     const auto inserted = gicp.align(excess, Eigen::Isometry3f::Identity());
-    require(inserted.num_target_points == 3 && inserted.num_raw_correspondences == 1,
+    require(inserted.num_target_points == 3 && inserted.num_correspondences == 1,
             "Incremental target layout or correspondence lookup incorrect");
     excess.front().x = 0.81f;
     gicp.insertTargetPoints(excess);
@@ -290,7 +286,7 @@ void testAlignment()
     Eigen::Isometry3f initial = Eigen::Isometry3f::Identity();
     initial.translation() = translation;
     const auto exact_result = gicp.align(source, initial);
-    require(exact_result.converged && exact_result.num_raw_correspondences > 500,
+    require(exact_result.converged && exact_result.num_correspondences > 500,
             "Exact alignment failed or lost spatial matches");
     require((exact_result.transform.matrix() - initial.matrix()).norm() < 1.0e-4f,
             "Exact alignment changed a correct nonzero pose");

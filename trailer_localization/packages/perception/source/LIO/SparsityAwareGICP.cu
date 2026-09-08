@@ -26,8 +26,7 @@ constexpr int linear_system_block_size = 256;
 constexpr int hessian_size = 21;
 constexpr int valid_count_offset = hessian_size + 6;
 constexpr int squared_error_offset = valid_count_offset + 1;
-constexpr int raw_count_offset = squared_error_offset + 1;
-constexpr int linear_system_size = raw_count_offset + 1;
+constexpr int linear_system_size = squared_error_offset + 1;
 
 struct LinearSystemPartial
 {
@@ -120,7 +119,6 @@ struct TargetLayout
 struct DeviceAlignmentState
 {
     float fitness_score{std::numeric_limits<float>::infinity()};
-    int raw_correspondences{0};
     int num_correspondences{0};
     int iterations{0};
     int active{1};
@@ -205,7 +203,7 @@ __global__ void estimateCovariancesKernel(DevicePoint* points, const int num_poi
                                           const float regularization)
 {
     constexpr int neighbor_capacity = 64;
-    const int index = blockIdx.x * blockDim.x + threadIdx.x;
+    const int index = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
     if (index >= num_points)
     {
         return;
@@ -230,6 +228,7 @@ __global__ void estimateCovariancesKernel(DevicePoint* points, const int num_poi
                 {
                     continue;
                 }
+
                 const DeviceVoxelEntry voxel = voxel_entries[found->second];
                 for (int offset = 0; offset < voxel.count; ++offset)
                 {
@@ -243,6 +242,7 @@ __global__ void estimateCovariancesKernel(DevicePoint* points, const int num_poi
                     {
                         continue;
                     }
+
                     const int insertion_limit = min(neighbor_count, max_neighbors - 1);
                     int insertion_index = insertion_limit;
 
@@ -307,6 +307,7 @@ __global__ void estimateCovariancesKernel(DevicePoint* points, const int num_poi
         covariance[5] += y * z;
         covariance[8] += z * z;
     }
+
     const float scale = 1.0f / static_cast<float>(neighbor_count - 1);
     covariance[0] = covariance[0] * scale + regularization;
     covariance[1] *= scale;
@@ -395,13 +396,14 @@ TargetLayout makeTargetLayout(const std::vector<SparsePoint>& points)
     layout.points.reserve(points.size());
     std::vector<int> original_indices(points.size());
     std::iota(original_indices.begin(), original_indices.end(), 0);
-    std::sort(original_indices.begin(), original_indices.end(), [&](const int first, const int second) {
-        if (points[first].key == points[second].key)
+    std::sort(original_indices.begin(), original_indices.end(), [&](const int first, const int second)
         {
-            return first < second;
-        }
-        return points[first].key < points[second].key;
-    });
+            if (points[first].key == points[second].key)
+            {
+                return first < second;
+            }
+            return points[first].key < points[second].key;
+        });
 
     HostVoxelKey current_key;
     bool have_current_key = false;
@@ -558,7 +560,6 @@ __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const 
     {
         if (const DeviceCorrespondence correspondence = correspondences[index]; correspondence.target_index >= 0)
         {
-            thread_sum.values[raw_count_offset] += 1.0f;
             const DevicePoint source = source_points[index];
             const DevicePoint target = target_points[correspondence.target_index];
             const Eigen::Vector3f transformed_source(correspondence.transformed_x, correspondence.transformed_y, correspondence.transformed_z);
@@ -683,7 +684,6 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
     }
 
     float augmented[6][7]{};
-    float raw_correspondence_count = 0.0f;
     float valid_count = 0.0f;
     float squared_error_sum = 0.0f;
     for (int block = 0; block < num_blocks; ++block)
@@ -703,11 +703,9 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
             }
             augmented[row][6] -= partial[hessian_size + row];
         }
-        raw_correspondence_count += partial[raw_count_offset];
         valid_count += partial[valid_count_offset];
         squared_error_sum += partial[squared_error_offset];
     }
-    state->raw_correspondences = static_cast<int>(raw_correspondence_count);
     state->num_correspondences = static_cast<int>(valid_count);
     state->fitness_score = valid_count > 0.0f ? squared_error_sum / valid_count : CUDART_INF_F;
     if (valid_count <= 0.0f || !isfinite(squared_error_sum))
@@ -823,7 +821,6 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
         transform[element] = updated_transform[element];
     }
     state->iterations += 1;
-    state->raw_correspondences = static_cast<int>(raw_correspondence_count);
     state->num_correspondences = static_cast<int>(valid_count);
     state->fitness_score = squared_error_sum / valid_count;
     if (sqrtf(delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]) < convergence_translation &&
@@ -1022,7 +1019,6 @@ SparsityAwareGICPResult SparsityAwareGICP::align(const pcl::PointCloud<pcl::Poin
     thrust::host_vector<float> host_transform = device_transform;
     const DeviceAlignmentState& final_state = host_state.front();
     result.iterations = final_state.iterations;
-    result.num_raw_correspondences = static_cast<std::size_t>(std::max(0, final_state.raw_correspondences));
     result.num_correspondences = static_cast<std::size_t>(std::max(0, final_state.num_correspondences));
     result.fitness_score = final_state.fitness_score;
     result.transform.matrix() << host_transform[0], host_transform[1], host_transform[2], host_transform[9],

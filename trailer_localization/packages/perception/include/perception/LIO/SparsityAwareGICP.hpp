@@ -21,12 +21,12 @@ struct SparsityAwareGICPConfig
     // 增大保留更多局部几何、增加计算和显存开销；减小加快处理但可能使邻域过稀。
     int max_points_per_voxel{26};
 
-    // 对应搜索沿每个轴扩展的体素数 r，要求 >= 0；查询 (2*r+1)^3 个体素。
+    // 对应搜索沿每个轴扩展的体素数 r，要求 >= 0；查询 (2*r + 1)^3 个体素。
     // 增大可覆盖更大的初始位姿误差，但搜索开销和误匹配风险增加；减小更快但易漏匹配。
     int adjacent_voxels{2};
 
     // 协方差邻域沿每个轴扩展的体素数 r，实际至少为 0。
-    // 增大可找到更多候选邻居，但查询量按 (2*r+1)^3 增长，并可能混入不同表面；减小更局部。
+    // 增大可找到更多候选邻居，但查询量按 (2*r + 1)^3 增长，并可能混入不同表面；减小更局部。
     int covariance_voxel_radius{2};
 
     // 有效协方差所需的最少邻居数，包含点自身，实际至少为 3。
@@ -35,7 +35,7 @@ struct SparsityAwareGICPConfig
 
     // 计算协方差时最多使用的最近邻数 K；实际 K=max(3, min_covariance_neighbors, 本值)。
     // 当前 CUDA 实现要求实际 K <= 64，否则抛异常。增大通常更平滑、更慢；减小更局部、对噪声敏感。
-    int max_covariance_neighbors{20};
+    int max_covariance_neighbors{30};
 
     // 原始样本协方差对角线正则项，单位 m^2，实际至少为 1e-6，之后还会做逆矩阵范数归一化。
     // 增大改善求逆稳定性，但弱化平面/边缘的方向性；减小保留方向性，但退化邻域更易数值不稳。
@@ -43,9 +43,9 @@ struct SparsityAwareGICPConfig
 
     // 最近邻欧氏距离上限，单位 m，要求 > 0；只在 adjacent_voxels 覆盖的体素内查找。
     // 增大放宽匹配但增加误匹配风险；减小更严格、可能无对应点。单独增大不会扩大体素查询范围。
-    float max_correspondence_distance{0.2f};
+    float max_correspondence_distance{0.5f};
 
-    // Cauchy 鲁棒核尺度 s，作用于马氏误差 e：权重=1/(1+e/s^2)，不是直接的欧氏距离阈值。
+    // Cauchy 鲁棒核尺度 s，作用于马氏误差 e：权重= 1 / (1 + e/s^2)，不是直接的欧氏距离阈值。
     // 正值越小越抑制大残差，但也可能削弱有效约束；越大越接近普通 GICP；<= 0 禁用鲁棒降权。
     float cauchy_kernel_scale{0.3f};
 
@@ -63,7 +63,7 @@ struct SparsityAwareGICPConfig
     // 初始化体素数超过预算或预算为 0 时抛出 std::invalid_argument，已有目标保持不变。
     std::size_t max_target_voxels{20000};
 
-    // 求解 (H + lambda*I)*delta = -g 的固定阻尼，建议 > 0；不是自适应 LM 阻尼。
+    // 求解 (H + lambda*I) * delta = -g 的固定阻尼，建议 > 0；不是自适应 LM 阻尼。
     // 增大通常使更新更保守、改善病态系统，但可能减慢收敛；减小更激进，也更易受退化和噪声影响。
     float damping_factor{1.0e-4f};
 
@@ -87,7 +87,6 @@ struct SparsityAwareGICPResult
     int iterations{0};
     std::size_t num_source_points{0};
     std::size_t num_target_points{0};
-    std::size_t num_raw_correspondences{0};
     std::size_t num_correspondences{0};
     float fitness_score{std::numeric_limits<float>::infinity()};
     Eigen::Isometry3f transform{Eigen::Isometry3f::Identity()};

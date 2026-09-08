@@ -57,7 +57,7 @@ public:
 private:
     /* Subscribers */
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr mLidarScanSub;
-    // rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr mWheelOdomSub;
+    rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr mWheelOdomSub;
 
     /* Publishers */
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr mProcessedScanVisPub;
@@ -83,11 +83,9 @@ private:
     pcl::PointCloud<pcl::PointXYZ>::Ptr mTrailerVoxelMap;
     Eigen::Isometry3f mTrailerPose{Eigen::Isometry3f::Identity()};
     ROI mTrailerRoi{};
-    // perception::kalman::AckermannLidarEKF mFusionFilter;
     perception::lio::SparsityAwareGICP mGicp;
     std::vector<double> mGicpDurationsMs;
     std::size_t mGicpDurationCount{0};
-    // double mFilterTime{-1.0};
 
     void initSubscribers()
     {
@@ -104,34 +102,6 @@ private:
                     }
                     mTrigger.notify_one();
                 });
-
-        // mWheelOdomSub = create_subscription<geometry_msgs::msg::TwistStamped>("/wheel_odometry", rclcpp::SensorDataQoS(),
-        //     [this](const geometry_msgs::msg::TwistStamped::ConstSharedPtr& odometry_msg)
-        //     {
-        //         perception::kalman::AckermannMeasurement measurement;
-        //         // Temporary topic contract: linear.x is wheel speed [m/s], angular.z is steering angle [rad].
-        //         measurement.speed = static_cast<float>(odometry_msg->twist.linear.x);
-        //         measurement.steering_angle = static_cast<float>(odometry_msg->twist.angular.z);
-        //
-        //         const double odometry_time = rclcpp::Time(odometry_msg->header.stamp).seconds();
-        //         std::lock_guard lock(mFusionMutex);
-        //         if (!mFusionFilter.initialized())
-        //         {
-        //             return;
-        //         }
-        //         if (mFilterTime >= 0.0 && odometry_time > mFilterTime)
-        //         {
-        //             mFusionFilter.predict(measurement, static_cast<float>(odometry_time - mFilterTime));
-        //             mTrailerPose = mFusionFilter.pose().inverse();
-        //         }
-        //         mFilterTime = odometry_time;
-        //
-        //         geometry_msgs::msg::PoseStamped pose_msg;
-        //         pose_msg.header = odometry_msg->header;
-        //         pose_msg.header.frame_id = "LOLA";
-        //         pose_msg.pose = tf2::toMsg(Eigen::Isometry3d(mTrailerPose.cast<double>()));
-        //         mTrailerPosePub->publish(pose_msg);
-        //     });
     }
 
     void initPublisher()
@@ -156,10 +126,6 @@ private:
     void recordGicpDuration(double duration_ms);
 
     void updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan_in_truck);
-
-    // bool updateLio(const Eigen::Isometry3f& lidar_pose, const rclcpp::Time& scan_stamp);
-
-    // void publishLioPose(const rclcpp::Time& stamp);
 
     void workerLoop();
 };

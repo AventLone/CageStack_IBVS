@@ -336,9 +336,9 @@ bool TrailerLocalization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cu
         return true;
     }
 
-    RCLCPP_WARN(get_logger(), "CUDA sparse GICP did not converge: iter: %d, raw matches: %zu/%zu, valid correspondences: %zu, fitness: %.6f.",
-                result.iterations, result.num_raw_correspondences, result.num_source_points,
-                result.num_correspondences, result.fitness_score);
+    RCLCPP_WARN(get_logger(), "CUDA sparse GICP did not converge: iter: %d, correspondences: %zu/%zu, fitness: %.6f.",
+                result.iterations, result.num_correspondences, result.num_source_points,
+                result.fitness_score);
     return false;
 }
 

@@ -59,13 +59,19 @@ struct TargetLayout
     std::vector<std::int64_t> voxel_keys;
 };
 
+enum class AlignmentStatus : int
+{
+    Running,
+    Aborted,
+    Converged
+};
+
 struct DeviceAlignmentState
 {
     float fitness_score{std::numeric_limits<float>::infinity()};
     int num_correspondences{0};
     int iterations{0};
-    int active{1};
-    int converged{0};
+    AlignmentStatus status{AlignmentStatus::Running};
 };
 
 using DeviceVoxelMap = decltype(cuco::static_map{std::size_t{2},

@@ -402,59 +402,64 @@ void TrailerLocalization::workerLoop()
             mScanBuffer.pop();
         }
 
-        // pcl::PointCloud<pcl::PointXYZI> lidar_points;
-        // pcl::PointCloud<pcl::PointXYZI> lidar_points;
-        const auto lidar_points = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-        pcl::fromROSMsg(scan_msg, *lidar_points);
+        pcl::PointCloud<pcl::PointXYZI> lidar_points;
+        // const auto lidar_points = std::make_shared<pcl::PointCloud<pcl::PointXYZI>>();
+        pcl::fromROSMsg(scan_msg, lidar_points);
 
-        // if (!mIntensityAnalyzed)
-        // {
-        //     mIntensityAnalyzed = true;
-        //     if (const auto analysis = analyzeIntensity(lidar_points, mIntensityKeepRatio))
-        //     {
-        //         const double retained_percentage = 100.0 * static_cast<double>(analysis->retained_count) /
-        //                                            static_cast<double>(analysis->valid_count);
-        //         RCLCPP_INFO(get_logger(),
-        //                     "First-frame intensity distribution (%zu valid points): min %.2f, P25 %.2f, "
-        //                     "P40 %.2f, P50 %.2f, P75 %.2f, P90 %.2f, P95 %.2f, P99 %.2f, max %.2f.",
-        //                     analysis->valid_count, analysis->minimum, analysis->p25, analysis->p40, analysis->median,
-        //                     analysis->p75, analysis->p90, analysis->p95, analysis->p99, analysis->maximum);
-        //         RCLCPP_INFO(get_logger(),
-        //                     "Suggested intensity threshold: %.2f (target keep ratio %.1f%%, actual %.1f%%).",
-        //                     analysis->suggested_threshold, 100.0 * mIntensityKeepRatio, retained_percentage);
-        //         if (mIntensityThreshold < 0.0f)
-        //         {
-        //             mIntensityThreshold = analysis->suggested_threshold;
-        //             RCLCPP_INFO(get_logger(), "Using automatically selected intensity threshold %.2f.",
-        //                         mIntensityThreshold);
-        //         }
-        //         else
-        //         {
-        //             RCLCPP_INFO(get_logger(), "Using configured intensity threshold %.2f.", mIntensityThreshold);
-        //         }
-        //     }
-        //     else
-        //     {
-        //         RCLCPP_WARN(get_logger(), "First frame contains no finite intensity values; no threshold was selected.");
-        //     }
-        // }
+        if (!mIntensityAnalyzed)
+        {
+            mIntensityAnalyzed = true;
+            // mIntensityKeepRatio =0.9f;
+            if (const auto analysis = analyzeIntensity(lidar_points, mIntensityKeepRatio))
+            {
+                const double retained_percentage = 100.0 * static_cast<double>(analysis->retained_count) /
+                                                   static_cast<double>(analysis->valid_count);
+                RCLCPP_INFO(get_logger(),
+                            "First-frame intensity distribution (%zu valid points): min %.2f, P25 %.2f, "
+                            "P40 %.2f, P50 %.2f, P75 %.2f, P90 %.2f, P95 %.2f, P99 %.2f, max %.2f.",
+                            analysis->valid_count, analysis->minimum, analysis->p25, analysis->p40, analysis->median,
+                            analysis->p75, analysis->p90, analysis->p95, analysis->p99, analysis->maximum);
+                RCLCPP_INFO(get_logger(),
+                            "Suggested intensity threshold: %.2f (target keep ratio %.1f%%, actual %.1f%%).",
+                            analysis->suggested_threshold, 100.0 * mIntensityKeepRatio, retained_percentage);
+                if (mIntensityThreshold < 0.0f)
+                {
+                    mIntensityThreshold = analysis->suggested_threshold;
+                    RCLCPP_INFO(get_logger(), "Using automatically selected intensity threshold %.2f.",
+                                mIntensityThreshold);
+                }
+                else
+                {
+                    RCLCPP_INFO(get_logger(), "Using configured intensity threshold %.2f.", mIntensityThreshold);
+                }
+            }
+            else
+            {
+                RCLCPP_WARN(get_logger(), "First frame contains no finite intensity values; no threshold was selected.");
+            }
+        }
 
         /* Filter out points below the selected intensity threshold */
-        // const auto denoised_scan = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-        // denoised_scan->reserve(lidar_points.size());
-        // for (const auto& point : lidar_points)
-        // {
-        //     if (point.intensity >= mIntensityThreshold)
-        //     {
-        //         denoised_scan->emplace_back(point.x, point.y, point.z);
-        //     }
-        // }
+        const auto denoised_scan = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+        denoised_scan->reserve(lidar_points.size());
+        for (const auto& point : lidar_points)
+        {
+            if (point.intensity < mIntensityThreshold)
+            {
+                continue;
+            }
+
+            if (point.x > 0.1f || point.x < -0.1f || point.y > 0.2f || point.y < -0.2f)
+            {
+                denoised_scan->emplace_back(point.x, point.y, point.z);
+            }
+        }
 
         /* Preprocess the cloud */
         const auto processed_cloud = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
         pcl::VoxelGrid<pcl::PointXYZ> voxel_filter;
         voxel_filter.setLeafSize(MAP_RESOLUTION, MAP_RESOLUTION, MAP_RESOLUTION);
-        voxel_filter.setInputCloud(lidar_points);
+        voxel_filter.setInputCloud(denoised_scan);
         voxel_filter.filter(*processed_cloud);
 
         // processed_cloud->reserve(lidar_points.size());

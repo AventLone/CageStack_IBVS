@@ -67,16 +67,16 @@ struct SparsityAwareGICPConfig
 
     // 最大迭代轮数，正常使用应 > 0；增大允许更多更新但增加计算预算，减小更快但可能未充分对齐。
     // CPU 固定提交这么多轮；GPU 停止后搜索和 Hessian 构建直接返回，仍有 kernel launch 开销。
-    int max_iterations{100};
+    int max_iterations{50};
 
     // SE(3) 增量中平移分量的范数阈值，单位 m，要求 > 0；需与旋转阈值同时满足才停止更新。
     // 增大更早停止、精细程度降低；减小更严格、可能因浮点精度或噪声持续迭代；1e-6 m 为 1 微米。
-    float convergence_translation{1.0e-6f};
+    float convergence_translation{1.0e-5f};
 
     // SE(3) 增量中旋转向量的范数阈值，单位 rad，要求 > 0；增大更早停止，减小更严格。
     // 1e-6 rad 约为 0.000057 度。阈值仅判断更新量，不保证配准正确或残差足够小。
     // 注意：当前 result.converged 还会接受“有成功迭代且 fitness 有限”，不等价于满足这两个阈值。
-    float convergence_rotation{1.0e-6f};
+    float convergence_rotation{1.0e-5f};
 };
 
 struct SparsityAwareGICPResult

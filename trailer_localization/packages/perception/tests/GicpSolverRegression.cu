@@ -93,7 +93,8 @@ void testSolver(const bool zero_gradient, const bool singular)
     require(std::abs(state[0].fitness_score - 0.01f) < 1.0e-6f, "Fitness reduction incorrect");
     if (singular)
     {
-        require(state[0].iterations == 0 && state[0].active == 0, "Singular solve must stop without an update");
+        require(state[0].iterations == 0 && state[0].status == AlignmentStatus::Aborted,
+            "Singular solve must stop without an update");
     }
     else
     {
@@ -121,7 +122,7 @@ void testSolver(const bool zero_gradient, const bool singular)
 void testInactiveKernels()
 {
     DeviceAlignmentState inactive;
-    inactive.active = 0;
+    inactive.status = AlignmentStatus::Aborted;
     thrust::device_vector<DeviceAlignmentState> state(1, inactive);
     thrust::device_vector<float> partials(linear_system_size, -123.0f);
     thrust::device_vector<float> transform(12, 0.0f);

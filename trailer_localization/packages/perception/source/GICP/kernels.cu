@@ -5,8 +5,6 @@
 #include <cmath>
 #include <stdexcept>
 
-namespace cuda_func
-{
 namespace
 {
 template<class VoxelMapRef>
@@ -37,7 +35,7 @@ __global__ void estimateCovariancesKernel(DevicePoint* points, const int num_poi
         {
             for (int dz = -voxel_radius; dz <= voxel_radius; ++dz)
             {
-                const auto found = voxels.find(packVoxelKey(base_x + dx, base_y + dy, base_z + dz));
+                const auto found = voxels.find(cuda_func::packVoxelKey(base_x + dx, base_y + dy, base_z + dz));
                 if (found == voxels.end())
                 {
                     continue;
@@ -173,7 +171,7 @@ __global__ void findCorrespondencesKernel(const DevicePoint* source_points, cons
                                           const float max_correspondence_distance2, const float* transform,
                                           const DeviceAlignmentState* state)
 {
-    if (state->active == 0)
+    if (state->status != AlignmentStatus::Running)
     {
         return;
     }
@@ -199,7 +197,7 @@ __global__ void findCorrespondencesKernel(const DevicePoint* source_points, cons
             {
                 for (int dz = -adjacent_voxels; dz <= adjacent_voxels; ++dz)
                 {
-                    const auto found = target_voxels.find(packVoxelKey(base_x + dx, base_y + dy, base_z + dz));
+                    const auto found = target_voxels.find(cuda_func::packVoxelKey(base_x + dx, base_y + dy, base_z + dz));
                     if (found == target_voxels.end())
                     {
                         continue;
@@ -277,10 +275,11 @@ __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const 
                                         const float* transform, const float cauchy_kernel_scale, float* partials,
                                         const DeviceAlignmentState* state)
 {
-    if (state->active == 0)
+    if (state->status != AlignmentStatus::Running)
     {
         return;
     }
+
     using BlockReduce = cub::BlockReduce<LinearSystemPartial, linear_system_block_size, cub::BLOCK_REDUCE_WARP_REDUCTIONS>;
     __shared__ BlockReduce::TempStorage reduction_storage;
     LinearSystemPartial thread_sum;
@@ -289,11 +288,11 @@ __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const 
     const uint32_t stride = blockDim.x * gridDim.x;
     while (index < num_correspondences)
     {
-        if (const DeviceCorrespondence correspondence = correspondences[index]; correspondence.target_index >= 0)
+        if (const auto [target_index, transformed_x, transformed_y, transformed_z] = correspondences[index]; target_index >= 0)
         {
             const DevicePoint source = source_points[index];
-            const DevicePoint target = target_points[correspondence.target_index];
-            const Eigen::Vector3f transformed_source(correspondence.transformed_x, correspondence.transformed_y, correspondence.transformed_z);
+            const DevicePoint target = target_points[target_index];
+            const Eigen::Vector3f transformed_source(transformed_x, transformed_y, transformed_z);
             const Eigen::Vector3f target_position(target.x, target.y, target.z);
             const Eigen::Vector3f residual = transformed_source - target_position;
 
@@ -357,7 +356,7 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
                                      const float convergence_translation, const float convergence_rotation,
                                      float* transform, DeviceAlignmentState* state)
 {
-    if (threadIdx.x != 0 || state->active == 0)
+    if (threadIdx.x != 0 || state->status != AlignmentStatus::Running)
     {
         return;
     }
@@ -365,6 +364,7 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
     float augmented[6][7]{};
     float valid_count = 0.0f;
     float squared_error_sum = 0.0f;
+
     for (int block = 0; block < num_blocks; ++block)
     {
         const float* partial = partials + block * linear_system_size;
@@ -385,17 +385,20 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
         valid_count += partial[valid_count_offset];
         squared_error_sum += partial[squared_error_offset];
     }
+
     state->num_correspondences = static_cast<int>(valid_count);
     state->fitness_score = valid_count > 0.0f ? squared_error_sum / valid_count : CUDART_INF_F;
     if (valid_count <= 0.0f || !isfinite(squared_error_sum))
     {
-        state->active = 0;
+        state->status = AlignmentStatus::Aborted;
         return;
     }
+
     for (int diagonal = 0; diagonal < 6; ++diagonal)
     {
         augmented[diagonal][diagonal] += damping_factor;
     }
+
     for (int diagonal = 0; diagonal < 6; ++diagonal)
     {
         int pivot_row = diagonal;
@@ -409,7 +412,7 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
 
         if (!isfinite(augmented[pivot_row][diagonal]) || fabsf(augmented[pivot_row][diagonal]) <= 1.0e-12f)
         {
-            state->active = 0;
+            state->status = AlignmentStatus::Aborted;
             return;
         }
 
@@ -447,7 +450,7 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
         delta[row] = augmented[row][6];
         if (!isfinite(delta[row]))
         {
-            state->active = 0;
+            state->status = AlignmentStatus::Aborted;
             return;
         }
     }
@@ -458,6 +461,7 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
     const float theta_minus_sin_over_theta3 = theta > 1.0e-5f ? (theta - sinf(theta)) / (theta2 * theta) : 1.0f / 6.0f - theta2 / 120.0f;
     const float skew[9]{0.0f, -delta[5], delta[4], delta[5], 0.0f, -delta[3], -delta[4], delta[3], 0.0f};
     float skew_squared[9]{};
+
     for (int row = 0; row < 3; ++row)
     {
         for (int col = 0; col < 3; ++col)
@@ -505,12 +509,13 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
     if (sqrtf(delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]) < convergence_translation &&
         theta < convergence_rotation)
     {
-        state->converged = 1;
-        state->active = 0;
+        state->status = AlignmentStatus::Converged;
     }
 }
 } // namespace
 
+namespace cuda_func
+{
 thrust::device_vector<DevicePoint> estimateCovariances(const TargetLayout& layout, const SparsityAwareGICPConfig& config)
 {
     const int min_neighbors = std::max(3, config.min_covariance_neighbors);

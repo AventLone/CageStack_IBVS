@@ -313,12 +313,12 @@ SparsityAwareGICPResult SparsityAwareGICP::align(const pcl::PointCloud<pcl::Poin
     for (int iteration = 0; iteration < mConfig.max_iterations; ++iteration)
     {
         cuda_func::findCorrespondences(device_source, mTarget->points, mTarget->voxels, mTarget->voxel_map,
-                                                                device_correspondences, device_transform, mConfig, device_state);
+                                       device_correspondences, device_transform, mConfig, device_state);
         cuda_func::buildLinearSystem(source_layout.points.size(), device_source, mTarget->points, device_correspondences,
-                                                            device_transform, mConfig, device_partials, device_state);
+                                     device_transform, mConfig, device_partials, device_state);
         cuda_func::solveAndUpdate(device_partials, grid_size, mConfig.damping_factor,
-                                      mConfig.convergence_translation, mConfig.convergence_rotation,
-                                      device_transform, device_state);
+                                  mConfig.convergence_translation, mConfig.convergence_rotation,
+                                  device_transform, device_state);
     }
 
     thrust::host_vector<DeviceAlignmentState> host_state = device_state;
@@ -331,7 +331,7 @@ SparsityAwareGICPResult SparsityAwareGICP::align(const pcl::PointCloud<pcl::Poin
                                  host_transform[3], host_transform[4], host_transform[5], host_transform[10],
                                  host_transform[6], host_transform[7], host_transform[8], host_transform[11],
                                  0.0f, 0.0f, 0.0f, 1.0f;
-    result.converged = final_state.converged != 0;
+    result.converged = final_state.status == AlignmentStatus::Converged;
     if (!result.converged && result.iterations > 0)
     {
         result.converged = std::isfinite(result.fitness_score);

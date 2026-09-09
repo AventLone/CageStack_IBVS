@@ -16,9 +16,9 @@
 
 `SparsityAwareGICPKernels.cuh` 仍是内部头文件，不安装、不作为公开 API 使用。GPU 细节放在 `perception::lio::detail` 命名空间中，主流程只调用 wrapper，不直接依赖 kernel launch 细节。
 
-## 1. 数据对象
+## 1 数据对象
 
-### HostVoxelKey
+### 1.1 HostVoxelKey
 
 `HostVoxelKey` 是 CPU 侧体素坐标：
 
@@ -34,7 +34,7 @@
 
 GPU 侧不直接使用 `HostVoxelKey`，而是使用 `packVoxelKey(x, y, z)` 压成 `int64_t`。
 
-### SparsePoint
+### 1.2 SparsePoint
 
 `SparsePoint` 是 CPU 稀疏化后的中间点：
 
@@ -48,7 +48,7 @@ struct SparsePoint
 
 它只存在于 CPU 上，用来生成 `TargetLayout`。
 
-### DevicePoint
+### 1.3 DevicePoint
 
 `DevicePoint` 是 GPU 上使用的点结构：
 
@@ -65,7 +65,7 @@ struct DevicePoint
 
 协方差一开始为空，之后由 `estimateCovariancesKernel` 写入。
 
-### DeviceVoxelEntry
+### 1.4 DeviceVoxelEntry
 
 `DeviceVoxelEntry` 描述某个体素中的点在排序后点数组里的连续范围：
 
@@ -79,7 +79,7 @@ struct DeviceVoxelEntry
 
 目标点和源点都会先按体素排序，因此同一个体素内的点是连续的。
 
-### DeviceCorrespondence
+### 1.5 DeviceCorrespondence
 
 `DeviceCorrespondence` 保存每个源点的最近目标点结果：
 
@@ -95,13 +95,15 @@ struct DeviceCorrespondence
 
 `target_index < 0` 表示没有找到有效对应点。
 
+
+
 ## 2. 总体流程
 
 ```mermaid
 flowchart TD
     A[输入 PCL 点云] --> B[CPU makeSparseCloud]
     B --> C[CPU makeTargetLayout]
-    C --> D[GPU estimateCovariancesCuda]
+    C --> D[GPU estimateCovariances]
 
     D --> E{目标地图?}
     E -->|initializeTarget| F[TargetCache: points, voxels, cuco static_map]
@@ -223,11 +225,11 @@ insert voxel keys into occupied_voxels
 
 注意：当前新点协方差只基于本批新增点计算，不会使用已有目标地图邻居；已有点协方差也不会因为新点插入而更新。这是一个性能友好的近似，但不是完整增量 GICP 地图更新。
 
-## 7. 协方差估计：estimateCovariancesKernel
+## 7 协方差估计：estimateCovariancesKernel
 
 每个 CUDA thread 处理一个点。
 
-### 邻域搜索
+### 7.1 邻域搜索
 
 对当前点，根据 `covariance_voxel_radius` 搜索邻近体素：
 
@@ -267,7 +269,9 @@ $$
 
 当前实现最后会用逆矩阵范数相关量归一化协方差，以控制尺度。
 
-## 8. 对应搜索：findCorrespondencesKernel
+
+
+## 8 对应搜索：findCorrespondencesKernel
 
 每个 CUDA thread 处理一个源点。
 
@@ -301,7 +305,9 @@ for each source point:
 
 如果 `state->active == 0`，kernel 直接返回。这样收敛后仍然会有 kernel launch，但不再执行重计算。
 
-## 9. 线性系统构建：buildLinearSystemKernel
+
+
+## 9 线性系统构建：buildLinearSystemKernel
 
 每个 CUDA thread 处理一个有效对应点，并累加局部 Hessian 和 gradient。
 
@@ -316,7 +322,7 @@ $$
 
 前三维是平移增量，后三维是旋转向量增量。因此每个残差对状态的 Jacobian 是 $3 \times 6$，每个点贡献的 Hessian 是 $6 \times 6$，gradient 是 $6 \times 1$。
 
-### 残差
+### 9.1 残差
 
 对源点 $p_s$ 和目标点 $p_t$：
 
@@ -324,7 +330,7 @@ $$
 r = Tp_s - p_t
 $$
 
-### GICP covariance
+### 9.2 GICP covariance
 
 如果源点协方差有效：
 
@@ -340,7 +346,7 @@ $$
 
 如果源点协方差无效，则直接使用单位阵。
 
-### 鲁棒权重
+### 9.3 鲁棒权重
 
 使用 Cauchy 核：
 
@@ -354,7 +360,7 @@ $$
 
 其中 `s = cauchy_kernel_scale`。如果 `cauchy_kernel_scale <= 0`，则关闭鲁棒降权，`w = 1`。
 
-### Jacobian
+### 9.4 Jacobian
 
 当前位姿使用左乘 SE(3) 增量：
 
@@ -389,7 +395,7 @@ jacobian.block<3, 3>(0, 3) = -skewMatrix(transformed_source);
 对应的就是：
 
 ```text
-J = [ I, -skew(transformed_source) ]
+J = [I, -skew(transformed_source)]
 ```
 
 局部法方程：
@@ -427,7 +433,7 @@ $$
 
 然后交给 `solveAndUpdateKernel` 求解一次位姿增量。
 
-### 为什么 hessian_size 是 21
+### 9.5 为什么 hessian_size 是 21
 
 `hessian_size = 21` 是因为 6 维状态对应的 Hessian 是一个 $6 \times 6$ 对称矩阵。完整矩阵有：
 
@@ -498,7 +504,7 @@ if (row != col)
 
 这不会改变数学结果，只是改变存储方式。
 
-### Block reduction
+### 9.6 Block reduction
 
 每个 thread 先在寄存器里累加 `LinearSystemPartial`，然后用 CUB 做 block 内归约。
 
@@ -544,7 +550,7 @@ $$
 
 只存 Hessian 上三角是因为 Hessian 对称。`solveAndUpdateKernel` 读取时会恢复完整 6x6 矩阵。
 
-### 为什么先在线程内累加再做 CUB reduction
+### 9.7 为什么先在线程内累加再做 CUB reduction
 
 早期实现中，每个有效点会直接对 shared memory 中的 Hessian 和 gradient 做 `atomicAdd`。这样所有线程都会竞争同一组地址，尤其 Hessian/gradient 只有几十个通道，冲突很集中。
 
@@ -558,7 +564,9 @@ $$
 
 这样把大量 shared atomic 争用变成了规整的 block reduction，通常更适合这种“小向量、多样本求和”的问题。
 
-## 10. 求解和位姿更新：solveAndUpdateKernel
+
+
+## 10 求解和位姿更新：solveAndUpdateKernel
 
 `solveAndUpdateKernel<<<1, 1>>>` 只使用一个 CUDA thread。
 
@@ -605,7 +613,9 @@ delta = augmented[:, 6]
 
 当前使用手写高斯消元求解。如果系统无效、pivot 太小或数值非有限，则 `state->active = 0`，本次 align 停止更新。
 
-### 为什么加 damping_factor
+
+
+### 10.1 为什么加 damping_factor
 
 `damping_factor` 相当于在 Hessian 对角线上加一个小正数：
 
@@ -686,7 +696,9 @@ state->active = 0;
 
 `active` 和 `converged` 在 device state 中使用 `int` 而不是 `bool`，主要是为了 host/device 结构体布局更明确，并且以后若扩展成状态码或 atomic flag 更方便。
 
-## 11. align() 调用流程
+
+
+## 11 align() 调用流程
 
 `align(source, initial_guess)` 的完整流程：
 
@@ -719,7 +731,9 @@ fill SparsityAwareGICPResult
 
 注意：CPU 端仍固定提交 `max_iterations` 轮。GPU 端收敛后，搜索和线性系统 kernel 会因为 `active == 0` 直接返回，但 launch 开销仍然存在。
 
-## 12. 输出结果含义
+
+
+## 12 输出结果含义
 
 `SparsityAwareGICPResult` 包含：
 
@@ -733,7 +747,9 @@ fill SparsityAwareGICPResult
 
 当前 `converged` 语义有一个宽松回退：如果没有严格满足收敛阈值，但至少成功迭代过一次且 fitness 有限，也会返回 `converged = true`。调用方仍需要检查 `num_correspondences` 和 `fitness_score`。
 
-## 13. TrailerLocalization 中的使用方式
+
+
+## 13 TrailerLocalization 中的使用方式
 
 调用方中大致是：
 
@@ -759,7 +775,9 @@ result.fitness_score <= max_fitness_score
 
 通过后才更新 `mTrailerPose`，并在成功对齐后更新目标地图。
 
-## 14. 性能关键点
+
+
+## 14 性能关键点
 
 当前主要计算开销来自：
 
@@ -785,7 +803,9 @@ result.fitness_score <= max_fitness_score
 - 目标体素分布或 surfel 表示，减少点级对应搜索；
 - 轮速里程计提供初值和运动先验，减少高速下错误对应。
 
-## 15. 与轮速里程计融合的入口
+
+
+## 15 与轮速里程计融合的入口
 
 当前最自然的融合入口有两个。
 
@@ -809,7 +829,9 @@ $$
 
 这条路线可以形成实用的紧耦合：激光点残差和轮速运动先验进入同一个 6x6 求解器。
 
-## 16. 需要特别注意的边界
+
+
+## 16 需要特别注意的边界
 
 - `voxel_size` 同时影响稀疏化、协方差邻域和对应搜索，目前三个尺度尚未解耦。
 - `fitness_score` 是更新前最近一次对应集上的残差统计，不一定严格等于最终更新后位姿的残差。

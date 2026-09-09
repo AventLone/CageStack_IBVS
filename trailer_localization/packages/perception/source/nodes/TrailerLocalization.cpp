@@ -6,6 +6,64 @@
 #include <opencv2/opencv.hpp>
 #include "perception/types/common.hpp"
 
+namespace
+{
+struct IntensityAnalysis
+{
+    float minimum{};
+    float p25{};
+    float p40{};
+    float median{};
+    float p75{};
+    float p90{};
+    float p95{};
+    float p99{};
+    float maximum{};
+    float suggested_threshold{};
+    std::size_t valid_count{};
+    std::size_t retained_count{};
+};
+
+std::optional<IntensityAnalysis> analyzeIntensity(const pcl::PointCloud<pcl::PointXYZI>& cloud,
+                                                  const float keep_ratio)
+{
+    std::vector<float> intensities;
+    intensities.reserve(cloud.size());
+    for (const auto& point : cloud)
+    {
+        if (std::isfinite(point.intensity))
+        {
+            intensities.push_back(point.intensity);
+        }
+    }
+
+    if (intensities.empty())
+    {
+        return std::nullopt;
+    }
+
+    std::ranges::sort(intensities);
+    const auto percentile = [&intensities](const double fraction)
+        {
+            const auto index = static_cast<std::size_t>(
+                std::round(fraction * static_cast<double>(intensities.size() - 1)));
+            return intensities[index];
+        };
+
+    const float minimum = intensities.front();
+    const float maximum = intensities.back();
+    const std::size_t target_retained_count = std::min(intensities.size(),
+        static_cast<std::size_t>(std::ceil(static_cast<double>(keep_ratio) * intensities.size())));
+    const std::size_t threshold_index = intensities.size() - target_retained_count;
+    const float suggested_threshold = intensities[threshold_index];
+    const auto first_retained = std::ranges::lower_bound(intensities, suggested_threshold);
+    const std::size_t retained_count = static_cast<std::size_t>(intensities.end() - first_retained);
+    return IntensityAnalysis{minimum, percentile(0.25), percentile(0.40), percentile(0.50), percentile(0.75),
+                             percentile(0.90), percentile(0.95), percentile(0.99), maximum,
+                             suggested_threshold, intensities.size(), retained_count};
+}
+}
+
 void TrailerLocalization::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src_scan)
 {
     /* 2. Get lidar scan within the ROI */
@@ -192,7 +250,7 @@ void TrailerLocalization::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src
     pcl::transformPointCloud(side_walls, side_walls, T_trans);
 
     Eigen::Isometry3f T_truck2template = T_trans * T_rot;   // Combined transformation: points_template = T_truck2template * points_truck
-    mTrailerPose = T_truck2template.inverse();   // Trailer pose in truck frame
+    mBasePose = T_truck2template.inverse();   // Trailer pose in truck frame
 
     mTrailerRoi = ROI::getBBox(side_walls);
     mTrailerRoi.max_x += 0.5f;
@@ -219,18 +277,12 @@ void TrailerLocalization::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src
 void TrailerLocalization::updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan_in_truck)
 {
     // Transform scan into trailer local template frame
-    const Eigen::Isometry3f T_truck2trailer = mTrailerPose.inverse();
     pcl::PointCloud<pcl::PointXYZ> scan_in_trailer;
-    pcl::transformPointCloud(scan_in_truck, scan_in_trailer, T_truck2trailer);
-
-    // Filter points inside trailer ROI
-    // const auto scan_in_roi = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-    // filter3d::getCloud(scan_in_trailer, scan_in_roi, nullptr, mTrailerRoi);
+    pcl::transformPointCloud(scan_in_truck, scan_in_trailer, mBasePose);
 
     *mTrailerVoxelMap += scan_in_trailer;   // Merge into voxel map
 
     const auto filtered_map = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-    // Apply 0.05m voxel grid filter to update voxel map
     pcl::VoxelGrid<pcl::PointXYZ> voxel_filter;
     voxel_filter.setLeafSize(MAP_RESOLUTION, MAP_RESOLUTION, MAP_RESOLUTION);
     voxel_filter.setInputCloud(mTrailerVoxelMap);
@@ -272,7 +324,7 @@ void TrailerLocalization::recordGicpDuration(const double duration_ms)
                 mGicpDurationsMs.size(), mean, percentile(0.50), percentile(0.95), percentile(0.99), sorted_durations.back());
 }
 
-bool TrailerLocalization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_scan, Eigen::Isometry3f& out_pose)
+bool TrailerLocalization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_scan)
 {
     RCLCPP_INFO(get_logger(), "CUDA sparsity-aware GICP SE(3) start.");
     if (mTrailerVoxelMap == nullptr || mTrailerVoxelMap->empty() || current_scan == nullptr || current_scan->empty())
@@ -284,13 +336,11 @@ bool TrailerLocalization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cu
         return false;
     }
 
-    const Eigen::Isometry3f initial_guess = mTrailerPose.inverse();
-
     const auto start_time = std::chrono::high_resolution_clock::now();
-    perception::lio::SparsityAwareGICPResult result;
+    SparsityAwareGICPResult result;
     try
     {
-        result = mGicp.align(*current_scan, initial_guess);
+        result = mGicp.align(*current_scan, mBasePose);
     }
     catch (const std::exception& exception)
     {
@@ -317,7 +367,7 @@ bool TrailerLocalization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cu
             return false;
         }
 
-        out_pose = result.transform.inverse();
+        mBasePose = result.transform;
 
         if (fitness_score > gicp_config.max_fitness_score)
         {
@@ -352,23 +402,74 @@ void TrailerLocalization::workerLoop()
             mScanBuffer.pop();
         }
 
-        pcl::PointCloud<pcl::PointXYZI> lidar_points;
-        pcl::fromROSMsg(scan_msg, lidar_points);
+        // pcl::PointCloud<pcl::PointXYZI> lidar_points;
+        // pcl::PointCloud<pcl::PointXYZI> lidar_points;
+        const auto lidar_points = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+        pcl::fromROSMsg(scan_msg, *lidar_points);
+
+        // if (!mIntensityAnalyzed)
+        // {
+        //     mIntensityAnalyzed = true;
+        //     if (const auto analysis = analyzeIntensity(lidar_points, mIntensityKeepRatio))
+        //     {
+        //         const double retained_percentage = 100.0 * static_cast<double>(analysis->retained_count) /
+        //                                            static_cast<double>(analysis->valid_count);
+        //         RCLCPP_INFO(get_logger(),
+        //                     "First-frame intensity distribution (%zu valid points): min %.2f, P25 %.2f, "
+        //                     "P40 %.2f, P50 %.2f, P75 %.2f, P90 %.2f, P95 %.2f, P99 %.2f, max %.2f.",
+        //                     analysis->valid_count, analysis->minimum, analysis->p25, analysis->p40, analysis->median,
+        //                     analysis->p75, analysis->p90, analysis->p95, analysis->p99, analysis->maximum);
+        //         RCLCPP_INFO(get_logger(),
+        //                     "Suggested intensity threshold: %.2f (target keep ratio %.1f%%, actual %.1f%%).",
+        //                     analysis->suggested_threshold, 100.0 * mIntensityKeepRatio, retained_percentage);
+        //         if (mIntensityThreshold < 0.0f)
+        //         {
+        //             mIntensityThreshold = analysis->suggested_threshold;
+        //             RCLCPP_INFO(get_logger(), "Using automatically selected intensity threshold %.2f.",
+        //                         mIntensityThreshold);
+        //         }
+        //         else
+        //         {
+        //             RCLCPP_INFO(get_logger(), "Using configured intensity threshold %.2f.", mIntensityThreshold);
+        //         }
+        //     }
+        //     else
+        //     {
+        //         RCLCPP_WARN(get_logger(), "First frame contains no finite intensity values; no threshold was selected.");
+        //     }
+        // }
+
+        /* Filter out points below the selected intensity threshold */
+        // const auto denoised_scan = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+        // denoised_scan->reserve(lidar_points.size());
+        // for (const auto& point : lidar_points)
+        // {
+        //     if (point.intensity >= mIntensityThreshold)
+        //     {
+        //         denoised_scan->emplace_back(point.x, point.y, point.z);
+        //     }
+        // }
 
         /* Preprocess the cloud */
         const auto processed_cloud = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-        processed_cloud->reserve(lidar_points.size());
-        for (const auto& point : lidar_points)
-        {
-            if ((point.x > 0.05f || point.x < -0.05f) &&
-                (point.y > 0.05f || point.y < -0.05f) &&
-                point.z > -1.1f)
-            {
-                processed_cloud->emplace_back(point.x, point.y, point.z);
-            }
-        }
+        pcl::VoxelGrid<pcl::PointXYZ> voxel_filter;
+        voxel_filter.setLeafSize(MAP_RESOLUTION, MAP_RESOLUTION, MAP_RESOLUTION);
+        voxel_filter.setInputCloud(lidar_points);
+        voxel_filter.filter(*processed_cloud);
 
-        const rclcpp::Time lidar_scan_stamp(scan_msg.header.stamp);
+        // processed_cloud->reserve(lidar_points.size());
+        // for (const auto& point : lidar_points)
+        // {
+        //     if ((point.x > 0.05f || point.x < -0.05f) &&
+        //         (point.y > 0.05f || point.y < -0.05f) &&
+        //         point.z > -1.1f)
+        //     {
+        //         processed_cloud->emplace_back(point.x, point.y, point.z);
+        //     }
+        // }
+
+
+        // const rclcpp::Time lidar_scan_stamp(scan_msg.header.stamp);
 
         /* 1. Get lidar scan in base truck frame */
         // pcl::PointCloud<pcl::PointXYZ> lidar_points_truck;
@@ -381,8 +482,8 @@ void TrailerLocalization::workerLoop()
                 mTrailerVoxelMap = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
                 // mTrailerVoxelMap = processed_cloud;
 
-                pcl::VoxelGrid<pcl::PointXYZ> voxel_filter;
-                voxel_filter.setLeafSize(MAP_RESOLUTION, MAP_RESOLUTION, MAP_RESOLUTION);
+                // pcl::VoxelGrid<pcl::PointXYZ> voxel_filter;
+                // voxel_filter.setLeafSize(MAP_RESOLUTION, MAP_RESOLUTION, MAP_RESOLUTION);
                 voxel_filter.setInputCloud(processed_cloud);
                 voxel_filter.filter(*mTrailerVoxelMap);
 
@@ -395,30 +496,19 @@ void TrailerLocalization::workerLoop()
             continue;
         }
 
-        /* 2. Get lidar scan within ROI */
-        // ROI scan_roi = mTrailerRoi;
-        // scan_roi.min_x -= 1.0f;
-        // scan_roi.max_x += 1.0f;
-        // scan_roi.min_y -= 1.0f;
-        // scan_roi.max_y += 1.0f;
-        //
-        // auto scan_in_roi = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-        // scan_in_roi->reserve(lidar_points_truck.size() / 3);
-        // filter3d::getCloud(lidar_points_truck, scan_in_roi, nullptr, mTrailerPose, scan_roi);
-
         if (processed_cloud->empty())
         {
             RCLCPP_WARN(get_logger(), "Skipping GICP: current scan has no points inside the trailer ROI.");
             continue;
         }
 
-        if (alignICP(processed_cloud, mTrailerPose))
+        if (alignICP(processed_cloud))
         {
             updateVoxelMap(*processed_cloud);
         }
 
         pcl::PointCloud<pcl::PointXYZ> transformed_scan;
-        pcl::transformPointCloud(*processed_cloud, transformed_scan, mTrailerPose.inverse());
+        pcl::transformPointCloud(*processed_cloud, transformed_scan, mBasePose);
 
         sensor_msgs::msg::PointCloud2 scan_vis_msg;
         pcl::toROSMsg(transformed_scan, scan_vis_msg);

@@ -11,13 +11,12 @@
 #include <pcl/common/transforms.h>
 #include <pcl/filters/voxel_grid.h>
 #include <vector>
-#include "perception/LIO/SparsityAwareGICP.hpp"
-// #include "perception/kalman_filter/EKF.hpp"
+#include "perception/GICP/SparsityAwareGICP.h"
 #include "perception/types/common.hpp"
 
 class TrailerLocalization : public rclcpp::Node
 {
-    static constexpr float MAP_RESOLUTION = 0.05f;
+    static constexpr float MAP_RESOLUTION = 0.1f;
 public:
     explicit TrailerLocalization(const std::string& node_name) : Node(node_name), mTfBuffer(this->get_clock()), mTfListener(mTfBuffer)
     {
@@ -35,11 +34,16 @@ public:
         //     }
         // }
 
-        perception::lio::SparsityAwareGICPConfig config{};
+        SparsityAwareGICPConfig config{};
         config.voxel_size = MAP_RESOLUTION;
-        config.max_points_per_voxel = 26;
-        config.max_fitness_score = 0.1;
+        config.max_points_per_voxel = 36;
+        config.min_point_spacing = 0.01f;
+        config.max_fitness_score = 0.01f;  // 平均意义下的点位误差尺度 10 cm
         mGicp.setConfig(config);
+
+        mIntensityThreshold = static_cast<float>(declare_parameter<double>("intensity_threshold", -1.0));
+        mIntensityKeepRatio = std::clamp(
+            static_cast<float>(declare_parameter<double>("intensity_keep_ratio", 0.60)), 0.01f, 1.0f);
 
         initSubscribers();
         initPublisher();
@@ -88,16 +92,19 @@ private:
 
     /* Trailer voxel map and estimated pose */
     pcl::PointCloud<pcl::PointXYZ>::Ptr mTrailerVoxelMap;
-    Eigen::Isometry3f mTrailerPose{Eigen::Isometry3f::Identity()};
+    Eigen::Isometry3f mBasePose{Eigen::Isometry3f::Identity()};   // Pose of the truck
     ROI mTrailerRoi{};
-    perception::lio::SparsityAwareGICP mGicp;
+    SparsityAwareGICP mGicp;
     std::vector<double> mGicpDurationsMs;
     std::size_t mGicpDurationCount{0};
+    float mIntensityThreshold{-1.0f};
+    float mIntensityKeepRatio{0.90f};
+    bool mIntensityAnalyzed{false};
 
     void initSubscribers()
     {
         // mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/iv_points", rclcpp::SensorDataQoS(),
-        mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/iv_points", 10,
+        mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/velodyne_points", 10,
             [this](const sensor_msgs::msg::PointCloud2::ConstSharedPtr& scan_msg)
                 {
                     {
@@ -130,7 +137,7 @@ private:
 
     void makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src_scan);
 
-    bool alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_scan, Eigen::Isometry3f& out_pose);
+    bool alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_scan);
 
     void recordGicpDuration(double duration_ms);
 

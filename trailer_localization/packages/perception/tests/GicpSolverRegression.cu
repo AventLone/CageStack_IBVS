@@ -1,10 +1,30 @@
-#include "../source/LIO/SparsityAwareGICP.cu"
+#include "../source/GICP/SparsityAwareGICP.cu"
 #include <iostream>
 #include <string>
 
 namespace
 {
-using namespace perception::lio;
+
+Eigen::Isometry3f expUpdateReference(const Eigen::Matrix<float, 6, 1>& delta)
+{
+    const Eigen::Vector3f translation_delta = delta.head<3>();
+    const Eigen::Vector3f rotation_delta = delta.tail<3>();
+    const float theta = rotation_delta.norm();
+    const float theta2 = theta * theta;
+    const float sin_over_theta = theta > 1.0e-5f ? std::sin(theta) / theta : 1.0f - theta2 / 6.0f;
+    const float one_minus_cos_over_theta2 = theta > 1.0e-5f ? (1.0f - std::cos(theta)) / theta2 : 0.5f - theta2 / 24.0f;
+    const float theta_minus_sin_over_theta3 = theta > 1.0e-5f ? (theta - std::sin(theta)) / (theta2 * theta) : 1.0f / 6.0f - theta2 / 120.0f;
+    Eigen::Matrix3f skew;
+    skew << 0.0f, -rotation_delta.z(), rotation_delta.y(),
+            rotation_delta.z(), 0.0f, -rotation_delta.x(),
+            -rotation_delta.y(), rotation_delta.x(), 0.0f;
+    const Eigen::Matrix3f skew_squared = skew * skew;
+    Eigen::Isometry3f update = Eigen::Isometry3f::Identity();
+    update.linear() = Eigen::Matrix3f::Identity() + sin_over_theta * skew + one_minus_cos_over_theta2 * skew_squared;
+    update.translation() = (Eigen::Matrix3f::Identity() + one_minus_cos_over_theta2 * skew +
+                            theta_minus_sin_over_theta3 * skew_squared) * translation_delta;
+    return update;
+}
 
 void require(const bool condition, const char* message)
 {
@@ -65,9 +85,7 @@ void testSolver(const bool zero_gradient, const bool singular)
     thrust::device_vector<float> device_partials(partials.begin(), partials.end());
     thrust::device_vector<float> device_transform(transform.begin(), transform.end());
     thrust::device_vector<DeviceAlignmentState> device_state(1, DeviceAlignmentState{});
-    solveAndUpdateKernel<<<1, 1>>>(thrust::raw_pointer_cast(device_partials.data()), 2, damping,
-                                   1.0e-5f, 1.0e-5f, thrust::raw_pointer_cast(device_transform.data()),
-                                   thrust::raw_pointer_cast(device_state.data()));
+    cuda_func::solveAndUpdate(device_partials, 2, damping, 1.0e-5f, 1.0e-5f, device_transform, device_state);
     require(cudaDeviceSynchronize() == cudaSuccess, "Solver CUDA execution failed");
     const thrust::host_vector<DeviceAlignmentState> state = device_state;
     const thrust::host_vector<float> actual = device_transform;
@@ -86,17 +104,17 @@ void testSolver(const bool zero_gradient, const bool singular)
     {
         hessian.diagonal().array() += damping;
         const Eigen::Matrix<float, 6, 1> delta = hessian.ldlt().solve(-gradient);
-        expected = sophusExpUpdate(delta) * initial;
+        expected = expUpdateReference(delta) * initial;
     }
     for (int row = 0; row < 3; ++row)
     {
         for (int col = 0; col < 3; ++col)
         {
             require(std::abs(actual[row * 3 + col] - expected.linear()(row, col)) < 2.0e-5f,
-                    "GPU rotation differs from Eigen/Sophus reference");
+                    "GPU rotation differs from Eigen reference");
         }
         require(std::abs(actual[9 + row] - expected.translation()(row)) < 2.0e-5f,
-                "GPU translation differs from Eigen/Sophus reference");
+                "GPU translation differs from Eigen reference");
     }
 }
 
@@ -106,18 +124,19 @@ void testInactiveKernels()
     inactive.active = 0;
     thrust::device_vector<DeviceAlignmentState> state(1, inactive);
     thrust::device_vector<float> partials(linear_system_size, -123.0f);
+    thrust::device_vector<float> transform(12, 0.0f);
+    thrust::device_vector<DevicePoint> source(1);
+    thrust::device_vector<DevicePoint> target(1);
+    thrust::device_vector<DeviceVoxelEntry> voxels(1);
     DeviceCorrespondence sentinel;
     sentinel.target_index = 123;
     thrust::device_vector<DeviceCorrespondence> correspondences(1, sentinel);
     DeviceVoxelMap voxel_map(2, cuco::empty_key{std::numeric_limits<std::int64_t>::min()},
                              cuco::empty_value{-1}, cuda::std::equal_to<std::int64_t>{},
                              cuco::linear_probing<1, cuco::default_hash_function<std::int64_t>>{});
-    findCorrespondencesKernel<<<1, 256>>>(nullptr, 1, nullptr, nullptr, voxel_map.ref(cuco::find),
-                                          thrust::raw_pointer_cast(correspondences.data()), 0.05f, 2, 0.04f,
-                                          nullptr, thrust::raw_pointer_cast(state.data()));
-    buildLinearSystemKernel<<<1, 256>>>(nullptr, nullptr, nullptr, 1, nullptr, 0.3f,
-                                        thrust::raw_pointer_cast(partials.data()),
-                                        thrust::raw_pointer_cast(state.data()));
+    SparsityAwareGICPConfig config;
+    cuda_func::findCorrespondences(source, target, voxels, voxel_map, correspondences, transform, config, state);
+    cuda_func::buildLinearSystem(source.size(), source, target, correspondences, transform, config, partials, state);
     require(cudaDeviceSynchronize() == cudaSuccess, "Inactive kernels accessed their inputs");
     const thrust::host_vector<float> actual_partials = partials;
     const thrust::host_vector<DeviceCorrespondence> actual_correspondences = correspondences;
@@ -128,6 +147,7 @@ void testInactiveKernels()
 
 void testLinearSystem(const int num_points, const int num_blocks, const bool all_invalid)
 {
+    (void)num_blocks;
     std::vector<DevicePoint> source(num_points);
     std::vector<DevicePoint> target(num_points);
     std::vector<DeviceCorrespondence> correspondences(num_points);
@@ -194,15 +214,15 @@ void testLinearSystem(const int num_points, const int num_blocks, const bool all
     thrust::device_vector<DeviceCorrespondence> device_correspondences(correspondences.begin(), correspondences.end());
     thrust::device_vector<float> device_transform(transform.begin(), transform.end());
     thrust::device_vector<DeviceAlignmentState> state(1, DeviceAlignmentState{});
-    thrust::device_vector<float> partials(num_blocks * linear_system_size, std::numeric_limits<float>::quiet_NaN());
-    buildLinearSystemKernel<<<num_blocks, linear_system_block_size>>>(thrust::raw_pointer_cast(device_source.data()),
-        thrust::raw_pointer_cast(device_target.data()), thrust::raw_pointer_cast(device_correspondences.data()), num_points,
-        thrust::raw_pointer_cast(device_transform.data()), 0.3f, thrust::raw_pointer_cast(partials.data()),
-        thrust::raw_pointer_cast(state.data()));
+    const int grid_size = std::max(1, std::min(1024, static_cast<int>((num_points + linear_system_block_size - 1) / linear_system_block_size)));
+    thrust::device_vector<float> partials(grid_size * linear_system_size, std::numeric_limits<float>::quiet_NaN());
+    SparsityAwareGICPConfig config;
+    config.cauchy_kernel_scale = 0.3f;
+    cuda_func::buildLinearSystem(num_points, device_source, device_target, device_correspondences, device_transform, config, partials, state);
     require(cudaDeviceSynchronize() == cudaSuccess, "Linear-system kernel execution failed");
     const thrust::host_vector<float> actual = partials;
     std::array<double, linear_system_size> sum{};
-    for (int block = 0; block < num_blocks; ++block)
+    for (int block = 0; block < grid_size; ++block)
     {
         for (int element = 0; element < linear_system_size; ++element)
         {

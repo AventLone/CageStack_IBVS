@@ -52,10 +52,12 @@ struct HostVoxelKeyHash
     }
 };
 
+using OccupiedVoxels = std::unordered_map<HostVoxelKey, std::vector<std::size_t>, HostVoxelKeyHash>;
+
 struct SparsePoint
 {
-    Eigen::Vector3f position{Eigen::Vector3f::Zero()};
-    HostVoxelKey key{};
+    Eigen::Vector3f position{Eigen::Vector3f::Zero()};   // 点云中原始点的空间坐标（x，y，z）
+    HostVoxelKey key{};                                  // 离散体素网格坐标 （i, j, k)
 };
 
 HostVoxelKey pointToVoxel(const Eigen::Vector3f& point, const float voxel_size)
@@ -70,13 +72,14 @@ std::int64_t packVoxelKey(const HostVoxelKey& key)
     return cuda_func::packVoxelKey(key.x, key.y, key.z);
 }
 
-std::vector<SparsePoint> makeSparseCloud(const pcl::PointCloud<pcl::PointXYZ>& cloud, const SparsityAwareGICPConfig& config)
+std::vector<SparsePoint> makeSparseCloud(const pcl::PointCloud<pcl::PointXYZ>& cloud, const SparsityAwareGICP::Config& config)
 {
     std::vector<SparsePoint> points;
     points.reserve(cloud.size());
-    std::unordered_map<HostVoxelKey, std::vector<std::size_t>, HostVoxelKeyHash> occupied_voxels;
+    OccupiedVoxels occupied_voxels;
     const int max_points_per_voxel = std::max(1, config.max_points_per_voxel);
-    const float min_spacing2 = std::max(0.0f, config.min_point_spacing) * std::max(0.0f, config.min_point_spacing);
+    const float min_spacing_square = std::pow(std::max(0.0f, config.min_point_spacing), 2.0f);
+
 
     // Retain several well-spaced samples per voxel instead of replacing each
     // voxel with one centroid, preserving local geometry for point covariances.
@@ -99,7 +102,7 @@ std::vector<SparsePoint> makeSparseCloud(const pcl::PointCloud<pcl::PointXYZ>& c
 
         const bool too_close = std::any_of(voxel_points.cbegin(), voxel_points.cend(), [&](const std::size_t index)
             {
-                return (points[index].position - point.position).squaredNorm() < min_spacing2;
+                return (points[index].position - point.position).squaredNorm() < min_spacing_square;
             });
 
         if (too_close)
@@ -193,7 +196,10 @@ struct SparsityAwareGICP::TargetCache
     }
 };
 
-SparsityAwareGICP::SparsityAwareGICP(const SparsityAwareGICPConfig& config) : mConfig(config)
+SparsityAwareGICP::SparsityAwareGICP() : SparsityAwareGICP(Config{})
+{}
+
+SparsityAwareGICP::SparsityAwareGICP(const Config& config) : mConfig(config)
 {}
 
 SparsityAwareGICP::~SparsityAwareGICP() = default;
@@ -279,10 +285,10 @@ bool SparsityAwareGICP::hasTarget() const noexcept
     return mTarget != nullptr;
 }
 
-SparsityAwareGICPResult SparsityAwareGICP::align(const pcl::PointCloud<pcl::PointXYZ>& source,
-                                                 const Eigen::Isometry3f& initial_guess) const
+SparsityAwareGICP::Result SparsityAwareGICP::align(const pcl::PointCloud<pcl::PointXYZ>& source,
+                                                   const Eigen::Isometry3f& initial_guess) const
 {
-    SparsityAwareGICPResult result;
+    Result result;
     result.transform = initial_guess;
 
     if (source.empty())
@@ -307,6 +313,7 @@ SparsityAwareGICPResult SparsityAwareGICP::align(const pcl::PointCloud<pcl::Poin
 
     const thrust::device_vector<DevicePoint> device_source = cuda_func::estimateCovariances(source_layout, mConfig);
     thrust::device_vector<DeviceCorrespondence> device_correspondences(source_layout.points.size());
+
     const Eigen::Matrix3f initial_rotation = initial_guess.rotation();
     const Eigen::Vector3f initial_translation = initial_guess.translation();
     const std::array<float, 12> initial_transform{initial_rotation(0, 0), initial_rotation(0, 1), initial_rotation(0, 2),
@@ -315,6 +322,7 @@ SparsityAwareGICPResult SparsityAwareGICP::align(const pcl::PointCloud<pcl::Poin
                                                    initial_translation.x(), initial_translation.y(), initial_translation.z()};
     thrust::device_vector<float> device_transform(initial_transform.begin(), initial_transform.end());
     thrust::device_vector<DeviceAlignmentState> device_state(1, DeviceAlignmentState{});
+
     constexpr int block_size = LINEAR_SYSTEM_BLOCK_SIZE;
     const int grid_size = std::max(1, std::min(1024, static_cast<int>((source_layout.points.size() + block_size - 1) / block_size)));
     thrust::device_vector<float> device_partials(static_cast<std::size_t>(grid_size * LINEAR_SYSTEM_SIZE));

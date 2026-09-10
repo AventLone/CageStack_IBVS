@@ -34,7 +34,7 @@ public:
         //     }
         // }
 
-        SparsityAwareGICPConfig config{};
+        SparsityAwareGICP::Config config{};
         config.voxel_size = MAP_RESOLUTION;
         config.max_points_per_voxel = 36;
         config.min_point_spacing = 0.02f;
@@ -42,7 +42,7 @@ public:
         mGicp.setConfig(config);
 
         mIntensityThreshold = static_cast<float>(declare_parameter<double>("intensity_threshold", -1.0));
-        mIntensityKeepRatio = std::clamp(static_cast<float>(declare_parameter<double>("intensity_keep_ratio", 0.9)), 0.01f, 1.0f);
+        mIntensityKeepRatio = std::clamp(static_cast<float>(declare_parameter<double>("intensity_keep_ratio", 0.8)), 0.01f, 1.0f);
 
         initSubscribers();
         initPublisher();

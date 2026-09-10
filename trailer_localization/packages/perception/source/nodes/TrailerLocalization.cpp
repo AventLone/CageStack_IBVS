@@ -337,7 +337,7 @@ bool TrailerLocalization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cu
     }
 
     const auto start_time = std::chrono::high_resolution_clock::now();
-    SparsityAwareGICPResult result;
+    SparsityAwareGICP::Result result;
     try
     {
         result = mGicp.align(*current_scan, mBasePose);

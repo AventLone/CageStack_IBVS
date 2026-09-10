@@ -361,7 +361,7 @@ __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const 
     }
 }
 
-__global__ void solveAndUpdateKernel(const float* partials, const int num_blocks, const SparsityAwareGICPConfig& config,
+__global__ void solveAndUpdateKernel(const float* partials, const int num_blocks, const SparsityAwareGICP::Config& config,
                                      float* transform, DeviceAlignmentState* state)
 {
     if (threadIdx.x != 0 || state->status != AlignmentStatus::Running)
@@ -528,7 +528,7 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
 
 namespace cuda_func
 {
-thrust::device_vector<DevicePoint> estimateCovariances(const TargetLayout& layout, const SparsityAwareGICPConfig& config)
+thrust::device_vector<DevicePoint> estimateCovariances(const TargetLayout& layout, const SparsityAwareGICP::Config& config)
 {
     const int min_neighbors = std::max(3, config.min_covariance_neighbors);
     const int max_neighbors = std::max(min_neighbors, config.max_covariance_neighbors);
@@ -571,7 +571,7 @@ void findCorrespondences(const thrust::device_vector<DevicePoint>& device_source
                              const DeviceVoxelMap& target_voxel_map,
                              thrust::device_vector<DeviceCorrespondence>& device_correspondences,
                              thrust::device_vector<float>& device_transform,
-                             const SparsityAwareGICPConfig& config,
+                             const SparsityAwareGICP::Config& config,
                              const thrust::device_vector<DeviceAlignmentState>& device_state)
 {
     constexpr int block_size = LINEAR_SYSTEM_BLOCK_SIZE;
@@ -595,7 +595,7 @@ void buildLinearSystem(const std::size_t num_source_points,
                            const thrust::device_vector<DevicePoint>& device_target,
                            const thrust::device_vector<DeviceCorrespondence>& device_correspondences,
                            const thrust::device_vector<float>& device_transform,
-                           const SparsityAwareGICPConfig& config,
+                           const SparsityAwareGICP::Config& config,
                            thrust::device_vector<float>& device_partials,
                            const thrust::device_vector<DeviceAlignmentState>& device_state)
 {
@@ -618,7 +618,7 @@ void buildLinearSystem(const std::size_t num_source_points,
 
 void solveAndUpdate(const thrust::device_vector<float>& device_partials,
                         const int num_blocks,
-                        const SparsityAwareGICPConfig& config,
+                        const SparsityAwareGICP::Config& config,
                         thrust::device_vector<float>& device_transform,
                         thrust::device_vector<DeviceAlignmentState>& device_state)
 {

@@ -1,4 +1,5 @@
 #include "perception/GICP/kernels.cuh"
+#include <cub/block/block_reduce.cuh>
 #include <math_constants.h>
 #include <thrust/host_vector.h>
 #include <algorithm>
@@ -29,6 +30,8 @@ __global__ void estimateCovariancesKernel(DevicePoint* points, const int num_poi
     int neighbor_indices[neighbor_capacity];
     int neighbor_count = 0;
 
+    // Search neighboring voxels while retaining only the nearest fixed-capacity
+    // set. Squared distances preserve ordering without a square root.
     for (int dx = -voxel_radius; dx <= voxel_radius; ++dx)
     {
         for (int dy = -voxel_radius; dy <= voxel_radius; ++dy)
@@ -89,6 +92,8 @@ __global__ void estimateCovariancesKernel(DevicePoint* points, const int num_poi
         return;
     }
 
+    // Estimate one local sample covariance per point. This is GICP point
+    // geometry, not one covariance shared by an entire voxel.
     float mean_x = 0.0f;
     float mean_y = 0.0f;
     float mean_z = 0.0f;
@@ -137,6 +142,8 @@ __global__ void estimateCovariancesKernel(DevicePoint* points, const int num_poi
         return;
     }
 
+    // Normalize by the Frobenius norm of the inverse covariance. This limits
+    // the scale of the precision matrix while retaining local anisotropy.
     const float inverse_norm_squared =
         (covariance[4] * covariance[8] - covariance[5] * covariance[7]) * (covariance[4] * covariance[8] - covariance[5] * covariance[7]) +
         (covariance[2] * covariance[7] - covariance[1] * covariance[8]) * (covariance[2] * covariance[7] - covariance[1] * covariance[8]) +
@@ -296,6 +303,8 @@ __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const 
             const Eigen::Vector3f target_position(target.x, target.y, target.z);
             const Eigen::Vector3f residual = transformed_source - target_position;
 
+            // GICP combines the target covariance with the rotated source
+            // covariance, yielding the Mahalanobis metric for this match.
             Eigen::Matrix3f covariance = Eigen::Matrix3f::Identity();
             if (source.covariance_valid != 0)
             {
@@ -454,6 +463,8 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
             return;
         }
     }
+    // Compute Exp(delta) in SE(3). Series expansions avoid divisions by very
+    // small rotation angles.
     const float theta = sqrtf(delta[3] * delta[3] + delta[4] * delta[4] + delta[5] * delta[5]);
     const float theta2 = theta * theta;
     const float sin_over_theta = theta > 1.0e-5f ? sinf(theta) / theta : 1.0f - theta2 / 6.0f;
@@ -485,6 +496,8 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
         }
     }
 
+    // Left composition keeps the Jacobian convention above consistent:
+    // T_next = Exp(delta) * T_current.
     float updated_transform[12]{};
     for (int row = 0; row < 3; ++row)
     {

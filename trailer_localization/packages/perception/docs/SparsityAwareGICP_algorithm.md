@@ -147,6 +147,8 @@ for point in cloud:
 
 注意：`min_point_spacing` 只检查同一体素内的点，不检查跨体素点对。
 
+
+
 ## 4. 体素布局：makeTargetLayout
 
 `makeTargetLayout()` 将稀疏点按体素排序，并生成三个数组：
@@ -168,6 +170,8 @@ voxel i -> points[start ... start + count - 1]
 
 这样 GPU 查询某个体素时，只需要通过哈希表找到体素 entry index，再读取连续的目标点范围。
 
+
+
 ## 5. 目标地图缓存：TargetCache
 
 `initializeTarget()` 的流程：
@@ -183,6 +187,7 @@ target PCL cloud
 
 `TargetCache` 持有：
 
+- `host_points`：CPU 侧目标点，用于增量补点、空间裁剪和重建；
 - `points`：目标点和协方差，GPU device vector；
 - `voxels`：目标体素 entry，GPU device vector；
 - `voxel_map`：`cuco::static_map<int64_t, int>`，从 packed voxel key 映射到 voxel entry index；
@@ -190,9 +195,12 @@ target PCL cloud
 
 初始化时，如果目标体素数超过 `max_target_voxels`，会抛出 `std::invalid_argument`，避免 `cuco::static_map` 容量不足导致未定义行为。
 
+
+
 ## 6. 增量目标插入：insertTargetPoints
 
-`insertTargetPoints()` 用于向已有目标地图追加新点。
+`insertTargetPoints()` 用于向已有目标地图合并新点。无裁剪中心的重载只更新地图；带
+`pruning_center` 的重载还会按 `max_target_distance` 删除远处体素。
 
 流程：
 
@@ -204,26 +212,30 @@ if no target:
     initializeTarget(input)
     return
 
-if target voxel count >= max_target_voxels:
-    return
-
 sparse = makeSparseCloud(input)
-remove sparse points whose voxel already exists in target
+merge points into existing voxels subject to min spacing and per-voxel capacity
+remove complete voxels farther than max_target_distance from pruning_center
+merged_layout = makeTargetLayout(merged points)
+if merged_layout.voxels exceeds capacity:
+    keep the closest max_target_voxels voxels around pruning_center
 
-if sparse empty:
-    return
-
-new_layout = makeTargetLayout(sparse)
-if new_layout.voxels exceeds remaining capacity:
-    return
-
-estimate covariance for new_layout
-append points and voxels to target device vectors
-insert new voxel pairs into cuco map
-insert voxel keys into occupied_voxels
+re-estimate covariance for the complete retained target
+atomically replace target points, voxel layout, and cuco map
 ```
 
-注意：当前新点协方差只基于本批新增点计算，不会使用已有目标地图邻居；已有点协方差也不会因为新点插入而更新。这是一个性能友好的近似，但不是完整增量 GICP 地图更新。
+已有体素不再被冻结：只要满足 `min_point_spacing` 且未达到
+`max_points_per_voxel`，新观测也可以加入已有体素。当前采用整图重建，因此新增点和旧点的
+协方差都会基于裁剪后的完整目标重新计算。这样语义直接且不会留下失效邻接关系，但更新成本高于
+FAR-LIO 只处理活动点并维护双地图的增量实现。
+
+已有体素达到点数上限时，新点只有在能增大体素内最小点间距时，才会替换最接近点对中的一个
+旧点；每体素上限为 1 时则保留更靠近体素中心的点。地图超过 `max_target_voxels` 时，带裁剪中心
+的更新会保留离当前中心最近的体素，使新旧体素按空间相关性竞争容量。无裁剪中心的兼容接口仍在
+超限时拒绝更新，因为它没有可靠的空间淘汰依据。
+
+空间裁剪以调用者给出的 `pruning_center` 为球心，比较每个体素首个点与球心的距离，并整体删除
+超出 `max_target_distance` 的体素。`TrailerLocalization` 使用当前配准位姿的 translation 作为
+裁剪中心，同时裁剪用于发布的 PCL 地图。
 
 ## 7 协方差估计：estimateCovariancesKernel
 

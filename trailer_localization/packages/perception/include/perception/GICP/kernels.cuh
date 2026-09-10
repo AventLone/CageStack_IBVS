@@ -1,6 +1,5 @@
 #pragma once
 #include "perception/GICP/SparsityAwareGICP.h"
-#include <cub/block/block_reduce.cuh>
 #include <cuco/static_map.cuh>
 #include <cuda_runtime.h>
 #include <thrust/device_vector.h>
@@ -29,6 +28,8 @@ struct LinearSystemPartial
     }
 };
 
+// A GICP point stored on the device. The covariance describes the point's
+// local surface neighborhood; voxels are used only to index nearby points.
 struct DevicePoint
 {
     float x{0.0f};
@@ -38,20 +39,26 @@ struct DevicePoint
     int covariance_valid{0};
 };
 
+// A voxel owns a contiguous [start, start + count) range in the point array.
 struct DeviceVoxelEntry
 {
     int start{0};
     int count{0};
 };
 
+// Correspondence search also caches the transformed source position so the
+// linear-system kernel does not repeat the same rigid transformation.
 struct DeviceCorrespondence
 {
-    int target_index{-1};
+    int target_index{-1};      // 匹配到的目标点在 target_points 数组中的索引，-1 没有在距离阈值内找到有效目标点
+
+    /* 源点经过当前位姿估计变换后的坐标 */
     float transformed_x{0.0f};
     float transformed_y{0.0f};
     float transformed_z{0.0f};
 };
 
+// Host-side, voxel-sorted representation used to create device arrays/maps.
 struct TargetLayout
 {
     std::vector<DevicePoint> points;
@@ -59,6 +66,8 @@ struct TargetLayout
     std::vector<std::int64_t> voxel_keys;
 };
 
+// Non-running states make later queued kernels return without synchronizing
+// the host after every iteration.
 enum class AlignmentStatus : int
 {
     Running,
@@ -82,6 +91,7 @@ using DeviceVoxelMap = decltype(cuco::static_map{std::size_t{2},
 
 namespace cuda_func
 {
+// Pack three signed 21-bit voxel coordinates into one hash-map key.
 __host__ __device__ inline std::int64_t packVoxelKey(const int x, const int y, const int z)
 {
     constexpr std::int64_t coordinate_offset = 1 << 20;

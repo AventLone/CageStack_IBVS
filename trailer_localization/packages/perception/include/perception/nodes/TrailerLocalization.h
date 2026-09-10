@@ -16,7 +16,7 @@
 
 class TrailerLocalization : public rclcpp::Node
 {
-    static constexpr float MAP_RESOLUTION = 0.05f;
+    static constexpr float MAP_RESOLUTION = 0.1f;
 public:
     explicit TrailerLocalization(const std::string& node_name) : Node(node_name), mTfBuffer(this->get_clock()), mTfListener(mTfBuffer)
     {
@@ -36,13 +36,13 @@ public:
 
         SparsityAwareGICPConfig config{};
         config.voxel_size = MAP_RESOLUTION;
-        config.max_points_per_voxel = 26;
-        config.min_point_spacing = 0.01f;
-        config.max_fitness_score = 0.01f;  // 平均意义下的点位误差尺度 10 cm
+        config.max_points_per_voxel = 36;
+        config.min_point_spacing = 0.02f;
+        config.max_fitness_score = 0.1f;  // 平均意义下的点位误差尺度 10 cm
         mGicp.setConfig(config);
 
         mIntensityThreshold = static_cast<float>(declare_parameter<double>("intensity_threshold", -1.0));
-        mIntensityKeepRatio = std::clamp(static_cast<float>(declare_parameter<double>("intensity_keep_ratio", 0.8)), 0.01f, 1.0f);
+        mIntensityKeepRatio = std::clamp(static_cast<float>(declare_parameter<double>("intensity_keep_ratio", 0.9)), 0.01f, 1.0f);
 
         initSubscribers();
         initPublisher();

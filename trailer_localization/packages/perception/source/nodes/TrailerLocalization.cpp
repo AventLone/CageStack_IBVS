@@ -403,13 +403,11 @@ void TrailerLocalization::workerLoop()
         }
 
         pcl::PointCloud<pcl::PointXYZI> lidar_points;
-        // const auto lidar_points = std::make_shared<pcl::PointCloud<pcl::PointXYZI>>();
         pcl::fromROSMsg(scan_msg, lidar_points);
 
         if (!mIntensityAnalyzed)
         {
             mIntensityAnalyzed = true;
-            // mIntensityKeepRatio =0.9f;
             if (const auto analysis = analyzeIntensity(lidar_points, mIntensityKeepRatio))
             {
                 const double retained_percentage = 100.0 * static_cast<double>(analysis->retained_count) /

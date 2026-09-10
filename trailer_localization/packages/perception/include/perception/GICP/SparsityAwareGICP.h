@@ -21,7 +21,7 @@ struct SparsityAwareGICPConfig
 
     // 对应搜索沿每个轴扩展的体素数 r，要求 >= 0；查询 (2*r + 1)^3 个体素。
     // 增大可覆盖更大的初始位姿误差，但搜索开销和误匹配风险增加；减小更快但易漏匹配。
-    int adjacent_voxels{2};
+    int adjacent_voxels{1};
 
     // 协方差邻域沿每个轴扩展的体素数 r，实际至少为 0。
     // 增大可找到更多候选邻居，但查询量按 (2*r + 1)^3 增长，并可能混入不同表面；减小更局部。
@@ -54,29 +54,28 @@ struct SparsityAwareGICPConfig
 
     // 调用方验收所需的最少有效约束数，不是原始最近邻命中数，也不控制求解器迭代。
     // 增大降低少量匹配被接受的风险，但更易拒绝稀疏扫描；减小更宽松，不保证几何约束充分。
-    std::size_t min_correspondences{80};
+    std::size_t min_correspondences{1000};
 
-    // 目标地图体素容量预算，要求 > 0；不是点数上限，也没有自动淘汰旧体素。
-    // 增大允许地图增长，但占用更多显存；减小更早停止增量插入，新增体素超出剩余容量时整批拒绝。
+    // 目标地图体素容量预算，要求 > 0；不是点数上限。
     // 初始化体素数超过预算或预算为 0 时抛出 std::invalid_argument，已有目标保持不变。
     std::size_t max_target_voxels{30000};
 
     // 求解 (H + lambda*I) * delta = -g 的固定阻尼，建议 > 0；不是自适应 LM 阻尼。
     // 增大通常使更新更保守、改善病态系统，但可能减慢收敛；减小更激进，也更易受退化和噪声影响。
-    float damping_factor{1.0e-4f};
+    float damping_factor{1.0e-3f};
 
     // 最大迭代轮数，正常使用应 > 0；增大允许更多更新但增加计算预算，减小更快但可能未充分对齐。
     // CPU 固定提交这么多轮；GPU 停止后搜索和 Hessian 构建直接返回，仍有 kernel launch 开销。
-    int max_iterations{50};
+    int max_iterations{100};
 
     // SE(3) 增量中平移分量的范数阈值，单位 m，要求 > 0；需与旋转阈值同时满足才停止更新。
     // 增大更早停止、精细程度降低；减小更严格、可能因浮点精度或噪声持续迭代；1e-6 m 为 1 微米。
-    float convergence_translation{1.0e-5f};
+    float convergence_translation{1.0e-6f};
 
     // SE(3) 增量中旋转向量的范数阈值，单位 rad，要求 > 0；增大更早停止，减小更严格。
     // 1e-6 rad 约为 0.000057 度。阈值仅判断更新量，不保证配准正确或残差足够小。
     // 注意：当前 result.converged 还会接受“有成功迭代且 fitness 有限”，不等价于满足这两个阈值。
-    float convergence_rotation{1.0e-5f};
+    float convergence_rotation{1.0e-6f};
 };
 
 struct SparsityAwareGICPResult

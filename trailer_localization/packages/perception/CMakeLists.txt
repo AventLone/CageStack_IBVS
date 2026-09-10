@@ -24,8 +24,6 @@ endif ()
 # --------------------------------------------------------------------------------
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies() # Automaticly find all the packages mentioned in 'package.xml'
-find_package(PCL REQUIRED COMPONENTS common registration filters)
-find_package(CUDAToolkit REQUIRED)
 
 if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/cuCollections/include/cuco/static_map.cuh)
     message(FATAL_ERROR "cuCollections headers not found at ${CMAKE_CURRENT_SOURCE_DIR}/cuCollections/include")
@@ -47,7 +45,8 @@ target_include_directories(sparsity_aware_gicp PUBLIC
     $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
     ${PCL_INCLUDE_DIRS}
 )
-target_link_libraries(sparsity_aware_gicp PRIVATE ${PCL_LIBRARIES} CUDA::cudart cuco::cuco)
+
+target_link_libraries(sparsity_aware_gicp PRIVATE ${PCL_LIBRARIES} cuco::cuco)
 target_compile_features(sparsity_aware_gicp PUBLIC cxx_std_23 cuda_std_17)
 target_compile_options(sparsity_aware_gicp PRIVATE
     $<$<COMPILE_LANGUAGE:CUDA>:--expt-extended-lambda>
@@ -60,10 +59,9 @@ ament_auto_add_executable(perception ${SOURCE_FILES})
 target_include_directories(perception PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
-    ${PCL_INCLUDE_DIRS}
 )
 target_link_libraries(perception ${PCL_LIBRARIES} sparsity_aware_gicp)
-target_compile_features(perception PUBLIC c_std_99 cxx_std_23)  # Require C99 and C++23
+target_compile_features(perception PUBLIC c_std_99 cxx_std_23)
 
 if (BUILD_TESTING)
     add_executable(gicp_solver_regression tests/GicpSolverRegression.cu)

@@ -78,6 +78,8 @@ std::vector<SparsePoint> makeSparseCloud(const pcl::PointCloud<pcl::PointXYZ>& c
     const int max_points_per_voxel = std::max(1, config.max_points_per_voxel);
     const float min_spacing2 = std::max(0.0f, config.min_point_spacing) * std::max(0.0f, config.min_point_spacing);
 
+    // Retain several well-spaced samples per voxel instead of replacing each
+    // voxel with one centroid, preserving local geometry for point covariances.
     for (const auto& pcl_point : cloud)
     {
         if (!std::isfinite(pcl_point.x) || !std::isfinite(pcl_point.y) || !std::isfinite(pcl_point.z))
@@ -117,6 +119,8 @@ TargetLayout makeTargetLayout(const std::vector<SparsePoint>& points)
     layout.points.reserve(points.size());
     std::vector<int> original_indices(points.size());
     std::iota(original_indices.begin(), original_indices.end(), 0);
+    // Sorting by voxel makes every voxel's points contiguous, so a hash lookup
+    // only needs to return one compact start/count entry.
     std::sort(original_indices.begin(), original_indices.end(), [&](const int first, const int second)
         {
             if (points[first].key == points[second].key)
@@ -281,9 +285,14 @@ SparsityAwareGICPResult SparsityAwareGICP::align(const pcl::PointCloud<pcl::Poin
     SparsityAwareGICPResult result;
     result.transform = initial_guess;
 
-    if (source.empty() || !hasTarget())
+    if (source.empty())
     {
-        return result;
+        throw std::invalid_argument("source cloud is empty!");
+    }
+
+    if (!hasTarget())
+    {
+        throw std::runtime_error("Target was not initialized before you call this method!");
     }
 
     std::vector<SparsePoint> source_sparse = makeSparseCloud(source, mConfig);

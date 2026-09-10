@@ -325,9 +325,7 @@ SparsityAwareGICPResult SparsityAwareGICP::align(const pcl::PointCloud<pcl::Poin
                                        device_correspondences, device_transform, mConfig, device_state);
         cuda_func::buildLinearSystem(source_layout.points.size(), device_source, mTarget->points, device_correspondences,
                                      device_transform, mConfig, device_partials, device_state);
-        cuda_func::solveAndUpdate(device_partials, grid_size, mConfig.damping_factor,
-                                  mConfig.convergence_translation, mConfig.convergence_rotation,
-                                  device_transform, device_state);
+        cuda_func::solveAndUpdate(device_partials, grid_size, mConfig, device_transform, device_state);
     }
 
     thrust::host_vector<DeviceAlignmentState> host_state = device_state;

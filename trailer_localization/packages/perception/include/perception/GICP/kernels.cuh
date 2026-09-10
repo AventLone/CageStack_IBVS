@@ -102,33 +102,27 @@ __host__ __device__ inline std::int64_t packVoxelKey(const int x, const int y, c
     return (packed_x << 42) | (packed_y << 21) | packed_z;
 }
 
-thrust::device_vector<DevicePoint> estimateCovariances(const TargetLayout& layout,
-                                                           const SparsityAwareGICPConfig& config);
+thrust::device_vector<DevicePoint> estimateCovariances(const TargetLayout& layout, const SparsityAwareGICPConfig& config);
 
 void findCorrespondences(const thrust::device_vector<DevicePoint>& device_source,
-                             const thrust::device_vector<DevicePoint>& device_target,
-                             const thrust::device_vector<DeviceVoxelEntry>& device_voxels,
-                             const DeviceVoxelMap& target_voxel_map,
-                             thrust::device_vector<DeviceCorrespondence>& device_correspondences,
-                             thrust::device_vector<float>& device_transform,
-                             const SparsityAwareGICPConfig& config,
-                             const thrust::device_vector<DeviceAlignmentState>& device_state);
+                         const thrust::device_vector<DevicePoint>& device_target,
+                         const thrust::device_vector<DeviceVoxelEntry>& device_voxels,
+                         const DeviceVoxelMap& target_voxel_map,
+                         thrust::device_vector<DeviceCorrespondence>& device_correspondences,
+                         thrust::device_vector<float>& device_transform,
+                         const SparsityAwareGICPConfig& config,
+                         const thrust::device_vector<DeviceAlignmentState>& device_state);
 
 void buildLinearSystem(std::size_t num_source_points,
-                           const thrust::device_vector<DevicePoint>& device_source,
-                           const thrust::device_vector<DevicePoint>& device_target,
-                           const thrust::device_vector<DeviceCorrespondence>& device_correspondences,
-                           const thrust::device_vector<float>& device_transform,
-                           const SparsityAwareGICPConfig& config,
-                           thrust::device_vector<float>& device_partials,
-                           const thrust::device_vector<DeviceAlignmentState>& device_state);
+                       const thrust::device_vector<DevicePoint>& device_source,
+                       const thrust::device_vector<DevicePoint>& device_target,
+                       const thrust::device_vector<DeviceCorrespondence>& device_correspondences,
+                       const thrust::device_vector<float>& device_transform,
+                       const SparsityAwareGICPConfig& config, thrust::device_vector<float>& device_partials,
+                       const thrust::device_vector<DeviceAlignmentState>& device_state);
 
-void solveAndUpdate(const thrust::device_vector<float>& device_partials,
-                        int num_blocks,
-                        float damping_factor,
-                        float convergence_translation,
-                        float convergence_rotation,
-                        thrust::device_vector<float>& device_transform,
-                        thrust::device_vector<DeviceAlignmentState>& device_state);
+void solveAndUpdate(const thrust::device_vector<float>& device_partials, int num_blocks,
+                    const SparsityAwareGICPConfig& config, thrust::device_vector<float>& device_transform,
+                    thrust::device_vector<DeviceAlignmentState>& device_state);
 }
 // } // namespace perception::lio::detail

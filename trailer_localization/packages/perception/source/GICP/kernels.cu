@@ -361,8 +361,7 @@ __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const 
     }
 }
 
-__global__ void solveAndUpdateKernel(const float* partials, const int num_blocks, const float damping_factor,
-                                     const float convergence_translation, const float convergence_rotation,
+__global__ void solveAndUpdateKernel(const float* partials, const int num_blocks, const SparsityAwareGICPConfig* config,
                                      float* transform, DeviceAlignmentState* state)
 {
     if (threadIdx.x != 0 || state->status != AlignmentStatus::Running)
@@ -405,7 +404,7 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
 
     for (int diagonal = 0; diagonal < 6; ++diagonal)
     {
-        augmented[diagonal][diagonal] += damping_factor;
+        augmented[diagonal][diagonal] += config->damping_factor;
     }
 
     for (int diagonal = 0; diagonal < 6; ++diagonal)
@@ -519,8 +518,8 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
     state->iterations += 1;
     state->num_correspondences = static_cast<int>(valid_count);
     state->fitness_score = squared_error_sum / valid_count;
-    if (sqrtf(delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]) < convergence_translation &&
-        theta < convergence_rotation)
+    if (sqrtf(delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]) < config->convergence_translation &&
+        theta < config->convergence_rotation)
     {
         state->status = AlignmentStatus::Converged;
     }
@@ -619,14 +618,11 @@ void buildLinearSystem(const std::size_t num_source_points,
 
 void solveAndUpdate(const thrust::device_vector<float>& device_partials,
                         const int num_blocks,
-                        const float damping_factor,
-                        const float convergence_translation,
-                        const float convergence_rotation,
+                        const SparsityAwareGICPConfig& config,
                         thrust::device_vector<float>& device_transform,
                         thrust::device_vector<DeviceAlignmentState>& device_state)
 {
-    solveAndUpdateKernel<<<1, 1>>>(thrust::raw_pointer_cast(device_partials.data()), num_blocks, damping_factor,
-                                   convergence_translation, convergence_rotation,
+    solveAndUpdateKernel<<<1, 1>>>(thrust::raw_pointer_cast(device_partials.data()), num_blocks, &config,
                                    thrust::raw_pointer_cast(device_transform.data()),
                                    thrust::raw_pointer_cast(device_state.data()));
     if (cudaGetLastError() != cudaSuccess)

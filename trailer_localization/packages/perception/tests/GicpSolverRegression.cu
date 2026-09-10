@@ -73,7 +73,7 @@ void testSolver(const bool zero_gradient, const bool singular)
     Eigen::Isometry3f initial = Eigen::Isometry3f::Identity();
     initial.linear() = Eigen::AngleAxisf(0.3f, Eigen::Vector3f::UnitY()).toRotationMatrix();
     initial.translation() = Eigen::Vector3f(3.0f, -2.0f, 1.0f);
-    std::array<float, 12> transform;
+    std::array<float, 12> transform{};
     for (int row = 0; row < 3; ++row)
     {
         for (int col = 0; col < 3; ++col)
@@ -85,7 +85,8 @@ void testSolver(const bool zero_gradient, const bool singular)
     thrust::device_vector<float> device_partials(partials.begin(), partials.end());
     thrust::device_vector<float> device_transform(transform.begin(), transform.end());
     thrust::device_vector<DeviceAlignmentState> device_state(1, DeviceAlignmentState{});
-    cuda_func::solveAndUpdate(device_partials, 2, damping, 1.0e-5f, 1.0e-5f, device_transform, device_state);
+    SparsityAwareGICPConfig config;
+    cuda_func::solveAndUpdate(device_partials, 2, config, device_transform, device_state);
     require(cudaDeviceSynchronize() == cudaSuccess, "Solver CUDA execution failed");
     const thrust::host_vector<DeviceAlignmentState> state = device_state;
     const thrust::host_vector<float> actual = device_transform;

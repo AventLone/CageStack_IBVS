@@ -6,21 +6,21 @@
 #include <limits>
 #include <vector>
 
-constexpr int linear_system_block_size = 256;
-constexpr int hessian_size = 21;
-constexpr int valid_count_offset = hessian_size + 6;
-constexpr int squared_error_offset = valid_count_offset + 1;
-constexpr int linear_system_size = squared_error_offset + 1;
+static constexpr int LINEAR_SYSTEM_BLOCK_SIZE = 256;
+static constexpr int HESSIAN_SIZE = 21;
+static constexpr int VALID_COUNT_OFFSET = HESSIAN_SIZE + 6;
+static constexpr int SQUARED_ERROR_OFFSET = VALID_COUNT_OFFSET + 1;
+static constexpr int LINEAR_SYSTEM_SIZE = SQUARED_ERROR_OFFSET + 1;
 
 struct LinearSystemPartial
 {
-    float values[linear_system_size]{};
+    float values[LINEAR_SYSTEM_SIZE]{};
 
     __device__ LinearSystemPartial operator+(const LinearSystemPartial& other) const
     {
         LinearSystemPartial result;
         #pragma unroll
-        for (int element = 0; element < linear_system_size; ++element)
+        for (int element = 0; element < LINEAR_SYSTEM_SIZE; ++element)
         {
             result.values[element] = values[element] + other.values[element];
         }
@@ -125,4 +125,3 @@ void solveAndUpdate(const thrust::device_vector<float>& device_partials, int num
                     const SparsityAwareGICPConfig& config, thrust::device_vector<float>& device_transform,
                     thrust::device_vector<DeviceAlignmentState>& device_state);
 }
-// } // namespace perception::lio::detail

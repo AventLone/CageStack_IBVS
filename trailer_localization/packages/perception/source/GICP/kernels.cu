@@ -287,7 +287,7 @@ __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const 
         return;
     }
 
-    using BlockReduce = cub::BlockReduce<LinearSystemPartial, linear_system_block_size, cub::BLOCK_REDUCE_WARP_REDUCTIONS>;
+    using BlockReduce = cub::BlockReduce<LinearSystemPartial, LINEAR_SYSTEM_BLOCK_SIZE, cub::BLOCK_REDUCE_WARP_REDUCTIONS>;
     __shared__ BlockReduce::TempStorage reduction_storage;
     LinearSystemPartial thread_sum;
 
@@ -341,10 +341,10 @@ __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const 
                 #pragma unroll
                 for (int element = 0; element < 6; ++element)
                 {
-                    thread_sum.values[hessian_size + element] += local_gradient(element);
+                    thread_sum.values[HESSIAN_SIZE + element] += local_gradient(element);
                 }
-                thread_sum.values[valid_count_offset] += 1.0f;
-                thread_sum.values[squared_error_offset] += residual.squaredNorm();
+                thread_sum.values[VALID_COUNT_OFFSET] += 1.0f;
+                thread_sum.values[SQUARED_ERROR_OFFSET] += residual.squaredNorm();
             }
         }
         index += stride;
@@ -354,14 +354,14 @@ __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const 
     if (threadIdx.x == 0)
     {
         #pragma unroll
-        for (int element = 0; element < linear_system_size; ++element)
+        for (int element = 0; element < LINEAR_SYSTEM_SIZE; ++element)
         {
-            partials[blockIdx.x * linear_system_size + element] = block_sum.values[element];
+            partials[blockIdx.x * LINEAR_SYSTEM_SIZE + element] = block_sum.values[element];
         }
     }
 }
 
-__global__ void solveAndUpdateKernel(const float* partials, const int num_blocks, const SparsityAwareGICPConfig* config,
+__global__ void solveAndUpdateKernel(const float* partials, const int num_blocks, const SparsityAwareGICPConfig& config,
                                      float* transform, DeviceAlignmentState* state)
 {
     if (threadIdx.x != 0 || state->status != AlignmentStatus::Running)
@@ -375,7 +375,7 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
 
     for (int block = 0; block < num_blocks; ++block)
     {
-        const float* partial = partials + block * linear_system_size;
+        const float* partial = partials + block * LINEAR_SYSTEM_SIZE;
         int packed_index = 0;
         for (int row = 0; row < 6; ++row)
         {
@@ -388,10 +388,10 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
                     augmented[col][row] += value;
                 }
             }
-            augmented[row][6] -= partial[hessian_size + row];
+            augmented[row][6] -= partial[HESSIAN_SIZE + row];
         }
-        valid_count += partial[valid_count_offset];
-        squared_error_sum += partial[squared_error_offset];
+        valid_count += partial[VALID_COUNT_OFFSET];
+        squared_error_sum += partial[SQUARED_ERROR_OFFSET];
     }
 
     state->num_correspondences = static_cast<int>(valid_count);
@@ -404,7 +404,7 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
 
     for (int diagonal = 0; diagonal < 6; ++diagonal)
     {
-        augmented[diagonal][diagonal] += config->damping_factor;
+        augmented[diagonal][diagonal] += config.damping_factor;
     }
 
     for (int diagonal = 0; diagonal < 6; ++diagonal)
@@ -518,8 +518,8 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
     state->iterations += 1;
     state->num_correspondences = static_cast<int>(valid_count);
     state->fitness_score = squared_error_sum / valid_count;
-    if (sqrtf(delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]) < config->convergence_translation &&
-        theta < config->convergence_rotation)
+    if (sqrtf(delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]) < config.convergence_translation &&
+        theta < config.convergence_rotation)
     {
         state->status = AlignmentStatus::Converged;
     }
@@ -574,7 +574,7 @@ void findCorrespondences(const thrust::device_vector<DevicePoint>& device_source
                              const SparsityAwareGICPConfig& config,
                              const thrust::device_vector<DeviceAlignmentState>& device_state)
 {
-    constexpr int block_size = linear_system_block_size;
+    constexpr int block_size = LINEAR_SYSTEM_BLOCK_SIZE;
     const int grid_size = std::max(1, std::min(1024, static_cast<int>((device_source.size() + block_size - 1) / block_size)));
     const float max_distance2 = config.max_correspondence_distance * config.max_correspondence_distance;
     findCorrespondencesKernel<<<grid_size, block_size>>>(thrust::raw_pointer_cast(device_source.data()), static_cast<int>(device_source.size()),
@@ -599,7 +599,7 @@ void buildLinearSystem(const std::size_t num_source_points,
                            thrust::device_vector<float>& device_partials,
                            const thrust::device_vector<DeviceAlignmentState>& device_state)
 {
-    constexpr int block_size = linear_system_block_size;
+    constexpr int block_size = LINEAR_SYSTEM_BLOCK_SIZE;
     const int grid_size = std::max(1, std::min(1024, static_cast<int>((num_source_points + block_size - 1) / block_size)));
 
     buildLinearSystemKernel<<<grid_size, block_size>>>(thrust::raw_pointer_cast(device_source.data()),
@@ -622,7 +622,7 @@ void solveAndUpdate(const thrust::device_vector<float>& device_partials,
                         thrust::device_vector<float>& device_transform,
                         thrust::device_vector<DeviceAlignmentState>& device_state)
 {
-    solveAndUpdateKernel<<<1, 1>>>(thrust::raw_pointer_cast(device_partials.data()), num_blocks, &config,
+    solveAndUpdateKernel<<<1, 1>>>(thrust::raw_pointer_cast(device_partials.data()), num_blocks, config,
                                    thrust::raw_pointer_cast(device_transform.data()),
                                    thrust::raw_pointer_cast(device_state.data()));
     if (cudaGetLastError() != cudaSuccess)

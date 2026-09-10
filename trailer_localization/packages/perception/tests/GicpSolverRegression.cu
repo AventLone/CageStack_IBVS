@@ -55,7 +55,7 @@ void testSolver(const bool zero_gradient, const bool singular)
         gradient.setZero();
     }
     const float damping = singular ? 0.0f : 0.1f;
-    std::vector<float> partials(2 * linear_system_size, 0.0f);
+    std::vector<float> partials(2 * LINEAR_SYSTEM_SIZE, 0.0f);
     for (int block = 0; block < 2; ++block)
     {
         int packed_index = 0;
@@ -63,12 +63,12 @@ void testSolver(const bool zero_gradient, const bool singular)
         {
             for (int col = row; col < 6; ++col)
             {
-                partials[block * linear_system_size + packed_index++] = hessian(row, col) * 0.5f;
+                partials[block * LINEAR_SYSTEM_SIZE + packed_index++] = hessian(row, col) * 0.5f;
             }
-            partials[block * linear_system_size + hessian_size + row] = gradient(row) * 0.5f;
+            partials[block * LINEAR_SYSTEM_SIZE + HESSIAN_SIZE + row] = gradient(row) * 0.5f;
         }
-        partials[block * linear_system_size + valid_count_offset] = 10.0f;
-        partials[block * linear_system_size + squared_error_offset] = 0.1f;
+        partials[block * LINEAR_SYSTEM_SIZE + VALID_COUNT_OFFSET] = 10.0f;
+        partials[block * LINEAR_SYSTEM_SIZE + SQUARED_ERROR_OFFSET] = 0.1f;
     }
     Eigen::Isometry3f initial = Eigen::Isometry3f::Identity();
     initial.linear() = Eigen::AngleAxisf(0.3f, Eigen::Vector3f::UnitY()).toRotationMatrix();
@@ -125,7 +125,7 @@ void testInactiveKernels()
     DeviceAlignmentState inactive;
     inactive.status = AlignmentStatus::Aborted;
     thrust::device_vector<DeviceAlignmentState> state(1, inactive);
-    thrust::device_vector<float> partials(linear_system_size, -123.0f);
+    thrust::device_vector<float> partials(LINEAR_SYSTEM_SIZE, -123.0f);
     thrust::device_vector<float> transform(12, 0.0f);
     thrust::device_vector<DevicePoint> source(1);
     thrust::device_vector<DevicePoint> target(1);
@@ -216,19 +216,19 @@ void testLinearSystem(const int num_points, const int num_blocks, const bool all
     thrust::device_vector<DeviceCorrespondence> device_correspondences(correspondences.begin(), correspondences.end());
     thrust::device_vector<float> device_transform(transform.begin(), transform.end());
     thrust::device_vector<DeviceAlignmentState> state(1, DeviceAlignmentState{});
-    const int grid_size = std::max(1, std::min(1024, static_cast<int>((num_points + linear_system_block_size - 1) / linear_system_block_size)));
-    thrust::device_vector<float> partials(grid_size * linear_system_size, std::numeric_limits<float>::quiet_NaN());
+    const int grid_size = std::max(1, std::min(1024, static_cast<int>((num_points + LINEAR_SYSTEM_BLOCK_SIZE - 1) / LINEAR_SYSTEM_BLOCK_SIZE)));
+    thrust::device_vector<float> partials(grid_size * LINEAR_SYSTEM_SIZE, std::numeric_limits<float>::quiet_NaN());
     SparsityAwareGICPConfig config;
     config.cauchy_kernel_scale = 0.3f;
     cuda_func::buildLinearSystem(num_points, device_source, device_target, device_correspondences, device_transform, config, partials, state);
     require(cudaDeviceSynchronize() == cudaSuccess, "Linear-system kernel execution failed");
     const thrust::host_vector<float> actual = partials;
-    std::array<double, linear_system_size> sum{};
+    std::array<double, LINEAR_SYSTEM_SIZE> sum{};
     for (int block = 0; block < grid_size; ++block)
     {
-        for (int element = 0; element < linear_system_size; ++element)
+        for (int element = 0; element < LINEAR_SYSTEM_SIZE; ++element)
         {
-            sum[element] += actual[block * linear_system_size + element];
+            sum[element] += actual[block * LINEAR_SYSTEM_SIZE + element];
         }
     }
     int packed_index = 0;
@@ -239,11 +239,11 @@ void testLinearSystem(const int num_points, const int num_blocks, const bool all
             require(std::abs(sum[packed_index++] - expected_hessian(row, col)) < 5.0e-5 * std::max(1.0, std::abs(expected_hessian(row, col))),
                     "Reduced Hessian differs from CPU reference");
         }
-        require(std::abs(sum[hessian_size + row] - expected_gradient(row)) < 5.0e-5 * std::max(1.0, std::abs(expected_gradient(row))),
+        require(std::abs(sum[HESSIAN_SIZE + row] - expected_gradient(row)) < 5.0e-5 * std::max(1.0, std::abs(expected_gradient(row))),
                 "Reduced gradient differs from CPU reference");
     }
-    require(sum[valid_count_offset] == valid_count, "Reduced correspondence count incorrect");
-    require(std::abs(sum[squared_error_offset] - squared_error) < 1.0e-6, "Reduced fitness sum incorrect");
+    require(sum[VALID_COUNT_OFFSET] == valid_count, "Reduced correspondence count incorrect");
+    require(std::abs(sum[SQUARED_ERROR_OFFSET] - squared_error) < 1.0e-6, "Reduced fitness sum incorrect");
 }
 
 void testTargetCapacity()

@@ -177,7 +177,7 @@ struct SparsityAwareGICP::TargetCache
     thrust::device_vector<DeviceVoxelEntry> voxels;
     DeviceVoxelMap voxel_map;
 
-    TargetCache(const TargetLayout& layout, thrust::device_vector<DevicePoint> device_points, const std::size_t max_target_voxels)
+    explicit TargetCache(const TargetLayout& layout, thrust::device_vector<DevicePoint> device_points, const std::size_t max_target_voxels)
         : points(std::move(device_points)),
           voxels(layout.voxels.begin(), layout.voxels.end()),
           voxel_map(std::max<std::size_t>(2, max_target_voxels * 2),
@@ -315,9 +315,9 @@ SparsityAwareGICPResult SparsityAwareGICP::align(const pcl::PointCloud<pcl::Poin
                                                    initial_translation.x(), initial_translation.y(), initial_translation.z()};
     thrust::device_vector<float> device_transform(initial_transform.begin(), initial_transform.end());
     thrust::device_vector<DeviceAlignmentState> device_state(1, DeviceAlignmentState{});
-    constexpr int block_size = linear_system_block_size;
+    constexpr int block_size = LINEAR_SYSTEM_BLOCK_SIZE;
     const int grid_size = std::max(1, std::min(1024, static_cast<int>((source_layout.points.size() + block_size - 1) / block_size)));
-    thrust::device_vector<float> device_partials(static_cast<std::size_t>(grid_size * linear_system_size));
+    thrust::device_vector<float> device_partials(static_cast<std::size_t>(grid_size * LINEAR_SYSTEM_SIZE));
 
     for (int iteration = 0; iteration < mConfig.max_iterations; ++iteration)
     {
@@ -330,15 +330,15 @@ SparsityAwareGICPResult SparsityAwareGICP::align(const pcl::PointCloud<pcl::Poin
 
     thrust::host_vector<DeviceAlignmentState> host_state = device_state;
     thrust::host_vector<float> host_transform = device_transform;
-    const DeviceAlignmentState& final_state = host_state.front();
-    result.iterations = final_state.iterations;
-    result.num_correspondences = static_cast<std::size_t>(std::max(0, final_state.num_correspondences));
-    result.fitness_score = final_state.fitness_score;
+    const auto& [fitness_score, num_correspondences, iterations, status] = host_state.front();
+    result.iterations = iterations;
+    result.num_correspondences = static_cast<std::size_t>(std::max(0, num_correspondences));
+    result.fitness_score = fitness_score;
     result.transform.matrix() << host_transform[0], host_transform[1], host_transform[2], host_transform[9],
                                  host_transform[3], host_transform[4], host_transform[5], host_transform[10],
                                  host_transform[6], host_transform[7], host_transform[8], host_transform[11],
                                  0.0f, 0.0f, 0.0f, 1.0f;
-    result.converged = final_state.status == AlignmentStatus::Converged;
+    result.converged = status == AlignmentStatus::Converged;
     if (!result.converged && result.iterations > 0)
     {
         result.converged = std::isfinite(result.fitness_score);

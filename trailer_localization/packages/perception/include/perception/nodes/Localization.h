@@ -15,11 +15,11 @@
 #include "perception/GICP/SparsityAwareGICP.h"
 #include "perception/types/common.hpp"
 
-class TrailerLocalization : public rclcpp::Node
+class Localization : public rclcpp::Node
 {
     static constexpr float MAP_RESOLUTION = 0.1f;
 public:
-    explicit TrailerLocalization(const std::string& node_name) : Node(node_name), mTfBuffer(this->get_clock()), mTfListener(mTfBuffer)
+    explicit Localization(const std::string& node_name) : Node(node_name), mTfBuffer(this->get_clock()), mTfListener(mTfBuffer)
     {
         /* Lookup transform */
         // while (rclcpp::ok())
@@ -45,11 +45,11 @@ public:
 
         initSubscribers();
         initPublisher();
-        mWorker = std::thread(&TrailerLocalization::workerLoop, this);
+        mWorker = std::thread(&Localization::workerLoop, this);
         RCLCPP_INFO(get_logger(), "The node has been activated.");
     }
 
-    ~TrailerLocalization() override
+    ~Localization() override
     {
         {
             std::lock_guard lock(mScanBufferMutex);

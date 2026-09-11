@@ -1,4 +1,4 @@
-#include "perception/nodes/TrailerLocalization.h"
+#include "perception/nodes/Localization.h"
 #include <pcl_conversions/pcl_conversions.h>
 #include "perception/tools/OrthographicProjector.hpp"
 #include "perception/tools/feature_detect_3d.hpp"
@@ -64,7 +64,7 @@ std::optional<IntensityAnalysis> analyzeIntensity(const pcl::PointCloud<pcl::Poi
 }
 }
 
-void TrailerLocalization::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src_scan)
+void Localization::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src_scan)
 {
     /* 2. Get lidar scan within the ROI */
     auto scan_in_roi = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
@@ -274,7 +274,7 @@ void TrailerLocalization::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src
     mGicp.initializeTarget(*mTrailerVoxelMap);
 }
 
-void TrailerLocalization::updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan_in_truck)
+void Localization::updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan_in_truck)
 {
     // Transform scan into trailer local template frame
     pcl::PointCloud<pcl::PointXYZ> scan_in_trailer;
@@ -293,7 +293,7 @@ void TrailerLocalization::updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& s
     mGicp.insertTargetPoints(scan_in_trailer);
 }
 
-void TrailerLocalization::recordGicpDuration(const double duration_ms)
+void Localization::recordGicpDuration(const double duration_ms)
 {
     if (constexpr std::size_t statistics_window_size = 200;
         mGicpDurationsMs.size() == statistics_window_size)
@@ -324,7 +324,7 @@ void TrailerLocalization::recordGicpDuration(const double duration_ms)
                 mGicpDurationsMs.size(), mean, percentile(0.50), percentile(0.95), percentile(0.99), sorted_durations.back());
 }
 
-bool TrailerLocalization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_scan)
+bool Localization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_scan)
 {
     RCLCPP_INFO(get_logger(), "CUDA sparsity-aware GICP SE(3) start.");
     if (mTrailerVoxelMap == nullptr || mTrailerVoxelMap->empty() || current_scan == nullptr || current_scan->empty())
@@ -385,7 +385,7 @@ bool TrailerLocalization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cu
     return false;
 }
 
-void TrailerLocalization::workerLoop()
+void Localization::workerLoop()
 {
     while (rclcpp::ok())
     {

@@ -1,9 +1,9 @@
-#include "perception/nodes/TrailerLocalization.h"
+#include "perception/nodes/Localization.h"
 
 int main(const int argc, char** argv)
 {
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<TrailerLocalization>("trailer_localization"));
+    rclcpp::spin(std::make_shared<Localization>("trailer_localization"));
     rclcpp::shutdown();
     return 0;
 }

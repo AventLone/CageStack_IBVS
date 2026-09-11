@@ -460,36 +460,11 @@ void TrailerLocalization::workerLoop()
         voxel_filter.setInputCloud(denoised_scan);
         voxel_filter.filter(*processed_cloud);
 
-        // processed_cloud->reserve(lidar_points.size());
-        // for (const auto& point : lidar_points)
-        // {
-        //     if ((point.x > 0.05f || point.x < -0.05f) &&
-        //         (point.y > 0.05f || point.y < -0.05f) &&
-        //         point.z > -1.1f)
-        //     {
-        //         processed_cloud->emplace_back(point.x, point.y, point.z);
-        //     }
-        // }
-
-
-        // const rclcpp::Time lidar_scan_stamp(scan_msg.header.stamp);
-
-        /* 1. Get lidar scan in base truck frame */
-        // pcl::PointCloud<pcl::PointXYZ> lidar_points_truck;
-        // pcl::transformPointCloud(lidar_points, lidar_points_truck, T_truck2lidar);
-
         if (mTrailerVoxelMap == nullptr)
         {
             if (processed_cloud->size() > 100)
             {
-                mTrailerVoxelMap = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-                // mTrailerVoxelMap = processed_cloud;
-
-                // pcl::VoxelGrid<pcl::PointXYZ> voxel_filter;
-                // voxel_filter.setLeafSize(MAP_RESOLUTION, MAP_RESOLUTION, MAP_RESOLUTION);
-                voxel_filter.setInputCloud(processed_cloud);
-                voxel_filter.filter(*mTrailerVoxelMap);
-
+                mTrailerVoxelMap = processed_cloud;
                 mGicp.initializeTarget(*mTrailerVoxelMap);
             }
             else

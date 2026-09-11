@@ -57,7 +57,7 @@ public:
 
         // 目标地图体素容量预算，要求 > 0；不是点数上限。
         // 初始化体素数超过预算或预算为 0 时抛出 std::invalid_argument，已有目标保持不变。
-        std::size_t max_target_voxels{60000};
+        std::size_t max_target_voxels{999999};
 
         // 求解 (H + lambda*I) * delta = -g 的固定阻尼，建议 > 0；不是自适应 LM 阻尼。
         // 增大通常使更新更保守、改善病态系统，但可能减慢收敛；减小更激进，也更易受退化和噪声影响。

@@ -18,26 +18,26 @@ namespace
 {
 struct HostVoxelKey
 {
-    int x{0};
-    int y{0};
-    int z{0};
+    int i{0};
+    int j{0};
+    int k{0};
 
     bool operator==(const HostVoxelKey& other) const noexcept
     {
-        return x == other.x && y == other.y && z == other.z;
+        return i == other.i && j == other.j && k == other.k;
     }
 
     bool operator<(const HostVoxelKey& other) const noexcept
     {
-        if (x != other.x)
+        if (i != other.i)
         {
-            return x < other.x;
+            return i < other.i;
         }
-        if (y != other.y)
+        if (j != other.j)
         {
-            return y < other.y;
+            return j < other.j;
         }
-        return z < other.z;
+        return k < other.k;
     }
 };
 
@@ -45,13 +45,14 @@ struct HostVoxelKeyHash
 {
     std::size_t operator()(const HostVoxelKey& key) const noexcept
     {
-        const auto x = static_cast<std::size_t>(key.x);
-        const auto y = static_cast<std::size_t>(key.y);
-        const auto z = static_cast<std::size_t>(key.z);
+        const auto x = static_cast<std::size_t>(key.i);
+        const auto y = static_cast<std::size_t>(key.j);
+        const auto z = static_cast<std::size_t>(key.k);
         return (x * 73856093ULL) ^ (y * 19349663ULL) ^ (z * 83492791ULL);
     }
 };
 
+/* Host-side, and std::vector<std::size_t> is the indcies of the cloud */
 using OccupiedVoxels = std::unordered_map<HostVoxelKey, std::vector<std::size_t>, HostVoxelKeyHash>;
 
 struct SparsePoint
@@ -69,7 +70,7 @@ HostVoxelKey pointToVoxel(const Eigen::Vector3f& point, const float voxel_size)
 
 std::int64_t packVoxelKey(const HostVoxelKey& key)
 {
-    return cuda_func::packVoxelKey(key.x, key.y, key.z);
+    return cuda_func::packVoxelKey(key.i, key.j, key.k);
 }
 
 std::vector<SparsePoint> makeSparseCloud(const pcl::PointCloud<pcl::PointXYZ>& cloud, const SparsityAwareGICP::Config& config)
@@ -78,9 +79,7 @@ std::vector<SparsePoint> makeSparseCloud(const pcl::PointCloud<pcl::PointXYZ>& c
     sparse_cloud.reserve(cloud.size());
     OccupiedVoxels occupied_voxels;
     const int max_points_per_voxel = std::max(1, config.max_points_per_voxel);
-    // const float min_spacing_square = std::pow(std::max(0.001f, config.min_point_spacing), 2.0f);
     const float min_spacing_square = std::pow(std::max(0.001f, config.voxel_size * 0.1f), 2.0f);
-
 
     // Retain several well-spaced samples per voxel instead of replacing each
     // voxel with one centroid, preserving local geometry for point covariances.
@@ -116,10 +115,11 @@ std::vector<SparsePoint> makeSparseCloud(const pcl::PointCloud<pcl::PointXYZ>& c
     return sparse_cloud;
 }
 
-TargetLayout makeTargetLayout(const std::vector<SparsePoint>& points)
+VoxelPointLayout makeVoxelPointLayout(const std::vector<SparsePoint>& points)
 {
-    TargetLayout layout;
+    VoxelPointLayout layout;
     layout.points.reserve(points.size());
+
     std::vector<int> original_indices(points.size());
     std::iota(original_indices.begin(), original_indices.end(), 0);
     // Sorting by voxel makes every voxel's points contiguous, so a hash lookup
@@ -135,9 +135,9 @@ TargetLayout makeTargetLayout(const std::vector<SparsePoint>& points)
 
     HostVoxelKey current_key;
     bool have_current_key = false;
-    for (int ordered_index = 0; ordered_index < static_cast<int>(original_indices.size()); ++ordered_index)
+    for (int i = 0; i < static_cast<int>(original_indices.size()); ++i)
     {
-        const int original_index = original_indices[ordered_index];
+        const int original_index = original_indices[i];
         const auto& [position, key] = points[original_index];
         DevicePoint device_point;
         device_point.x = position.x();
@@ -147,7 +147,7 @@ TargetLayout makeTargetLayout(const std::vector<SparsePoint>& points)
 
         if (!have_current_key || !(key == current_key))
         {
-            layout.voxels.push_back(DeviceVoxelEntry{ordered_index, 1});
+            layout.voxels.push_back(DeviceVoxelEntry{i, 1});
             layout.voxel_keys.push_back(packVoxelKey(key));
             current_key = key;
             have_current_key = true;
@@ -159,10 +159,9 @@ TargetLayout makeTargetLayout(const std::vector<SparsePoint>& points)
     }
     return layout;
 }
-
 } // namespace
 
-static std::vector<cuco::pair<std::int64_t, int>> makeVoxelPairs(const TargetLayout& layout)
+static std::vector<cuco::pair<std::int64_t, int>> makeVoxelPairs(const VoxelPointLayout& layout)
 {
     std::vector<cuco::pair<std::int64_t, int>> pairs;
     pairs.reserve(layout.voxel_keys.size());
@@ -180,7 +179,7 @@ struct SparsityAwareGICP::TargetCache
     thrust::device_vector<DeviceVoxelEntry> voxels;
     DeviceVoxelMap voxel_map;
 
-    explicit TargetCache(const TargetLayout& layout, thrust::device_vector<DevicePoint> device_points, const std::size_t max_target_voxels)
+    explicit TargetCache(const VoxelPointLayout& layout, thrust::device_vector<DevicePoint> device_points, const std::size_t max_target_voxels)
         : points(std::move(device_points)),
           voxels(layout.voxels.begin(), layout.voxels.end()),
           voxel_map(std::max<std::size_t>(2, max_target_voxels * 2),
@@ -209,7 +208,7 @@ SparsityAwareGICP& SparsityAwareGICP::operator=(SparsityAwareGICP&&) noexcept = 
 void SparsityAwareGICP::initializeTarget(const pcl::PointCloud<pcl::PointXYZ>& target)
 {
     const std::vector<SparsePoint> target_sparse = makeSparseCloud(target, mConfig);
-    TargetLayout target_layout = makeTargetLayout(target_sparse);
+    VoxelPointLayout target_layout = makeVoxelPointLayout(target_sparse);
     if (mConfig.max_target_voxels == 0 || target_layout.voxels.size() > mConfig.max_target_voxels)
     {
         throw std::invalid_argument("Initial target exceeds max_target_voxels or the voxel budget is zero");
@@ -245,7 +244,7 @@ void SparsityAwareGICP::insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>&
         return;
     }
 
-    TargetLayout new_layout = makeTargetLayout(sparse_points);
+    VoxelPointLayout new_layout = makeVoxelPointLayout(sparse_points);
     if (const std::size_t available_voxels = mConfig.max_target_voxels - mTarget->voxels.size();
         new_layout.voxels.size() > available_voxels)
     {
@@ -302,7 +301,7 @@ SparsityAwareGICP::Result SparsityAwareGICP::align(const pcl::PointCloud<pcl::Po
     }
 
     std::vector<SparsePoint> source_sparse = makeSparseCloud(source, mConfig);
-    TargetLayout source_layout = makeTargetLayout(source_sparse);
+    VoxelPointLayout source_layout = makeVoxelPointLayout(source_sparse);
 
     result.num_source_points = source_layout.points.size();
     result.num_target_points = mTarget->points.size();

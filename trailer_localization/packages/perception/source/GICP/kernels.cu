@@ -462,6 +462,7 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
             return;
         }
     }
+
     // Compute Exp(delta) in SE(3). Series expansions avoid divisions by very
     // small rotation angles.
     const float theta = sqrtf(delta[3] * delta[3] + delta[4] * delta[4] + delta[5] * delta[5]);
@@ -528,7 +529,7 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
 
 namespace cuda_func
 {
-thrust::device_vector<DevicePoint> estimateCovariances(const TargetLayout& layout, const SparsityAwareGICP::Config& config)
+thrust::device_vector<DevicePoint> estimateCovariances(const VoxelPointLayout& layout, const SparsityAwareGICP::Config& config)
 {
     const int min_neighbors = std::max(3, config.min_covariance_neighbors);
     const int max_neighbors = std::max(min_neighbors, config.max_covariance_neighbors);

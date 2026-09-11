@@ -34,6 +34,31 @@
 
 GPU 侧不直接使用 `HostVoxelKey`，而是使用 `packVoxelKey(x, y, z)` 压成 `int64_t`。
 
+`int64_t` 并不表示体素只有一个坐标，而是将三个整数坐标编码为一个标量 key，供
+`cuco::static_map<int64_t, int>` 查询。每个坐标占用 21 bit：先加上 $2^{20}$ 的偏移量，
+再保留低 21 bit，因此可无冲突地表示的每维坐标范围为：
+
+```text
+[-1,048,576, 1,048,575]
+```
+
+三个坐标合计使用 63 bit，位布局如下：
+
+```text
+| x: 21 bits | y: 21 bits | z: 21 bits | unused: 1 bit |
+    62       42 41       21 20        0
+```
+
+对应实现为：
+
+```cpp
+return (packed_x << 42) | (packed_y << 21) | packed_z;
+```
+
+这种表示让 GPU 哈希表可以将一个体素坐标作为单个 key 比较和哈希，而无需在设备端为
+三维结构实现相等比较、哈希函数和空 key。最高位未使用，因此打包结果非负，不会与
+`std::numeric_limits<std::int64_t>::min()` 这个哈希表空 key 冲突。
+
 ### 1.2 SparsePoint
 
 `SparsePoint` 是 CPU 稀疏化后的中间点：
@@ -94,6 +119,33 @@ struct DeviceCorrespondence
 ```
 
 `target_index < 0` 表示没有找到有效对应点。
+
+### 1.6 DeviceVoxelMap
+
+`DeviceVoxelMap` 是目标地图驻留在 GPU 上的只读体素索引。它的实际类型由
+`decltype(cuco::static_map{...})` 推导，等价于一个键和值类型分别为 `int64_t` 和 `int`
+的固定容量哈希表：
+
+```text
+packed voxel key -> index into voxels
+```
+
+key 是 `packVoxelKey(x, y, z)` 生成的 packed voxel key；value 是该 key 对应的
+`DeviceVoxelEntry` 在 `voxels` 数组中的下标。因此，kernel 先用相邻体素的坐标生成 key，
+再查询 map，成功后就能读取 `voxels[value]` 给出的 `points` 连续范围。
+
+定义中的配置含义如下：
+
+- `std::size_t{2}`：仅用于 `decltype` 推导类型的最小示例容量；实际 `TargetCache` 会以
+    `max_target_voxels * 2` 创建 map，预留约 $0.5$ 的负载因子以降低冲突。
+- `empty_key{int64_t::min()}`：表示未使用的槽位。packed key 非负，所以不会与有效 key 冲突。
+- `empty_value{-1}`：与空 key 配套的值哨兵；正常插入的 voxel 下标总是非负。
+- `cuda::std::equal_to<int64_t>`：设备端 key 相等比较。
+- `cuco::linear_probing<1, cuco::default_hash_function<int64_t>>`：使用默认哈希函数；发生哈希冲突时，
+    以线性探测查找下一个槽位。
+
+`static_map` 的容量创建后不可扩展，因此初始化前会检查目标体素数不超过
+`max_target_voxels`，以保证插入不会超过预分配容量。
 
 
 
@@ -237,6 +289,8 @@ FAR-LIO 只处理活动点并维护双地图的增量实现。
 超出 `max_target_distance` 的体素。`TrailerLocalization` 使用当前配准位姿的 translation 作为
 裁剪中心，同时裁剪用于发布的 PCL 地图。
 
+
+
 ## 7 协方差估计：estimateCovariancesKernel
 
 每个 CUDA thread 处理一个点。
@@ -261,7 +315,7 @@ for dx in [-r, r]:
 
 每个点维护最多 `max_covariance_neighbors` 个最近邻，当前 CUDA 实现上限为 64。
 
-### 协方差计算
+### 7.2 协方差计算
 
 找到足够邻居后，先计算均值：
 

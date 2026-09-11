@@ -59,11 +59,11 @@ struct DeviceCorrespondence
 };
 
 // Host-side, voxel-sorted representation used to create device arrays/maps.
-struct TargetLayout
+struct VoxelPointLayout
 {
-    std::vector<DevicePoint> points;
-    std::vector<DeviceVoxelEntry> voxels;
-    std::vector<std::int64_t> voxel_keys;
+    std::vector<DevicePoint> points;        // Voxel-sorted points. Each DeviceVoxelEntry indexes a contiguous range in this array.
+    std::vector<DeviceVoxelEntry> voxels;   // One entry per occupied voxel, recording that voxel's point range in points.
+    std::vector<std::int64_t> voxel_keys;   // Packed coordinates for occupied voxels; voxel_keys[i] is the key for voxels[i].
 };
 
 // Non-running states make later queued kernels return without synchronizing
@@ -102,7 +102,7 @@ __host__ __device__ inline std::int64_t packVoxelKey(const int x, const int y, c
     return (packed_x << 42) | (packed_y << 21) | packed_z;
 }
 
-thrust::device_vector<DevicePoint> estimateCovariances(const TargetLayout& layout, const SparsityAwareGICP::Config& config);
+thrust::device_vector<DevicePoint> estimateCovariances(const VoxelPointLayout& layout, const SparsityAwareGICP::Config& config);
 
 void findCorrespondences(const thrust::device_vector<DevicePoint>& device_source,
                          const thrust::device_vector<DevicePoint>& device_target,

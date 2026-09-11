@@ -4,6 +4,7 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
+#include <nav_msgs/msg/path.hpp>
 #include <pcl/point_types.h>
 #include <tf2_eigen/tf2_eigen.hpp>
 #include <tf2_ros/buffer.h>
@@ -35,14 +36,12 @@ public:
         // }
 
         SparsityAwareGICP::Config config{};
-        config.voxel_size = MAP_RESOLUTION;
-        config.max_points_per_voxel = 36;
-        config.min_point_spacing = 0.02f;
+        config.voxel_size = MAP_RESOLUTION * 6;
         config.max_fitness_score = 0.1f;  // 平均意义下的点位误差尺度 10 cm
         mGicp.setConfig(config);
 
         mIntensityThreshold = static_cast<float>(declare_parameter<double>("intensity_threshold", -1.0));
-        mIntensityKeepRatio = std::clamp(static_cast<float>(declare_parameter<double>("intensity_keep_ratio", 0.8)), 0.01f, 1.0f);
+        mIntensityKeepRatio = std::clamp(static_cast<float>(declare_parameter<double>("intensity_keep_ratio", 0.9)), 0.01f, 1.0f);
 
         initSubscribers();
         initPublisher();
@@ -71,7 +70,8 @@ private:
 
     /* Publishers */
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr mProcessedScanVisPub, mVoxelMapPub;
-    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr mTrailerPosePub;
+    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr mBasePosePub;
+    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr mBasePosePathPub;
 
     /* Data Buffers */
     std::queue<sensor_msgs::msg::PointCloud2> mScanBuffer;
@@ -91,6 +91,7 @@ private:
     /* Trailer voxel map and estimated pose */
     pcl::PointCloud<pcl::PointXYZ>::Ptr mTrailerVoxelMap;
     Eigen::Isometry3f mBasePose{Eigen::Isometry3f::Identity()};   // Pose of the truck
+    nav_msgs::msg::Path mBasePosePath;
     ROI mTrailerRoi{};
     SparsityAwareGICP mGicp;
     std::vector<double> mGicpDurationsMs;
@@ -102,7 +103,7 @@ private:
     void initSubscribers()
     {
         // mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/iv_points", rclcpp::SensorDataQoS(),
-        mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/iv_points", 10,
+        mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/hesai/pandar", 10,
             [this](const sensor_msgs::msg::PointCloud2::ConstSharedPtr& scan_msg)
                 {
                     {
@@ -121,7 +122,8 @@ private:
     {
         mProcessedScanVisPub = create_publisher<sensor_msgs::msg::PointCloud2>("/scan_vis", rclcpp::SensorDataQoS());
         mVoxelMapPub = create_publisher<sensor_msgs::msg::PointCloud2>("/voxel_map", rclcpp::SensorDataQoS());
-        mTrailerPosePub = create_publisher<geometry_msgs::msg::PoseStamped>("/trailer_pose", rclcpp::SensorDataQoS());
+        mBasePosePub = create_publisher<geometry_msgs::msg::PoseStamped>("/base_pose", rclcpp::SensorDataQoS());
+        mBasePosePathPub = create_publisher<nav_msgs::msg::Path>("/base_pose_path", rclcpp::SensorDataQoS());
     }
 
     /* Transform LiDAR scan to base truck frame */

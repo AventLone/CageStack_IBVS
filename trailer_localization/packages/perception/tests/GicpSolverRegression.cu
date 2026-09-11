@@ -85,7 +85,7 @@ void testSolver(const bool zero_gradient, const bool singular)
     thrust::device_vector<float> device_partials(partials.begin(), partials.end());
     thrust::device_vector<float> device_transform(transform.begin(), transform.end());
     thrust::device_vector<DeviceAlignmentState> device_state(1, DeviceAlignmentState{});
-    SparsityAwareGICPConfig config;
+    SparsityAwareGICP::Config config;
     cuda_func::solveAndUpdate(device_partials, 2, config, device_transform, device_state);
     require(cudaDeviceSynchronize() == cudaSuccess, "Solver CUDA execution failed");
     const thrust::host_vector<DeviceAlignmentState> state = device_state;
@@ -136,7 +136,7 @@ void testInactiveKernels()
     DeviceVoxelMap voxel_map(2, cuco::empty_key{std::numeric_limits<std::int64_t>::min()},
                              cuco::empty_value{-1}, cuda::std::equal_to<std::int64_t>{},
                              cuco::linear_probing<1, cuco::default_hash_function<std::int64_t>>{});
-    SparsityAwareGICPConfig config;
+    SparsityAwareGICP::Config config;
     cuda_func::findCorrespondences(source, target, voxels, voxel_map, correspondences, transform, config, state);
     cuda_func::buildLinearSystem(source.size(), source, target, correspondences, transform, config, partials, state);
     require(cudaDeviceSynchronize() == cudaSuccess, "Inactive kernels accessed their inputs");
@@ -218,7 +218,7 @@ void testLinearSystem(const int num_points, const int num_blocks, const bool all
     thrust::device_vector<DeviceAlignmentState> state(1, DeviceAlignmentState{});
     const int grid_size = std::max(1, std::min(1024, static_cast<int>((num_points + LINEAR_SYSTEM_BLOCK_SIZE - 1) / LINEAR_SYSTEM_BLOCK_SIZE)));
     thrust::device_vector<float> partials(grid_size * LINEAR_SYSTEM_SIZE, std::numeric_limits<float>::quiet_NaN());
-    SparsityAwareGICPConfig config;
+    SparsityAwareGICP::Config config;
     config.cauchy_kernel_scale = 0.3f;
     cuda_func::buildLinearSystem(num_points, device_source, device_target, device_correspondences, device_transform, config, partials, state);
     require(cudaDeviceSynchronize() == cudaSuccess, "Linear-system kernel execution failed");
@@ -248,7 +248,7 @@ void testLinearSystem(const int num_points, const int num_blocks, const bool all
 
 void testTargetCapacity()
 {
-    SparsityAwareGICPConfig config;
+    SparsityAwareGICP::Config config;
     config.max_target_voxels = 3;
     config.max_iterations = 1;
     SparsityAwareGICP gicp(config);
@@ -301,7 +301,7 @@ void testAlignment()
         const Eigen::Vector3f shifted = position - translation;
         source.emplace_back(shifted.x(), shifted.y(), shifted.z());
     }
-    SparsityAwareGICPConfig config;
+    SparsityAwareGICP::Config config;
     config.max_correspondence_distance = 0.2f;
     SparsityAwareGICP gicp(config);
     gicp.initializeTarget(target);

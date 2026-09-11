@@ -74,11 +74,12 @@ std::int64_t packVoxelKey(const HostVoxelKey& key)
 
 std::vector<SparsePoint> makeSparseCloud(const pcl::PointCloud<pcl::PointXYZ>& cloud, const SparsityAwareGICP::Config& config)
 {
-    std::vector<SparsePoint> points;
-    points.reserve(cloud.size());
+    std::vector<SparsePoint> sparse_cloud;
+    sparse_cloud.reserve(cloud.size());
     OccupiedVoxels occupied_voxels;
     const int max_points_per_voxel = std::max(1, config.max_points_per_voxel);
-    const float min_spacing_square = std::pow(std::max(0.0f, config.min_point_spacing), 2.0f);
+    // const float min_spacing_square = std::pow(std::max(0.001f, config.min_point_spacing), 2.0f);
+    const float min_spacing_square = std::pow(std::max(0.001f, config.voxel_size * 0.1f), 2.0f);
 
 
     // Retain several well-spaced samples per voxel instead of replacing each
@@ -100,20 +101,19 @@ std::vector<SparsePoint> makeSparseCloud(const pcl::PointCloud<pcl::PointXYZ>& c
             continue;
         }
 
-        const bool too_close = std::any_of(voxel_points.cbegin(), voxel_points.cend(), [&](const std::size_t index)
+        /* The ponit would not be pushed in sparse_cloud if it's too close to any of the existing points */
+        if (const bool too_close = std::any_of(voxel_points.cbegin(), voxel_points.cend(), [&](const std::size_t index)
             {
-                return (points[index].position - point.position).squaredNorm() < min_spacing_square;
-            });
-
-        if (too_close)
+                return (sparse_cloud[index].position - point.position).squaredNorm() < min_spacing_square;
+            }); too_close)
         {
             continue;
         }
 
-        voxel_points.push_back(points.size());
-        points.push_back(point);
+        voxel_points.push_back(sparse_cloud.size());
+        sparse_cloud.push_back(point);
     }
-    return points;
+    return sparse_cloud;
 }
 
 TargetLayout makeTargetLayout(const std::vector<SparsePoint>& points)

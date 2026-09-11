@@ -447,7 +447,7 @@ void TrailerLocalization::workerLoop()
                 continue;
             }
 
-            if (point.x > 0.1f || point.x < -0.1f || point.y > 0.2f || point.y < -0.2f)
+            if (point.x > 0.8f || point.x < -0.8f || point.y > 0.8f || point.y < -0.8f)
             {
                 denoised_scan->emplace_back(point.x, point.y, point.z);
             }
@@ -525,10 +525,14 @@ void TrailerLocalization::workerLoop()
         map_msg.header.frame_id = "map";
         mVoxelMapPub->publish(map_msg);
 
-        // geometry_msgs::msg::PoseStamped pose_msg;
-        // pose_msg.header = scan_msg.header;
-        // pose_msg.header.frame_id = "LOLA";
-        // pose_msg.pose = tf2::toMsg(Eigen::Isometry3d(mTrailerPose.cast<double>()));
-        // mTrailerPosePub->publish(pose_msg);
+        geometry_msgs::msg::PoseStamped pose_msg;
+        pose_msg.header = scan_msg.header;
+        pose_msg.header.frame_id = "map";
+        pose_msg.pose = tf2::toMsg(mBasePose.cast<double>());
+        mBasePosePub->publish(pose_msg);
+
+        mBasePosePath.header = pose_msg.header;
+        mBasePosePath.poses.push_back(pose_msg);
+        mBasePosePathPub->publish(mBasePosePath);
     }
 }

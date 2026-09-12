@@ -93,6 +93,7 @@ private:
     Eigen::Isometry3f mBasePose{Eigen::Isometry3f::Identity()};   // Pose of the truck
     nav_msgs::msg::Path mBasePosePath;
     ROI mTrailerRoi{};
+    // SparsityAwareGICP mGicp;
     SparsityAwareGICP mGicp;
     std::vector<double> mGicpDurationsMs;
     std::size_t mGicpDurationCount{0};
@@ -103,8 +104,8 @@ private:
     void initSubscribers()
     {
         // mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/iv_points", rclcpp::SensorDataQoS(),
-        // mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/hesai/pandar", 10,
-        mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/iv_points", 10,
+        mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/hesai/pandar", 10,
+        // mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/iv_points", 10,
             [this](const sensor_msgs::msg::PointCloud2::ConstSharedPtr& scan_msg)
                 {
                     {

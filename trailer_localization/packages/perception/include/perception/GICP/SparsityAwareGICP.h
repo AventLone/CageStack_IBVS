@@ -1,13 +1,11 @@
 #pragma once
-#include <cstddef>
-#include <limits>
-#include <memory>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 
 class SparsityAwareGICP
 {
 public:
+
     struct Config
     {
         // 体素边长，单位 m，必须 > 0；同时用于稀疏化、协方差邻域和对应搜索。
@@ -16,15 +14,11 @@ public:
 
         // 每体素最多保留的点数，按输入顺序筛选，实际至少为 1。
         // 增大保留更多局部几何、增加计算和显存开销；减小加快处理但可能使邻域过稀。
-        int max_points_per_voxel{36};
-
-        // 对应搜索沿每个轴扩展的体素数 r，要求 >= 0；查询 (2*r + 1)^3 个体素。
-        // 增大可覆盖更大的初始位姿误差，但搜索开销和误匹配风险增加；减小更快但易漏匹配。
-        int adjacent_voxels{1};
+        int max_points_per_voxel{26};
 
         // 协方差邻域沿每个轴扩展的体素数 r，实际至少为 0。
         // 增大可找到更多候选邻居，但查询量按 (2*r + 1)^3 增长，并可能混入不同表面；减小更局部。
-        int covariance_voxel_radius{2};
+        int covariance_voxel_radius{1};
 
         // 有效协方差所需的最少邻居数，包含点自身，实际至少为 3。
         // 增大对稀疏邻域更严格，更多点回退为无效协方差；减小更易获得协方差，但统计可靠性降低。
@@ -65,7 +59,7 @@ public:
 
         // 最大迭代轮数，正常使用应 > 0；增大允许更多更新但增加计算预算，减小更快但可能未充分对齐。
         // CPU 固定提交这么多轮；GPU 停止后搜索和 Hessian 构建直接返回，仍有 kernel launch 开销。
-        int max_iterations{100};
+        int max_iterations{50};
 
         // SE(3) 增量中平移分量的范数阈值，单位 m，要求 > 0；需与旋转阈值同时满足才停止更新。
         // 增大更早停止、精细程度降低；减小更严格、可能因浮点精度或噪声持续迭代；1e-6 m 为 1 微米。
@@ -100,6 +94,7 @@ public:
     {
         return mConfig;
     }
+
     void setConfig(const Config& config) noexcept
     {
         mConfig = config;
@@ -107,14 +102,12 @@ public:
     }
 
     void initializeTarget(const pcl::PointCloud<pcl::PointXYZ>& target);
-
     void insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>& points);
-
     void clearTarget() noexcept;
 
     [[nodiscard]] bool hasTarget() const noexcept;
-
-    [[nodiscard]] Result align(const pcl::PointCloud<pcl::PointXYZ>& source, const Eigen::Isometry3f& initial_guess) const;
+    [[nodiscard]] Result align(const pcl::PointCloud<pcl::PointXYZ>& source,
+                               const Eigen::Isometry3f& initial_guess) const;
 
 private:
     struct TargetCache;

@@ -402,6 +402,8 @@ void Localization::workerLoop()
             mScanBuffer.pop();
         }
 
+        const auto frame_start_time = std::chrono::high_resolution_clock::now();
+
         pcl::PointCloud<pcl::PointXYZI> lidar_points;
         pcl::fromROSMsg(scan_msg, lidar_points);
 
@@ -447,7 +449,7 @@ void Localization::workerLoop()
                 continue;
             }
 
-            if (point.x > 0.8f || point.x < -0.8f || point.y > 0.8f || point.y < -0.8f)
+            if (point.x > 0.2f || point.x < -0.2f || point.y > 0.3f || point.y < -0.3f)
             {
                 denoised_scan->emplace_back(point.x, point.y, point.z);
             }
@@ -509,5 +511,9 @@ void Localization::workerLoop()
         mBasePosePath.header = pose_msg.header;
         mBasePosePath.poses.push_back(pose_msg);
         mBasePosePathPub->publish(mBasePosePath);
+
+        const auto frame_end_time = std::chrono::high_resolution_clock::now();
+        const double frame_duration_ms = std::chrono::duration<double, std::milli>(frame_end_time - frame_start_time).count();
+        RCLCPP_INFO(get_logger(), "Whole frame processing time: %.2f ms", frame_duration_ms);
     }
 }

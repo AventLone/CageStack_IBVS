@@ -140,9 +140,7 @@ VoxelPointLayout makeVoxelPointLayout(const std::vector<SparsePoint>& points)
         const int original_index = original_indices[i];
         const auto& [position, key] = points[original_index];
         DevicePoint device_point;
-        device_point.x = position.x();
-        device_point.y = position.y();
-        device_point.z = position.z();
+        device_point.position = position;
         layout.points.push_back(device_point);
 
         if (!have_current_key || !(key == current_key))
@@ -179,7 +177,8 @@ struct SparsityAwareGICP::TargetCache
     thrust::device_vector<DeviceVoxelEntry> voxels;
     DeviceVoxelMap voxel_map;
 
-    explicit TargetCache(const VoxelPointLayout& layout, thrust::device_vector<DevicePoint> device_points, const std::size_t max_target_voxels)
+    explicit TargetCache(const VoxelPointLayout& layout, thrust::device_vector<DevicePoint> device_points,
+                         const std::size_t max_target_voxels)
         : points(std::move(device_points)),
           voxels(layout.voxels.begin(), layout.voxels.end()),
           voxel_map(std::max<std::size_t>(2, max_target_voxels * 2),
@@ -299,7 +298,6 @@ SparsityAwareGICP::Result SparsityAwareGICP::align(const pcl::PointCloud<pcl::Po
     {
         throw std::runtime_error("Target was not initialized before you call this method!");
     }
-
     std::vector<SparsePoint> source_sparse = makeSparseCloud(source, mConfig);
     VoxelPointLayout source_layout = makeVoxelPointLayout(source_sparse);
 

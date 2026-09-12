@@ -1,5 +1,6 @@
 #pragma once
 #include "perception/GICP/SparsityAwareGICP.h"
+#include <Eigen/Core>
 #include <cuco/static_map.cuh>
 #include <cuda_runtime.h>
 #include <thrust/device_vector.h>
@@ -32,10 +33,8 @@ struct LinearSystemPartial
 // local surface neighborhood; voxels are used only to index nearby points.
 struct DevicePoint
 {
-    float x{0.0f};
-    float y{0.0f};
-    float z{0.0f};
-    float covariance[9]{};
+    Eigen::Vector3f position{Eigen::Vector3f::Zero()};
+    Eigen::Matrix3f covariance{Eigen::Matrix3f::Zero()};
     int covariance_valid{0};
 };
 
@@ -53,9 +52,7 @@ struct DeviceCorrespondence
     int target_index{-1};      // 匹配到的目标点在 target_points 数组中的索引，-1 没有在距离阈值内找到有效目标点
 
     /* 源点经过当前位姿估计变换后的坐标 */
-    float transformed_x{0.0f};
-    float transformed_y{0.0f};
-    float transformed_z{0.0f};
+    Eigen::Vector3f transformed_position{Eigen::Vector3f::Zero()};
 };
 
 // Host-side, voxel-sorted representation used to create device arrays/maps.
@@ -92,14 +89,15 @@ using DeviceVoxelMap = decltype(cuco::static_map{std::size_t{2},
 namespace cuda_func
 {
 // Pack three signed 21-bit voxel coordinates into one hash-map key.
-__host__ __device__ inline std::int64_t packVoxelKey(const int x, const int y, const int z)
+// __host__ __device__ inline std::int64_t packVoxelKey(const int x, const int y, const int z)
+__host__ __device__ inline std::int64_t packVoxelKey(const int i, const int j, const int k)
 {
     constexpr std::int64_t coordinate_offset = 1 << 20;
     constexpr std::int64_t coordinate_mask = (1 << 21) - 1;
-    const std::int64_t packed_x = (static_cast<std::int64_t>(x) + coordinate_offset) & coordinate_mask;
-    const std::int64_t packed_y = (static_cast<std::int64_t>(y) + coordinate_offset) & coordinate_mask;
-    const std::int64_t packed_z = (static_cast<std::int64_t>(z) + coordinate_offset) & coordinate_mask;
-    return (packed_x << 42) | (packed_y << 21) | packed_z;
+    const std::int64_t packed_i = (static_cast<std::int64_t>(i) + coordinate_offset) & coordinate_mask;
+    const std::int64_t packed_j = (static_cast<std::int64_t>(j) + coordinate_offset) & coordinate_mask;
+    const std::int64_t packed_k = (static_cast<std::int64_t>(k) + coordinate_offset) & coordinate_mask;
+    return (packed_i << 42) | (packed_j << 21) | packed_k;
 }
 
 thrust::device_vector<DevicePoint> estimateCovariances(const VoxelPointLayout& layout, const SparsityAwareGICP::Config& config);

@@ -1,11 +1,6 @@
+set(CMAKE_CUDA_ARCHITECTURES native)
 cmake_minimum_required(VERSION 4.3)
 project(perception LANGUAGES C CXX CUDA)
-
-set(CMAKE_CUDA_STANDARD 17)
-set(CMAKE_CUDA_STANDARD_REQUIRED ON)
-if (NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-    set(CMAKE_CUDA_ARCHITECTURES native)
-endif ()
 
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
@@ -46,7 +41,8 @@ target_include_directories(sparsity_aware_gicp PUBLIC
     ${PCL_INCLUDE_DIRS}
 )
 
-target_link_libraries(sparsity_aware_gicp PRIVATE ${PCL_LIBRARIES} cuco::cuco)
+find_package(Sophus REQUIRED)
+target_link_libraries(sparsity_aware_gicp PRIVATE ${PCL_LIBRARIES} cuco::cuco Sophus::Sophus)
 target_compile_features(sparsity_aware_gicp PUBLIC cxx_std_23 cuda_std_17)
 target_compile_options(sparsity_aware_gicp PRIVATE
     $<$<COMPILE_LANGUAGE:CUDA>:--expt-extended-lambda>

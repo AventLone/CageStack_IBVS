@@ -86,6 +86,7 @@ void testSolver(const bool zero_gradient, const bool singular)
     thrust::device_vector<float> device_transform(transform.begin(), transform.end());
     thrust::device_vector<DeviceAlignmentState> device_state(1, DeviceAlignmentState{});
     SparsityAwareGICP::Config config;
+    config.damping_factor = damping;
     cuda_func::solveAndUpdate(device_partials, 2, config, device_transform, device_state);
     require(cudaDeviceSynchronize() == cudaSuccess, "Solver CUDA execution failed");
     const thrust::host_vector<DeviceAlignmentState> state = device_state;
@@ -167,27 +168,17 @@ void testLinearSystem(const int num_points, const int num_blocks, const bool all
         const Eigen::Vector3f transformed = rotation * position + Eigen::Vector3f(0.1f, -0.2f, 0.3f);
         const Eigen::Vector3f residual(0.001f * (index % 9 - 4), 0.002f * (index % 7 - 3), 0.003f * (index % 5 - 2));
         const Eigen::Vector3f target_position = transformed - residual;
-        source[index].x = position.x();
-        source[index].y = position.y();
-        source[index].z = position.z();
-        target[index].x = target_position.x();
-        target[index].y = target_position.y();
-        target[index].z = target_position.z();
+        source[index].position = position;
+        target[index].position = target_position;
         source[index].covariance_valid = index % 3 != 0;
         target[index].covariance_valid = index % 4 != 0;
         Eigen::Matrix3f source_covariance;
         source_covariance << 0.2f, 0.01f, 0.02f, 0.01f, 0.3f, 0.01f, 0.02f, 0.01f, 0.4f;
         const Eigen::Matrix3f target_covariance = 2.0f * source_covariance;
-        for (int row = 0; row < 3; ++row)
-        {
-            for (int col = 0; col < 3; ++col)
-            {
-                source[index].covariance[row * 3 + col] = source_covariance(row, col);
-                target[index].covariance[row * 3 + col] = target_covariance(row, col);
-            }
-        }
+        source[index].covariance = source_covariance;
+        target[index].covariance = target_covariance;
         correspondences[index] = DeviceCorrespondence{!all_invalid && index % 7 != 0 ? index : -1,
-                                   transformed.x(), transformed.y(), transformed.z()};
+                                   transformed};
         if (correspondences[index].target_index < 0)
         {
             continue;

@@ -36,12 +36,12 @@ public:
         // }
 
         SparsityAwareGICP::Config config{};
-        config.voxel_size = MAP_RESOLUTION * 6;
+        config.voxel_size = MAP_RESOLUTION * 5;
         config.max_fitness_score = 0.1f;  // 平均意义下的点位误差尺度 10 cm
         mGicp.setConfig(config);
 
         mIntensityThreshold = static_cast<float>(declare_parameter<double>("intensity_threshold", -1.0));
-        mIntensityKeepRatio = std::clamp(static_cast<float>(declare_parameter<double>("intensity_keep_ratio", 0.9)), 0.01f, 1.0f);
+        mIntensityKeepRatio = std::clamp(static_cast<float>(declare_parameter<double>("intensity_keep_ratio", 0.6)), 0.01f, 1.0f);
 
         initSubscribers();
         initPublisher();
@@ -103,7 +103,8 @@ private:
     void initSubscribers()
     {
         // mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/iv_points", rclcpp::SensorDataQoS(),
-        mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/hesai/pandar", 10,
+        // mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/hesai/pandar", 10,
+        mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/iv_points", 10,
             [this](const sensor_msgs::msg::PointCloud2::ConstSharedPtr& scan_msg)
                 {
                     {

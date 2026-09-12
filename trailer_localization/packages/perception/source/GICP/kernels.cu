@@ -1,6 +1,7 @@
 #include "perception/GICP/kernels.cuh"
 #include <cub/block/block_reduce.cuh>
 #include <math_constants.h>
+#include <sophus/se3.hpp>
 #include <thrust/host_vector.h>
 #include <algorithm>
 #include <cmath>
@@ -23,9 +24,7 @@ __global__ void estimateCovariancesKernel(DevicePoint* points, const int num_poi
     }
 
     const DevicePoint point = points[index];
-    const int base_x = static_cast<int>(floorf(point.x / voxel_size));
-    const int base_y = static_cast<int>(floorf(point.y / voxel_size));
-    const int base_z = static_cast<int>(floorf(point.z / voxel_size));
+    const Eigen::Array3i base = (point.position / voxel_size).array().floor().cast<int>();
     float distances[neighbor_capacity];
     int neighbor_indices[neighbor_capacity];
     int neighbor_count = 0;
@@ -38,7 +37,7 @@ __global__ void estimateCovariancesKernel(DevicePoint* points, const int num_poi
         {
             for (int dz = -voxel_radius; dz <= voxel_radius; ++dz)
             {
-                const auto found = voxels.find(cuda_func::packVoxelKey(base_x + dx, base_y + dy, base_z + dz));
+                const auto found = voxels.find(cuda_func::packVoxelKey(base.x() + dx, base.y() + dy, base.z() + dz));
                 if (found == voxels.end())
                 {
                     continue;
@@ -49,10 +48,7 @@ __global__ void estimateCovariancesKernel(DevicePoint* points, const int num_poi
                 {
                     const int candidate_index = voxel.start + offset;
                     const DevicePoint candidate = points[candidate_index];
-                    const float x_difference = candidate.x - point.x;
-                    const float y_difference = candidate.y - point.y;
-                    const float z_difference = candidate.z - point.z;
-                    const float distance = x_difference * x_difference + y_difference * y_difference + z_difference * z_difference;
+                    const float distance = (candidate.position - point.position).squaredNorm();
                     if (neighbor_count == max_neighbors && distance >= distances[max_neighbors - 1])
                     {
                         continue;
@@ -82,10 +78,7 @@ __global__ void estimateCovariancesKernel(DevicePoint* points, const int num_poi
 
     DevicePoint result = point;
     result.covariance_valid = 0;
-    for (int element = 0; element < 9; ++element)
-    {
-        result.covariance[element] = element % 4 == 0 ? 1.0f : 0.0f;
-    }
+    result.covariance.setIdentity();
     if (neighbor_count < min_neighbors)
     {
         points[index] = result;
@@ -94,49 +87,26 @@ __global__ void estimateCovariancesKernel(DevicePoint* points, const int num_poi
 
     // Estimate one local sample covariance per point. This is GICP point
     // geometry, not one covariance shared by an entire voxel.
-    float mean_x = 0.0f;
-    float mean_y = 0.0f;
-    float mean_z = 0.0f;
+    Eigen::Vector3f mean = Eigen::Vector3f::Zero();
     for (int neighbor = 0; neighbor < neighbor_count; ++neighbor)
     {
         const DevicePoint candidate = points[neighbor_indices[neighbor]];
-        mean_x += candidate.x;
-        mean_y += candidate.y;
-        mean_z += candidate.z;
+        mean += candidate.position;
     }
-    mean_x /= static_cast<float>(neighbor_count);
-    mean_y /= static_cast<float>(neighbor_count);
-    mean_z /= static_cast<float>(neighbor_count);
+    mean /= static_cast<float>(neighbor_count);
 
-    float covariance[9]{};
+    Eigen::Matrix3f covariance = Eigen::Matrix3f::Zero();
     for (int neighbor = 0; neighbor < neighbor_count; ++neighbor)
     {
         const DevicePoint candidate = points[neighbor_indices[neighbor]];
-        const float x = candidate.x - mean_x;
-        const float y = candidate.y - mean_y;
-        const float z = candidate.z - mean_z;
-        covariance[0] += x * x;
-        covariance[1] += x * y;
-        covariance[2] += x * z;
-        covariance[4] += y * y;
-        covariance[5] += y * z;
-        covariance[8] += z * z;
+        const Eigen::Vector3f offset = candidate.position - mean;
+        covariance.noalias() += offset * offset.transpose();
     }
-    const float scale = 1.0f / static_cast<float>(neighbor_count - 1);
-    covariance[0] = covariance[0] * scale + regularization;
-    covariance[1] *= scale;
-    covariance[2] *= scale;
-    covariance[3] = covariance[1];
-    covariance[4] = covariance[4] * scale + regularization;
-    covariance[5] *= scale;
-    covariance[6] = covariance[2];
-    covariance[7] = covariance[5];
-    covariance[8] = covariance[8] * scale + regularization;
+    covariance /= static_cast<float>(neighbor_count - 1);
+    covariance.diagonal().array() += regularization;
 
-    const float determinant = covariance[0] * (covariance[4] * covariance[8] - covariance[5] * covariance[7]) -
-                              covariance[1] * (covariance[3] * covariance[8] - covariance[5] * covariance[6]) +
-                              covariance[2] * (covariance[3] * covariance[7] - covariance[4] * covariance[6]);
-    if (!isfinite(determinant) || fabsf(determinant) <= 1.0e-12f)
+    if (const float determinant = covariance.determinant();
+        !isfinite(determinant) || fabsf(determinant) <= 1.0e-12f)
     {
         points[index] = result;
         return;
@@ -144,27 +114,14 @@ __global__ void estimateCovariancesKernel(DevicePoint* points, const int num_poi
 
     // Normalize by the Frobenius norm of the inverse covariance. This limits
     // the scale of the precision matrix while retaining local anisotropy.
-    const float inverse_norm_squared =
-        (covariance[4] * covariance[8] - covariance[5] * covariance[7]) * (covariance[4] * covariance[8] - covariance[5] * covariance[7]) +
-        (covariance[2] * covariance[7] - covariance[1] * covariance[8]) * (covariance[2] * covariance[7] - covariance[1] * covariance[8]) +
-        (covariance[1] * covariance[5] - covariance[2] * covariance[4]) * (covariance[1] * covariance[5] - covariance[2] * covariance[4]) +
-        (covariance[5] * covariance[6] - covariance[3] * covariance[8]) * (covariance[5] * covariance[6] - covariance[3] * covariance[8]) +
-        (covariance[0] * covariance[8] - covariance[2] * covariance[6]) * (covariance[0] * covariance[8] - covariance[2] * covariance[6]) +
-        (covariance[2] * covariance[3] - covariance[0] * covariance[5]) * (covariance[2] * covariance[3] - covariance[0] * covariance[5]) +
-        (covariance[3] * covariance[7] - covariance[4] * covariance[6]) * (covariance[3] * covariance[7] - covariance[4] * covariance[6]) +
-        (covariance[1] * covariance[6] - covariance[0] * covariance[7]) * (covariance[1] * covariance[6] - covariance[0] * covariance[7]) +
-        (covariance[0] * covariance[4] - covariance[1] * covariance[3]) * (covariance[0] * covariance[4] - covariance[1] * covariance[3]);
-    const float inverse_norm = sqrtf(inverse_norm_squared) / fabsf(determinant);
+    const float inverse_norm = covariance.inverse().norm();
     if (!isfinite(inverse_norm) || inverse_norm <= 0.0f)
     {
         points[index] = result;
         return;
     }
 
-    for (int element = 0; element < 9; ++element)
-    {
-        result.covariance[element] = covariance[element] * inverse_norm;
-    }
+    result.covariance = covariance * inverse_norm;
     result.covariance_valid = 1;
     points[index] = result;
 }
@@ -185,16 +142,14 @@ __global__ void findCorrespondencesKernel(const DevicePoint* source_points, cons
     uint32_t index = blockIdx.x * blockDim.x + threadIdx.x;
     const uint32_t stride = blockDim.x * gridDim.x;
 
+    const Sophus::SE3f pose(Eigen::Map<const Eigen::Matrix<float, 3, 3, Eigen::RowMajor>>(transform),
+                            Eigen::Map<const Eigen::Vector3f>(transform + 9));
     while (index < num_source_points)
     {
         const DevicePoint source = source_points[index];
-        const float transformed_x = transform[0] * source.x + transform[1] * source.y + transform[2] * source.z + transform[9];
-        const float transformed_y = transform[3] * source.x + transform[4] * source.y + transform[5] * source.z + transform[10];
-        const float transformed_z = transform[6] * source.x + transform[7] * source.y + transform[8] * source.z + transform[11];
+        const Eigen::Vector3f transformed_position = pose * source.position;
 
-        const int base_x = static_cast<int>(floorf(transformed_x / voxel_size));
-        const int base_y = static_cast<int>(floorf(transformed_y / voxel_size));
-        const int base_z = static_cast<int>(floorf(transformed_z / voxel_size));
+        const Eigen::Array3i base = (transformed_position / voxel_size).array().floor().cast<int>();
 
         float best_distance2 = max_correspondence_distance2;
         int best_target = -1;
@@ -204,7 +159,7 @@ __global__ void findCorrespondencesKernel(const DevicePoint* source_points, cons
             {
                 for (int dz = -adjacent_voxels; dz <= adjacent_voxels; ++dz)
                 {
-                    const auto found = target_voxels.find(cuda_func::packVoxelKey(base_x + dx, base_y + dy, base_z + dz));
+                    const auto found = target_voxels.find(cuda_func::packVoxelKey(base.x() + dx, base.y() + dy, base.z() + dz));
                     if (found == target_voxels.end())
                     {
                         continue;
@@ -214,10 +169,7 @@ __global__ void findCorrespondencesKernel(const DevicePoint* source_points, cons
                     {
                         const int target_index = voxel.start + i;
                         const DevicePoint target = target_points[target_index];
-                        const float diff_x = transformed_x - target.x;
-                        const float diff_y = transformed_y - target.y;
-                        const float diff_z = transformed_z - target.z;
-                        if (const float distance2 = diff_x * diff_x + diff_y * diff_y + diff_z * diff_z;
+                        if (const float distance2 = (transformed_position - target.position).squaredNorm();
                             distance2 < best_distance2)
                         {
                             best_distance2 = distance2;
@@ -228,53 +180,14 @@ __global__ void findCorrespondencesKernel(const DevicePoint* source_points, cons
             }
         }
 
-        correspondences[index] = DeviceCorrespondence{best_target, transformed_x, transformed_y, transformed_z};
+        correspondences[index] = DeviceCorrespondence{best_target, transformed_position};
         index += stride;
     }
 }
 
-__device__ Eigen::Matrix3f covarianceMatrix(const DevicePoint& point)
-{
-    Eigen::Matrix3f covariance;
-    for (int row = 0; row < 3; ++row)
-    {
-        for (int col = 0; col < 3; ++col)
-        {
-            covariance(row, col) = point.covariance[row * 3 + col];
-        }
-    }
-    return covariance;
-}
-
 __device__ Eigen::Matrix3f rotationMatrix(const float* transform)
 {
-    Eigen::Matrix3f rotation;
-    rotation << transform[0], transform[1], transform[2],
-                transform[3], transform[4], transform[5],
-                transform[6], transform[7], transform[8];
-    return rotation;
-}
-
-__device__ Eigen::Matrix3f skewMatrix(const Eigen::Vector3f& vector)
-{
-    Eigen::Matrix3f skew;
-    skew << 0.0f, -vector.z(), vector.y(), vector.z(), 0.0f, -vector.x(), -vector.y(), vector.x(), 0.0f;
-    return skew;
-}
-
-__device__ bool matrixAllFinite(const Eigen::Matrix3f& matrix)
-{
-    for (int row = 0; row < 3; ++row)
-    {
-        for (int col = 0; col < 3; ++col)
-        {
-            if (!isfinite(matrix(row, col)))
-            {
-                return false;
-            }
-        }
-    }
-    return true;
+    return Eigen::Map<const Eigen::Matrix<float, 3, 3, Eigen::RowMajor>>(transform);
 }
 
 __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const DevicePoint* target_points,
@@ -295,13 +208,11 @@ __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const 
     const uint32_t stride = blockDim.x * gridDim.x;
     while (index < num_correspondences)
     {
-        if (const auto [target_index, transformed_x, transformed_y, transformed_z] = correspondences[index]; target_index >= 0)
+        if (const auto [target_index, transformed_source] = correspondences[index]; target_index >= 0)
         {
             const DevicePoint source = source_points[index];
             const DevicePoint target = target_points[target_index];
-            const Eigen::Vector3f transformed_source(transformed_x, transformed_y, transformed_z);
-            const Eigen::Vector3f target_position(target.x, target.y, target.z);
-            const Eigen::Vector3f residual = transformed_source - target_position;
+            const Eigen::Vector3f residual = transformed_source - target.position;
 
             // GICP combines the target covariance with the rotated source
             // covariance, yielding the Mahalanobis metric for this match.
@@ -309,11 +220,11 @@ __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const 
             if (source.covariance_valid != 0)
             {
                 const Eigen::Matrix3f rotation = rotationMatrix(transform);
-                const Eigen::Matrix3f target_covariance = target.covariance_valid != 0 ? covarianceMatrix(target) : Eigen::Matrix3f::Identity();
-                covariance = target_covariance + rotation * covarianceMatrix(source) * rotation.transpose();
+                const Eigen::Matrix3f target_covariance = target.covariance_valid != 0 ? target.covariance : Eigen::Matrix3f::Identity();
+                covariance = target_covariance + rotation * source.covariance * rotation.transpose();
             }
 
-            if (const Eigen::Matrix3f precision = covariance.inverse(); matrixAllFinite(precision))
+            if (const Eigen::Matrix3f precision = covariance.inverse(); precision.array().isFinite().all())
             {
                 const Eigen::Vector3f precision_residual = precision * residual;
                 const float mahalanobis_error = residual.dot(precision_residual);
@@ -321,8 +232,8 @@ __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const 
                 const float weight = cauchy_kernel_scale > 0.0f ? 1.0f / (1.0f + mahalanobis_error / kernel_scale2) : 1.0f;
 
                 Eigen::Matrix<float, 3, 6> jacobian;
-                jacobian.block<3, 3>(0, 0) = Eigen::Matrix3f::Identity();
-                jacobian.block<3, 3>(0, 3) = -skewMatrix(transformed_source);
+                jacobian.leftCols<3>().setIdentity();
+                jacobian.rightCols<3>() = -Sophus::SO3f::hat(transformed_source);
 
                 const Eigen::Matrix<float, 6, 6> local_hessian = jacobian.transpose() * weight * precision * jacobian;
                 const Eigen::Matrix<float, 6, 1> local_gradient = jacobian.transpose() * weight * precision_residual;
@@ -361,7 +272,7 @@ __global__ void buildLinearSystemKernel(const DevicePoint* source_points, const 
     }
 }
 
-__global__ void solveAndUpdateKernel(const float* partials, const int num_blocks, const SparsityAwareGICP::Config& config,
+__global__ void solveAndUpdateKernel(const float* partials, const int num_blocks, const SparsityAwareGICP::Config config,
                                      float* transform, DeviceAlignmentState* state)
 {
     if (threadIdx.x != 0 || state->status != AlignmentStatus::Running)
@@ -369,7 +280,8 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
         return;
     }
 
-    float augmented[6][7]{};
+    Eigen::Matrix<float, 6, 7, Eigen::RowMajor> augmented =
+        Eigen::Matrix<float, 6, 7, Eigen::RowMajor>::Zero();
     float valid_count = 0.0f;
     float squared_error_sum = 0.0f;
 
@@ -382,13 +294,13 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
             for (int col = row; col < 6; ++col)
             {
                 const float value = partial[packed_index++];
-                augmented[row][col] += value;
+                augmented(row, col) += value;
                 if (row != col)
                 {
-                    augmented[col][row] += value;
+                    augmented(col, row) += value;
                 }
             }
-            augmented[row][6] -= partial[HESSIAN_SIZE + row];
+            augmented(row, 6) -= partial[HESSIAN_SIZE + row];
         }
         valid_count += partial[VALID_COUNT_OFFSET];
         squared_error_sum += partial[SQUARED_ERROR_OFFSET];
@@ -402,23 +314,20 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
         return;
     }
 
-    for (int diagonal = 0; diagonal < 6; ++diagonal)
-    {
-        augmented[diagonal][diagonal] += config.damping_factor;
-    }
+    augmented.leftCols<6>().diagonal().array() += config.damping_factor;
 
     for (int diagonal = 0; diagonal < 6; ++diagonal)
     {
         int pivot_row = diagonal;
         for (int row = diagonal + 1; row < 6; ++row)
         {
-            if (fabsf(augmented[row][diagonal]) > fabsf(augmented[pivot_row][diagonal]))
+            if (fabsf(augmented(row, diagonal)) > fabsf(augmented(pivot_row, diagonal)))
             {
                 pivot_row = row;
             }
         }
 
-        if (!isfinite(augmented[pivot_row][diagonal]) || fabsf(augmented[pivot_row][diagonal]) <= 1.0e-12f)
+        if (!isfinite(augmented(pivot_row, diagonal)) || fabsf(augmented(pivot_row, diagonal)) <= 1.0e-12f)
         {
             state->status = AlignmentStatus::Aborted;
             return;
@@ -426,15 +335,15 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
 
         for (int col = diagonal; col < 7; ++col)
         {
-            const float temporary = augmented[diagonal][col];
-            augmented[diagonal][col] = augmented[pivot_row][col];
-            augmented[pivot_row][col] = temporary;
+            const float temporary = augmented(diagonal, col);
+            augmented(diagonal, col) = augmented(pivot_row, col);
+            augmented(pivot_row, col) = temporary;
         }
 
-        const float pivot = augmented[diagonal][diagonal];
+        const float pivot = augmented(diagonal, diagonal);
         for (int col = diagonal; col < 7; ++col)
         {
-            augmented[diagonal][col] /= pivot;
+            augmented(diagonal, col) /= pivot;
         }
 
         for (int row = 0; row < 6; ++row)
@@ -444,83 +353,43 @@ __global__ void solveAndUpdateKernel(const float* partials, const int num_blocks
                 continue;
             }
 
-            const float factor = augmented[row][diagonal];
+            const float factor = augmented(row, diagonal);
             for (int col = diagonal; col < 7; ++col)
             {
-                augmented[row][col] -= factor * augmented[diagonal][col];
+                augmented(row, col) -= factor * augmented(diagonal, col);
             }
         }
     }
 
-    float delta[6];
-    for (int row = 0; row < 6; ++row)
+    const Sophus::SE3f::Tangent delta = augmented.col(6);
+    if (!delta.array().isFinite().all())
     {
-        delta[row] = augmented[row][6];
-        if (!isfinite(delta[row]))
-        {
-            state->status = AlignmentStatus::Aborted;
-            return;
-        }
-    }
-
-    // Compute Exp(delta) in SE(3). Series expansions avoid divisions by very
-    // small rotation angles.
-    const float theta = sqrtf(delta[3] * delta[3] + delta[4] * delta[4] + delta[5] * delta[5]);
-    const float theta2 = theta * theta;
-    const float sin_over_theta = theta > 1.0e-5f ? sinf(theta) / theta : 1.0f - theta2 / 6.0f;
-    const float one_minus_cos_over_theta2 = theta > 1.0e-5f ? (1.0f - cosf(theta)) / theta2 : 0.5f - theta2 / 24.0f;
-    const float theta_minus_sin_over_theta3 = theta > 1.0e-5f ? (theta - sinf(theta)) / (theta2 * theta) : 1.0f / 6.0f - theta2 / 120.0f;
-    const float skew[9]{0.0f, -delta[5], delta[4], delta[5], 0.0f, -delta[3], -delta[4], delta[3], 0.0f};
-    float skew_squared[9]{};
-
-    for (int row = 0; row < 3; ++row)
-    {
-        for (int col = 0; col < 3; ++col)
-        {
-            for (int inner = 0; inner < 3; ++inner)
-            {
-                skew_squared[row * 3 + col] += skew[row * 3 + inner] * skew[inner * 3 + col];
-            }
-        }
-    }
-
-    float rotation[9]{};
-    float translation[3]{};
-    for (int row = 0; row < 3; ++row)
-    {
-        for (int col = 0; col < 3; ++col)
-        {
-            rotation[row * 3 + col] = (row == col ? 1.0f : 0.0f) + sin_over_theta * skew[row * 3 + col] + one_minus_cos_over_theta2 * skew_squared[row * 3 + col];
-            translation[row] += ((row == col ? 1.0f : 0.0f) + one_minus_cos_over_theta2 * skew[row * 3 + col] +
-                                 theta_minus_sin_over_theta3 * skew_squared[row * 3 + col]) * delta[col];
-        }
+        state->status = AlignmentStatus::Aborted;
+        return;
     }
 
     // Left composition keeps the Jacobian convention above consistent:
     // T_next = Exp(delta) * T_current.
-    float updated_transform[12]{};
-    for (int row = 0; row < 3; ++row)
-    {
-        for (int col = 0; col < 3; ++col)
-        {
-            for (int inner = 0; inner < 3; ++inner)
-            {
-                updated_transform[row * 3 + col] += rotation[row * 3 + inner] * transform[inner * 3 + col];
-            }
-            updated_transform[9 + row] += rotation[row * 3 + col] * transform[9 + col];
-        }
-        updated_transform[9 + row] += translation[row];
-    }
-
-    for (int element = 0; element < 12; ++element)
-    {
-        transform[element] = updated_transform[element];
-    }
+    const Sophus::SE3f pose(rotationMatrix(transform), Eigen::Map<const Eigen::Vector3f>(transform + 9));
+    const Eigen::Vector3f omega = delta.tail<3>();
+    const float theta_squared = omega.squaredNorm();
+    const float theta = sqrtf(theta_squared);
+    const float first_coefficient = theta > 1.0e-5f ? (1.0f - cosf(theta)) / theta_squared : 0.5f - theta_squared / 24.0f;
+    const float second_coefficient = theta > 1.0e-5f ? (theta - sinf(theta)) / (theta_squared * theta) : 1.0f / 6.0f - theta_squared / 120.0f;
+    const Eigen::Matrix3f omega_hat = Sophus::SO3f::hat(omega);
+    const Eigen::Matrix3f left_jacobian = Eigen::Matrix3f::Identity() + first_coefficient * omega_hat +
+                                        second_coefficient * omega_hat * omega_hat;
+    const Sophus::SE3f update(Sophus::SO3f::exp(omega), left_jacobian * delta.head<3>());
+    const Sophus::SE3f updated_pose = update * pose;
+    Eigen::Map<Eigen::Matrix<float, 3, 3, Eigen::RowMajor>> updated_rotation(transform);
+    Eigen::Map<Eigen::Vector3f> updated_translation(transform + 9);
+    updated_rotation = updated_pose.rotationMatrix();
+    updated_translation = updated_pose.translation();
     state->iterations += 1;
     state->num_correspondences = static_cast<int>(valid_count);
     state->fitness_score = squared_error_sum / valid_count;
-    if (sqrtf(delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]) < config.convergence_translation &&
-        theta < config.convergence_rotation)
+    if (delta.head<3>().norm() < config.convergence_translation &&
+        delta.tail<3>().norm() < config.convergence_rotation)
     {
         state->status = AlignmentStatus::Converged;
     }
@@ -618,10 +487,10 @@ void buildLinearSystem(const std::size_t num_source_points,
 }
 
 void solveAndUpdate(const thrust::device_vector<float>& device_partials,
-                        const int num_blocks,
-                        const SparsityAwareGICP::Config& config,
-                        thrust::device_vector<float>& device_transform,
-                        thrust::device_vector<DeviceAlignmentState>& device_state)
+                    const int num_blocks,
+                    const SparsityAwareGICP::Config& config,
+                    thrust::device_vector<float>& device_transform,
+                    thrust::device_vector<DeviceAlignmentState>& device_state)
 {
     solveAndUpdateKernel<<<1, 1>>>(thrust::raw_pointer_cast(device_partials.data()), num_blocks, config,
                                    thrust::raw_pointer_cast(device_transform.data()),
@@ -632,4 +501,3 @@ void solveAndUpdate(const thrust::device_vector<float>& device_partials,
     }
 }
 }
-// } // namespace perception::lio::detail

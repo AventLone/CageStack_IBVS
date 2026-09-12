@@ -1,11 +1,11 @@
 #pragma once
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
+#include "perception/GICP/preprocess.hpp"
 
 class SparsityAwareGICP
 {
 public:
-
     struct Config
     {
         // 体素边长，单位 m，必须 > 0；同时用于稀疏化、协方差邻域和对应搜索。
@@ -59,7 +59,7 @@ public:
 
         // 最大迭代轮数，正常使用应 > 0；增大允许更多更新但增加计算预算，减小更快但可能未充分对齐。
         // CPU 固定提交这么多轮；GPU 停止后搜索和 Hessian 构建直接返回，仍有 kernel launch 开销。
-        int max_iterations{50};
+        int max_iterations{60};
 
         // SE(3) 增量中平移分量的范数阈值，单位 m，要求 > 0；需与旋转阈值同时满足才停止更新。
         // 增大更早停止、精细程度降低；减小更严格、可能因浮点精度或噪声持续迭代；1e-6 m 为 1 微米。
@@ -98,6 +98,7 @@ public:
     void setConfig(const Config& config) noexcept
     {
         mConfig = config;
+        mProcesser.setConfig(mConfig.voxel_size, mConfig.max_points_per_voxel);
         clearTarget();
     }
 
@@ -113,5 +114,6 @@ private:
     struct TargetCache;
 
     Config mConfig;
+    Preprocesser mProcesser;
     std::unique_ptr<TargetCache> mTarget;
 };

@@ -6,160 +6,13 @@
 
 namespace
 {
-struct VoxelKey
-{
-    int i{0};
-    int j{0};
-    int k{0};
-
-    bool operator==(const VoxelKey& other) const noexcept
-    {
-        return i == other.i && j == other.j && k == other.k;
-    }
-
-    bool operator<(const VoxelKey& other) const noexcept
-    {
-        if (i != other.i)
-        {
-            return i < other.i;
-        }
-        if (j != other.j)
-        {
-            return j < other.j;
-        }
-        return k < other.k;
-    }
-};
-
-struct VoxelKeyHash
-{
-    std::size_t operator()(const VoxelKey& key) const noexcept
-    {
-        const auto x = static_cast<std::size_t>(key.i);
-        const auto y = static_cast<std::size_t>(key.j);
-        const auto z = static_cast<std::size_t>(key.k);
-        return (x * 73856093ULL) ^ (y * 19349663ULL) ^ (z * 83492791ULL);
-    }
-};
-
-struct SparsePoint
-{
-    Eigen::Vector3f position{Eigen::Vector3f::Zero()};
-    VoxelKey key{};
-};
-
-struct CpuPoint
-{
-    Eigen::Vector3f position{Eigen::Vector3f::Zero()};
-    Eigen::Matrix3f covariance{Eigen::Matrix3f::Identity()};
-    bool covariance_valid{false};
-};
-
-struct VoxelEntry
-{
-    int start{0};
-    int count{0};
-};
-
-struct VoxelPointLayout
-{
-    std::vector<CpuPoint> points;
-    std::vector<VoxelEntry> voxels;
-    std::vector<VoxelKey> voxel_keys;
-};
-
 struct Correspondence
 {
     int target_index{-1};
     Eigen::Vector3f transformed_position{Eigen::Vector3f::Zero()};
 };
 
-using OccupiedVoxels = std::unordered_map<VoxelKey, std::vector<std::size_t>, VoxelKeyHash>;
-
-VoxelKey pointToVoxel(const Eigen::Vector3f& point, const float voxel_size)
-{
-    return VoxelKey{static_cast<int>(std::floor(point.x() / voxel_size)),
-                    static_cast<int>(std::floor(point.y() / voxel_size)),
-                    static_cast<int>(std::floor(point.z() / voxel_size))};
-}
-
-std::vector<SparsePoint> makeSparseCloud(const pcl::PointCloud<pcl::PointXYZ>& cloud, const SparsityAwareGICP::Config& config)
-{
-    std::vector<SparsePoint> sparse_cloud;
-    sparse_cloud.reserve(cloud.size());
-    OccupiedVoxels occupied_voxels;
-    const int max_points_per_voxel = std::max(1, config.max_points_per_voxel);
-    const float min_spacing_square = std::pow(std::max(0.001f, config.voxel_size * 0.1f), 2.0f);
-
-    for (const auto& pcl_point : cloud)
-    {
-        if (!std::isfinite(pcl_point.x) || !std::isfinite(pcl_point.y) || !std::isfinite(pcl_point.z))
-        {
-            continue;
-        }
-
-        SparsePoint point;
-        point.position = Eigen::Vector3f(pcl_point.x, pcl_point.y, pcl_point.z);
-        point.key = pointToVoxel(point.position, config.voxel_size);
-
-        auto& voxel_points = occupied_voxels[point.key];
-        if (static_cast<int>(voxel_points.size()) >= max_points_per_voxel)
-        {
-            continue;
-        }
-
-        if (const bool too_close = std::ranges::any_of(std::as_const(voxel_points), [&](const std::size_t index)
-                                                       {
-                                                           return (sparse_cloud[index].position - point.position).squaredNorm() < min_spacing_square;
-                                                       });
-            too_close)
-        {
-            continue;
-        }
-
-        voxel_points.push_back(sparse_cloud.size());
-        sparse_cloud.push_back(point);
-    }
-    return sparse_cloud;
-}
-
-VoxelPointLayout makeVoxelPointLayout(const std::vector<SparsePoint>& points)
-{
-    VoxelPointLayout layout;
-    layout.points.reserve(points.size());
-    std::vector<int> original_indices(points.size());
-    std::iota(original_indices.begin(), original_indices.end(), 0);
-    std::ranges::sort(original_indices, [&](const int first, const int second)
-                          {
-                              if (points[first].key == points[second].key)
-                              {
-                                  return first < second;
-                              }
-                              return points[first].key < points[second].key;
-                          });
-
-    VoxelKey current_key;
-    bool have_current_key = false;
-    for (int index = 0; index < static_cast<int>(original_indices.size()); ++index)
-    {
-        const auto& [position, key] = points[original_indices[index]];
-        layout.points.push_back(CpuPoint{.position = position});
-        if (!have_current_key || !(key == current_key))
-        {
-            layout.voxels.push_back(VoxelEntry{index, 1});
-            layout.voxel_keys.push_back(key);
-            current_key = key;
-            have_current_key = true;
-        }
-        else
-        {
-            ++layout.voxels.back().count;
-        }
-    }
-    return layout;
-}
-
-std::vector<CpuPoint> estimateCovariances(VoxelPointLayout layout, const SparsityAwareGICP::Config& config)
+std::vector<PointWithCovariance> estimateCovariances(VoxelPointLayout layout, const SparsityAwareGICP::Config& config)
 {
     std::unordered_map<VoxelKey, int, VoxelKeyHash> voxel_map;
     voxel_map.reserve(layout.voxel_keys.size());
@@ -172,11 +25,11 @@ std::vector<CpuPoint> estimateCovariances(VoxelPointLayout layout, const Sparsit
     const int max_neighbors = std::max(min_neighbors, config.max_covariance_neighbors);
     const int voxel_radius = std::max(0, config.covariance_voxel_radius);
     const float regularization = std::max(1.0e-6f, config.covariance_regularization);
-    std::vector<CpuPoint> points = std::move(layout.points);
+    std::vector<PointWithCovariance> points = std::move(layout.points);
 
     for (int index = 0; index < static_cast<int>(points.size()); ++index)
     {
-        const CpuPoint point = points[index];
+        const PointWithCovariance point = points[index];
         const auto [i, j, k] = pointToVoxel(point.position, config.voxel_size);
         std::vector<std::pair<float, int>> neighbors;
         neighbors.reserve(max_neighbors + 1);
@@ -246,7 +99,7 @@ std::vector<CpuPoint> estimateCovariances(VoxelPointLayout layout, const Sparsit
     return points;
 }
 
-void findCorrespondences(const std::vector<CpuPoint>& source, const std::vector<CpuPoint>& target,
+void findCorrespondences(const std::vector<PointWithCovariance>& source, const std::vector<PointWithCovariance>& target,
                          const std::vector<VoxelEntry>& target_voxels,
                          const std::unordered_map<VoxelKey, int, VoxelKeyHash>& target_voxel_map,
                          const Eigen::Isometry3f& transform, const SparsityAwareGICP::Config& config,
@@ -293,7 +146,7 @@ void findCorrespondences(const std::vector<CpuPoint>& source, const std::vector<
     }
 }
 
-bool buildAndSolve(const std::vector<CpuPoint>& source, const std::vector<CpuPoint>& target,
+bool buildAndSolve(const std::vector<PointWithCovariance>& source, const std::vector<PointWithCovariance>& target,
                    const std::vector<Correspondence>& correspondences, const SparsityAwareGICP::Config& config,
                    Eigen::Isometry3f& transform, std::size_t& num_correspondences, float& fitness_score,
                    Sophus::SE3f::Tangent& delta)
@@ -312,8 +165,8 @@ bool buildAndSolve(const std::vector<CpuPoint>& source, const std::vector<CpuPoi
             continue;
         }
 
-        const CpuPoint& source_point = source[index];
-        const CpuPoint& target_point = target[target_index];
+        const PointWithCovariance& source_point = source[index];
+        const PointWithCovariance& target_point = target[target_index];
         const Eigen::Vector3f residual = transformed_position - target_point.position;
         Eigen::Matrix3f covariance = Eigen::Matrix3f::Identity();
         if (source_point.covariance_valid)
@@ -369,11 +222,11 @@ bool buildAndSolve(const std::vector<CpuPoint>& source, const std::vector<CpuPoi
 struct SparsityAwareGICP::TargetCache
 {
     std::unordered_set<VoxelKey, VoxelKeyHash> occupied_voxels;
-    std::vector<CpuPoint> points;
+    std::vector<PointWithCovariance> points;
     std::vector<VoxelEntry> voxels;
     std::unordered_map<VoxelKey, int, VoxelKeyHash> voxel_map;
 
-    TargetCache(const VoxelPointLayout& layout, std::vector<CpuPoint> estimated_points)
+    TargetCache(const VoxelPointLayout& layout, std::vector<PointWithCovariance> estimated_points)
         : points(std::move(estimated_points)), voxels(layout.voxels.begin(), layout.voxels.end())
     {
         occupied_voxels.insert(layout.voxel_keys.begin(), layout.voxel_keys.end());
@@ -388,8 +241,10 @@ struct SparsityAwareGICP::TargetCache
 SparsityAwareGICP::SparsityAwareGICP() : SparsityAwareGICP(Config{})
 {}
 
-SparsityAwareGICP::SparsityAwareGICP(const Config& config) : mConfig(config)
-{}
+SparsityAwareGICP::SparsityAwareGICP(const Config& config)
+    : mConfig(config), mProcesser(mConfig.voxel_size, mConfig.max_points_per_voxel)
+{
+}
 
 SparsityAwareGICP::~SparsityAwareGICP() = default;
 SparsityAwareGICP::SparsityAwareGICP(SparsityAwareGICP&&) noexcept = default;
@@ -397,13 +252,12 @@ SparsityAwareGICP& SparsityAwareGICP::operator=(SparsityAwareGICP&&) noexcept = 
 
 void SparsityAwareGICP::initializeTarget(const pcl::PointCloud<pcl::PointXYZ>& target)
 {
-    const std::vector<SparsePoint> target_sparse = makeSparseCloud(target, mConfig);
-    VoxelPointLayout target_layout = makeVoxelPointLayout(target_sparse);
+    VoxelPointLayout target_layout =  mProcesser.process(target);
     if (mConfig.max_target_voxels == 0 || target_layout.voxels.size() > mConfig.max_target_voxels)
     {
         throw std::invalid_argument("Initial target exceeds max_target_voxels or the voxel budget is zero");
     }
-    std::vector<CpuPoint> target_points = estimateCovariances(target_layout, mConfig);
+    std::vector<PointWithCovariance> target_points = estimateCovariances(target_layout, mConfig);
     mTarget = std::make_unique<TargetCache>(target_layout, std::move(target_points));
 }
 
@@ -423,7 +277,7 @@ void SparsityAwareGICP::insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>&
         return;
     }
 
-    std::vector<SparsePoint> sparse_points = makeSparseCloud(points, mConfig);
+    std::vector<SparsePoint> sparse_points = mProcesser.makeSparseCloud(points);
     std::erase_if(sparse_points, [this](const SparsePoint& point)
                       {
                           return mTarget->occupied_voxels.contains(point.key);
@@ -433,14 +287,14 @@ void SparsityAwareGICP::insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>&
         return;
     }
 
-    VoxelPointLayout new_layout = makeVoxelPointLayout(sparse_points);
+    VoxelPointLayout new_layout = Preprocesser::makeVoxelPointLayout(sparse_points);
     if (const std::size_t available_voxels = mConfig.max_target_voxels - mTarget->voxels.size();
         new_layout.voxels.size() > available_voxels)
     {
         return;
     }
 
-    std::vector<CpuPoint> new_points = estimateCovariances(new_layout, mConfig);
+    std::vector<PointWithCovariance> new_points = estimateCovariances(new_layout, mConfig);
     const int point_offset = static_cast<int>(mTarget->points.size());
     const int voxel_offset = static_cast<int>(mTarget->voxels.size());
     for (auto& [start, count] : new_layout.voxels)
@@ -480,8 +334,7 @@ SparsityAwareGICP::Result SparsityAwareGICP::align(const pcl::PointCloud<pcl::Po
         throw std::runtime_error("Target was not initialized before you call this method!");
     }
 
-    const std::vector<SparsePoint> source_sparse = makeSparseCloud(source, mConfig);
-    const VoxelPointLayout source_layout = makeVoxelPointLayout(source_sparse);
+    const VoxelPointLayout source_layout = mProcesser.process(source);
     result.num_source_points = source_layout.points.size();
     result.num_target_points = mTarget->points.size();
     if (source_layout.points.empty() || mTarget->points.empty())
@@ -489,7 +342,7 @@ SparsityAwareGICP::Result SparsityAwareGICP::align(const pcl::PointCloud<pcl::Po
         return result;
     }
 
-    const std::vector<CpuPoint> source_points = estimateCovariances(source_layout, mConfig);
+    const std::vector<PointWithCovariance> source_points = estimateCovariances(source_layout, mConfig);
     std::vector<Correspondence> correspondences(source_points.size());
     Eigen::Isometry3f transform = initial_guess;
     for (int iteration = 0; iteration < mConfig.max_iterations; ++iteration)

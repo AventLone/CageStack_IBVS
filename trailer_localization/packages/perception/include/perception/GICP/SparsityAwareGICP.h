@@ -24,7 +24,7 @@ public:
 
         // 计算协方差时最多使用的最近邻数 K；实际 K=max(3, min_covariance_neighbors, 本值)。
         // CPU 实现没有固定的 K 上限。增大通常更平滑、更慢；减小更局部、对噪声敏感。
-        int max_covariance_neighbors{max_points_per_voxel * 3};
+        int max_covariance_neighbors{36};
 
         // 原始样本协方差对角线正则项，单位 m^2，实际至少为 1e-6，之后还会做逆矩阵范数归一化。
         // 增大改善求逆稳定性，但弱化平面/边缘的方向性；减小保留方向性，但退化邻域更易数值不钱

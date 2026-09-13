@@ -63,6 +63,12 @@ void SparsityAwareGICP::insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>&
 
 std::vector<PointWithCovariance> SparsityAwareGICP::estimateCovariances(VoxelPointLayout layout) const
 {
+    struct Neighbor
+    {
+        int point_index;
+        float squared_distance;
+    };
+
     std::unordered_map<VoxelKey, int, VoxelKeyHash> voxel_map;
     voxel_map.reserve(layout.voxel_keys.size());
     for (std::size_t index = 0; index < layout.voxel_keys.size(); ++index)
@@ -81,7 +87,7 @@ std::vector<PointWithCovariance> SparsityAwareGICP::estimateCovariances(VoxelPoi
 
         const PointWithCovariance point = points[index];
         const auto [i, j, k] = pointToVoxel(point.position, mConfig.voxel_size);
-        std::vector<std::pair<float, int>> neighbors;
+        std::vector<Neighbor> neighbors;
         neighbors.reserve(max_neighbors + 1);
 
         for (int dx = -voxel_radius; dx <= voxel_radius; ++dx)
@@ -101,7 +107,7 @@ std::vector<PointWithCovariance> SparsityAwareGICP::estimateCovariances(VoxelPoi
                     for (int offset = 0; offset < count; ++offset)
                     {
                         const int candidate_index = start + offset;
-                        neighbors.emplace_back((points[candidate_index].position - point.position).squaredNorm(), candidate_index);
+                        neighbors.emplace_back(candidate_index, (points[candidate_index].position - point.position).squaredNorm());
                     }
                 }
             }
@@ -109,7 +115,7 @@ std::vector<PointWithCovariance> SparsityAwareGICP::estimateCovariances(VoxelPoi
 
         if (static_cast<int>(neighbors.size()) > max_neighbors)
         {
-            std::ranges::nth_element(neighbors, neighbors.begin() + max_neighbors);
+            std::ranges::nth_element(neighbors, neighbors.begin() + max_neighbors, {}, &Neighbor::squared_distance);
             neighbors.resize(max_neighbors);
         }
         if (static_cast<int>(neighbors.size()) < min_neighbors)
@@ -118,17 +124,15 @@ std::vector<PointWithCovariance> SparsityAwareGICP::estimateCovariances(VoxelPoi
         }
 
         Eigen::Vector3f mean = Eigen::Vector3f::Zero();
-        for (const auto& [distance, neighbor_index] : neighbors)
+        for (const auto& [neighbor_index, _] : neighbors)
         {
-            (void)distance;
             mean += points[neighbor_index].position;
         }
         mean /= static_cast<float>(neighbors.size());
 
         Eigen::Matrix3f covariance = Eigen::Matrix3f::Zero();
-        for (const auto& [distance, neighbor_index] : neighbors)
+        for (const auto& [neighbor_index, _] : neighbors)
         {
-            (void)distance;
             const Eigen::Vector3f offset = points[neighbor_index].position - mean;
             covariance.noalias() += offset * offset.transpose();
         }
@@ -140,6 +144,7 @@ std::vector<PointWithCovariance> SparsityAwareGICP::estimateCovariances(VoxelPoi
         {
             continue;
         }
+
         const float inverse_norm = covariance.inverse().norm();
         if (!std::isfinite(inverse_norm) || inverse_norm <= 0.0f)
         {
@@ -203,11 +208,12 @@ bool SparsityAwareGICP::buildAndSolve(const std::vector<PointWithCovariance>& so
 {
     Eigen::Matrix<float, 6, 6> hessian = Eigen::Matrix<float, 6, 6>::Zero();
     Eigen::Matrix<float, 6, 1> gradient = Eigen::Matrix<float, 6, 1>::Zero();
+
     float squared_error_sum = 0.0f;
     int valid_count = 0;
     const Eigen::Matrix3f rotation = source_to_target.rotationMatrix();
 
-    for (int index = 0; index < static_cast<int>(correspondences.size()); ++index)
+    for (std::size_t index = 0; index < correspondences.size(); ++index)
     {
         const auto& [target_index, transformed_position] = correspondences[index];
         if (target_index < 0)
@@ -217,7 +223,7 @@ bool SparsityAwareGICP::buildAndSolve(const std::vector<PointWithCovariance>& so
 
         const PointWithCovariance& source_point = source[index];
         const PointWithCovariance& target_point = target[target_index];
-        const Eigen::Vector3f residual = transformed_position - target_point.position;
+
         Eigen::Matrix3f covariance = Eigen::Matrix3f::Identity();
         if (source_point.covariance_valid)
         {
@@ -230,10 +236,13 @@ bool SparsityAwareGICP::buildAndSolve(const std::vector<PointWithCovariance>& so
             continue;
         }
 
+        const Eigen::Vector3f residual = transformed_position - target_point.position;
         const Eigen::Vector3f precision_residual = precision * residual;
+
         const float mahalanobis_error = residual.dot(precision_residual);
         const float kernel_scale2 = mConfig.cauchy_kernel_scale * mConfig.cauchy_kernel_scale;
         const float weight = mConfig.cauchy_kernel_scale > 0.0f ? 1.0f / (1.0f + mahalanobis_error / kernel_scale2) : 1.0f;
+
         Eigen::Matrix<float, 3, 6> jacobian;
         jacobian.leftCols<3>().setIdentity();
         jacobian.rightCols<3>() = -Sophus::SO3f::hat(transformed_position);
@@ -256,11 +265,13 @@ bool SparsityAwareGICP::buildAndSolve(const std::vector<PointWithCovariance>& so
     {
         return false;
     }
+
     left_increment = decomposition.solve(-gradient);
     if (decomposition.info() != Eigen::Success || !left_increment.allFinite())
     {
         return false;
     }
+
     source_to_target = Sophus::SE3f::exp(left_increment) * source_to_target;
     return true;
 }

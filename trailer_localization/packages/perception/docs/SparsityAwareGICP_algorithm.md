@@ -22,7 +22,7 @@
 
 ### 1.2 `SparsePoint`
 
-`SparsePoint` 是稀疏化阶段的中间对象：
+`SparsePoint` 是稀疏化阶段的**中间对象**：
 
 ```cpp
 struct SparsePoint
@@ -87,6 +87,8 @@ struct TargetCache
 - `voxels`：目标点的连续体素区间；
 - `voxel_map`：`VoxelKey -> voxels` 下标，用于查询邻近目标体素。
 
+
+
 ## 2 总体流程
 
 ```mermaid
@@ -106,6 +108,8 @@ flowchart TD
     L -->|是| M[输出 Result]
 ```
 
+
+
 ## 3 稀疏化与体素布局
 
 ### 3.1 `Preprocesser::makeSparseCloud()`
@@ -123,6 +127,8 @@ flowchart TD
 ### 3.2 `Preprocesser::makeVoxelPointLayout()`
 
 保留点先按 `VoxelKey(i, j, k)` 的字典序排序；相同 key 的点维持原输入顺序。随后创建连续的 `points` 数组以及对应的 `{start, count}` 体素条目。新建的 `PointWithCovariance` 只含位置，协方差保持默认值且标记为无效，直到 `estimateCovariances()` 处理完成。
+
+
 
 ## 4 目标地图管理
 
@@ -168,6 +174,8 @@ add new voxel keys to voxel_map and occupied_voxels
 因此，该操作不会向已有体素补点，也不会替换旧点，更不会淘汰远处体素。若一批新点超出剩余体素预算，整批更新被拒绝，而不是部分插入。
 
 新增点的协方差只使用此次 `new_layout` 中的邻居，不会把已有目标地图的点纳入该次估计；已有目标点的协方差也保持不变。
+
+
 
 ## 5 协方差估计：`estimateCovariances()`
 
@@ -231,6 +239,8 @@ $$
 
 并设 `covariance_valid = true`。
 
+
+
 ## 6 对应搜索：`findCorrespondences()`
 
 每次迭代对每个源点执行：
@@ -244,12 +254,14 @@ $$
 仅当距离平方严格小于
 
 $$
-max\_correspondence\_distance^2
+\text{max\_correspondence\_distance}^2
 $$
 
 时才建立对应。未找到对应时 `target_index = -1`。
 
 `max_correspondence_distance` 只影响欧氏距离阈值；它不会扩大固定为一层相邻体素的查询范围。
+
+
 
 ## 7 GICP 线性系统：`buildAndSolve()`
 
@@ -352,6 +364,8 @@ $$
 
 `num_correspondences` 统计实际进入该累加的约束数，而不仅是最近邻命中的数量。
 
+
+
 ## 8 求解、更新与收敛
 
 若没有有效约束，或未加权欧氏残差平方和非有限，当前轮失败并停止迭代。否则先计算：
@@ -360,7 +374,7 @@ $$
 H' = H + \lambda I
 $$
 
-其中 $\lambda = damping_factor$。这是固定的对角线阻尼，不是自适应 Levenberg-Marquardt 阻尼。
+其中 $\lambda = \text{damping\_factor}$。这是固定的对角线阻尼，不是自适应 Levenberg-Marquardt 阻尼。
 
 `Eigen::LDLT<Eigen::Matrix<float, 6, 6>>` 求解：
 
@@ -379,16 +393,18 @@ source_to_target = Sophus::SE3f::exp(left_increment) * source_to_target;
 若同时满足：
 
 $$
-\|\rho\| < convergence\_translation
+\|\rho\| < \text{convergence\_translation}
 $$
 
 和：
 
 $$
-\|\omega\| < convergence\_rotation
+\|\omega\| < \text{convergence\_rotation}
 $$
 
 则 `converged = true` 并停止迭代。
+
+
 
 ## 9 `align()` 调用流程
 
@@ -425,12 +441,13 @@ if at least one successful iteration completed and fitness is finite:
 最后的宽松回退意味着 `converged` 不严格等价于“增量已低于阈值”：只要至少完成一次成功更新且 `fitness_score` 有限，结果也会标记为已收敛。
 
 `fitness_score` 计算为最近一次构建法方程时有效约束的未加权欧氏残差平方均值：
-
 $$
-fitness = \frac{1}{N}\sum_i \|r_i\|^2
+\text{fitness} = \frac{1}{N}\sum_i \|r_i\|^2
 $$
 
 它不是 RMSE、不是马氏误差，也不是 Cauchy 加权代价。该统计发生在本轮位姿更新之前，不会在最终更新后的位姿上重新评估。
+
+
 
 ## 10 输出结果与调用方验收
 
@@ -452,6 +469,8 @@ result.num_correspondences >= config.min_correspondences
 result.fitness_score <= config.max_fitness_score
 ```
 
+
+
 ## 11 CPU 性能特征
 
 当前计算都在调用线程的 CPU 上执行，没有 GPU 上传、kernel launch 或异步设备任务。主要耗时来自：
@@ -463,6 +482,8 @@ result.fitness_score <= config.max_fitness_score
 5. 至多 `max_iterations` 次 CPU 迭代。
 
 `LDLT` 求解的是固定大小的 $6 \times 6$ 系统，通常不是主要瓶颈。性能主要受保留点数量、每体素点数、协方差搜索半径、实际邻居数以及迭代次数影响。
+
+
 
 ## 12 边界与后续改进方向
 

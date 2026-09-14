@@ -22,13 +22,14 @@ ament_auto_find_build_dependencies() # Automaticly find all the packages mention
 file(GLOB_RECURSE SOURCE_FILES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/source/*.cpp)
 
 find_package(Sophus REQUIRED)
+find_package(TBB REQUIRED)
 
 ament_auto_add_executable(perception ${SOURCE_FILES})
 target_include_directories(perception PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
 )
-target_link_libraries(perception Sophus::Sophus)
+target_link_libraries(perception Sophus::Sophus TBB::tbb)
 target_compile_features(perception PUBLIC c_std_99 cxx_std_23)
 
 if (BUILD_TESTING)

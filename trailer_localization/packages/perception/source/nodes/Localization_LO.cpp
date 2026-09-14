@@ -1,4 +1,4 @@
-#include "perception/nodes/Localization.h"
+#include "perception/nodes/Localization_LO.h"
 #include <pcl_conversions/pcl_conversions.h>
 #include "perception/tools/OrthographicProjector.hpp"
 #include "perception/tools/feature_detect_3d.hpp"
@@ -64,7 +64,7 @@ std::optional<IntensityAnalysis> analyzeIntensity(const pcl::PointCloud<pcl::Poi
 }
 }
 
-void Localization::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src_scan)
+void Localization_LO::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src_scan)
 {
     /* 2. Get lidar scan within the ROI */
     auto scan_in_roi = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
@@ -274,7 +274,7 @@ void Localization::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src_scan)
     mGicp.initializeTarget(*mTrailerVoxelMap);
 }
 
-void Localization::updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan_in_truck)
+void Localization_LO::updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan_in_truck)
 {
     // Transform scan into trailer local template frame
     pcl::PointCloud<pcl::PointXYZ> scan_in_trailer;
@@ -293,7 +293,7 @@ void Localization::updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan_in_
     mGicp.insertTargetPoints(scan_in_trailer);
 }
 
-void Localization::recordGicpDuration(const double duration_ms)
+void Localization_LO::recordGicpDuration(const double duration_ms)
 {
     if (constexpr std::size_t statistics_window_size = 200;
         mGicpDurationsMs.size() == statistics_window_size)
@@ -320,13 +320,13 @@ void Localization::recordGicpDuration(const double duration_ms)
                         static_cast<double>(mGicpDurationsMs.size());
 
     RCLCPP_INFO(get_logger(),
-                "CUDA sparse GICP latency (%zu-frame window): mean %.2f ms, P50 %.2f ms, P95 %.2f ms, P99 %.2f ms, max %.2f ms",
+                "Sparse GICP latency (%zu-frame window): mean %.2f ms, P50 %.2f ms, P95 %.2f ms, P99 %.2f ms, max %.2f ms",
                 mGicpDurationsMs.size(), mean, percentile(0.50), percentile(0.95), percentile(0.99), sorted_durations.back());
 }
 
-bool Localization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_scan)
+bool Localization_LO::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_scan)
 {
-    RCLCPP_INFO(get_logger(), "CUDA sparsity-aware GICP SE(3) start.");
+    RCLCPP_INFO(get_logger(), "Sparsity-aware GICP start.");
     if (mTrailerVoxelMap == nullptr || mTrailerVoxelMap->empty() || current_scan == nullptr || current_scan->empty())
     {
         const std::size_t target_point_count = mTrailerVoxelMap == nullptr ? 0 : mTrailerVoxelMap->size();
@@ -344,20 +344,20 @@ bool Localization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_s
     }
     catch (const std::exception& exception)
     {
-        RCLCPP_ERROR(get_logger(), "CUDA sparse GICP failed: %s", exception.what());
+        RCLCPP_ERROR(get_logger(), "Sparse GICP failed: %s", exception.what());
         return false;
     }
 
     const auto end_time = std::chrono::high_resolution_clock::now();
     const double duration_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
-    RCLCPP_INFO(get_logger(), "CUDA sparse GICP computation time: %.2f ms", duration_ms);
+    RCLCPP_INFO(get_logger(), "Sparse GICP computation time: %.2f ms", duration_ms);
     recordGicpDuration(duration_ms);
 
     if (result.converged)
     {
         const double fitness_score = result.fitness_score;
         const auto& gicp_config = mGicp.config();
-        RCLCPP_INFO(get_logger(), "CUDA sparse GICP fitness score: %.4f, iter: %d, correspondences: %zu/%zu",
+        RCLCPP_INFO(get_logger(), "Sparse GICP fitness score: %.4f, iter: %d, correspondences: %zu/%zu",
                     fitness_score, result.iterations, result.num_correspondences, result.num_source_points);
 
         if (result.num_correspondences < gicp_config.min_correspondences)
@@ -379,13 +379,13 @@ bool Localization::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_s
         return true;
     }
 
-    RCLCPP_WARN(get_logger(), "CUDA sparse GICP did not converge: iter: %d, correspondences: %zu/%zu, fitness: %.6f.",
+    RCLCPP_WARN(get_logger(), "Sparse GICP did not converge: iter: %d, correspondences: %zu/%zu, fitness: %.6f.",
                 result.iterations, result.num_correspondences, result.num_source_points,
                 result.fitness_score);
     return false;
 }
 
-void Localization::workerLoop()
+void Localization_LO::workerLoop()
 {
     while (rclcpp::ok())
     {
@@ -449,7 +449,7 @@ void Localization::workerLoop()
                 continue;
             }
 
-            if (point.x > 0.2f || point.x < -0.2f || point.y > 0.3f || point.y < -0.3f)
+            if (point.x > 0.8f || point.x < -0.8f || point.y > 0.8f || point.y < -0.8f)
             {
                 denoised_scan->emplace_back(point.x, point.y, point.z);
             }

@@ -1,8 +1,7 @@
 #pragma once
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
-#include "perception/GICP/preprocess.hpp"
-#include <unordered_set>
+#include "perception/LIO/SparseVoxel.h"
 #include <sophus/se3.hpp>
 
 class SparsityAwareGICP
@@ -26,13 +25,13 @@ public:
         // CPU 实现没有固定的 K 上限。增大通常更平滑、更慢；减小更局部、对噪声敏感。
         int max_covariance_neighbors{36};
 
-        // 原始样本协方差对角线正则项，单位 m^2，实际至少为 1e-6，之后还会做逆矩阵范数归一化。
-        // 增大改善求逆稳定性，但弱化平面/边缘的方向性；减小保留方向性，但退化邻域更易数值不钱
-        float covariance_regularization{1.0e-3f};
-
         // 最近邻欧氏距离上限，单位 m，要求 > 0；只在 adjacent_voxels 覆盖的体素内查找。
         // 增大放宽匹配但增加误匹配风险；减小更严格、可能无对应点。单独增大不会扩大体素查询范围。
         float max_correspondence_distance{0.5f};
+
+        // 原始样本协方差对角线正则项，单位 m^2，实际至少为 1e-6，之后还会做逆矩阵范数归一化。
+        // 增大改善求逆稳定性，但弱化平面/边缘的方向性；减小保留方向性，但退化邻域更易数值不钱
+        float covariance_regularization{1.0e-3f};
 
         // Cauchy 鲁棒核尺度 s，作用于马氏误差 e：权重= 1 / (1 + e/s^2)，不是直接的欧氏距离阈值。
         // 正值越小越抑制大残差，但也可能削弱有效约束；越大越接近普通 GICP；<= 0 禁用鲁棒降权。
@@ -83,7 +82,7 @@ public:
     {}
 
     explicit SparsityAwareGICP(const Config& config)
-        : mConfig(config), mProcesser(mConfig.voxel_size, mConfig.max_points_per_voxel)
+        : mConfig(config)
     {
     }
 
@@ -104,7 +103,6 @@ public:
     void setConfig(const Config& config) noexcept
     {
         mConfig = config;
-        mProcesser.setConfig(mConfig.voxel_size, mConfig.max_points_per_voxel);
         clearTarget();
     }
 
@@ -125,40 +123,10 @@ public:
     Result align(const pcl::PointCloud<pcl::PointXYZ>& source, const Eigen::Isometry3f& initial_guess) const;
 
 private:
-    struct TargetCache
-    {
-        std::unordered_set<VoxelKey, VoxelKeyHash> occupied_voxels;
-        std::vector<PointWithCovariance> points;
-        std::vector<VoxelEntry> voxels;
-        std::unordered_map<VoxelKey, int, VoxelKeyHash> voxel_map;
-
-        TargetCache(const VoxelPointLayout& layout, std::vector<PointWithCovariance> estimated_points)
-            : points(std::move(estimated_points)), voxels(layout.voxels.begin(), layout.voxels.end())
-        {
-            occupied_voxels.insert(layout.voxel_keys.begin(), layout.voxel_keys.end());
-            voxel_map.reserve(layout.voxel_keys.size());
-            for (int index = 0; index < static_cast<int>(layout.voxel_keys.size()); ++index)
-            {
-                voxel_map.emplace(layout.voxel_keys[index], index);
-            }
-        }
-    };
-
-    struct Correspondence
-    {
-        int target_index{-1};
-        Eigen::Vector3f transformed_position{Eigen::Vector3f::Zero()};
-    };
-
     Config mConfig;
-    Preprocesser mProcesser;
-    std::unique_ptr<TargetCache> mTarget;
+    std::unique_ptr<SparseVoxel> mTarget;
 
-    std::vector<PointWithCovariance> estimateCovariances(VoxelPointLayout layout) const;
-
-    void findCorrespondences(const std::vector<PointWithCovariance>& source, const std::vector<PointWithCovariance>& target,
-                             const std::vector<VoxelEntry>& target_voxels,
-                             const std::unordered_map<VoxelKey, int, VoxelKeyHash>& target_voxel_map,
+    void findCorrespondences(const std::vector<PointWithCovariance>& source, const SparseVoxel& target,
                              const Sophus::SE3f& source_to_target,
                              std::vector<Correspondence>& correspondences) const;
 

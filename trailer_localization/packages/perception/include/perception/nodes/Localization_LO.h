@@ -15,11 +15,11 @@
 #include "perception/GICP/SparsityAwareGICP.h"
 #include "perception/types/common.hpp"
 
-class Localization : public rclcpp::Node
+class Localization_LO : public rclcpp::Node
 {
     static constexpr float MAP_RESOLUTION = 0.1f;
 public:
-    explicit Localization(const std::string& node_name) : Node(node_name), mTfBuffer(this->get_clock()), mTfListener(mTfBuffer)
+    explicit Localization_LO(const std::string& node_name) : Node(node_name), mTfBuffer(this->get_clock()), mTfListener(mTfBuffer)
     {
         /* Lookup transform */
         // while (rclcpp::ok())
@@ -41,15 +41,15 @@ public:
         mGicp.setConfig(config);
 
         mIntensityThreshold = static_cast<float>(declare_parameter<double>("intensity_threshold", -1.0));
-        mIntensityKeepRatio = std::clamp(static_cast<float>(declare_parameter<double>("intensity_keep_ratio", 0.6)), 0.01f, 1.0f);
+        mIntensityKeepRatio = std::clamp(static_cast<float>(declare_parameter<double>("intensity_keep_ratio", 0.9)), 0.01f, 1.0f);
 
         initSubscribers();
         initPublisher();
-        mWorker = std::thread(&Localization::workerLoop, this);
+        mWorker = std::thread(&Localization_LO::workerLoop, this);
         RCLCPP_INFO(get_logger(), "The node has been activated.");
     }
 
-    ~Localization() override
+    ~Localization_LO() override
     {
         {
             std::lock_guard lock(mScanBufferMutex);

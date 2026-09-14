@@ -15,7 +15,7 @@ struct PointWithCovariance
 
 struct Correspondence
 {
-    int target_index{-1};
+    const PointWithCovariance* target{nullptr};
     Eigen::Vector3f transformed_position{Eigen::Vector3f::Zero()};
 };
 
@@ -36,7 +36,7 @@ public:
 
 	struct Neighbor
 	{
-		int point_index{-1};
+        const PointWithCovariance* point{nullptr};
 		float squared_distance{std::numeric_limits<float>::infinity()};
 	};
 
@@ -48,43 +48,32 @@ public:
         }
     }
 
-    void initialize(const pcl::PointCloud<pcl::PointXYZ>& cloud)
-    {
-        initializeLayout(makeVoxelPointLayout(makeSparseCloud(cloud)));
-	    estimateCovariances();
-    }
+    void initialize(const pcl::PointCloud<pcl::PointXYZ>& cloud);
 
     bool insert(const pcl::PointCloud<pcl::PointXYZ>& cloud);
 
     void clear() noexcept
     {
-        mPoints.clear();
-        mVoxels.clear();
-        mVoxelKeys.clear();
-        mVoxelMap.clear();
+        mOccupiedVoxels.clear();
+        mPointCount = 0;
     }
 
     bool empty() const noexcept
     {
-        return mPoints.empty();
+        return mPointCount == 0;
     }
 
     std::size_t pointCount() const noexcept
     {
-        return mPoints.size();
+        return mPointCount;
     }
 
     std::size_t voxelCount() const noexcept
     {
-        return mVoxels.size();
+        return mOccupiedVoxels.size();
     }
 
-    const std::vector<PointWithCovariance>& points() const noexcept
-    {
-        return mPoints;
-    }
-
-
+    std::vector<const PointWithCovariance*> points() const;
 
 	Neighbor nearestNeighbor(const Eigen::Vector3f& query, float max_distance, int voxel_radius = 1) const;
 
@@ -116,19 +105,6 @@ private:
         }
     };
 
-    struct VoxelEntry
-    {
-        int start{0};
-        int count{0};
-    };
-
-    struct VoxelPointLayout
-    {
-        std::vector<PointWithCovariance> points;
-        std::vector<VoxelEntry> voxels;
-        std::vector<VoxelKey> voxel_keys;
-    };
-
     struct VoxelKeyHash
     {
         std::size_t operator()(const VoxelKey& key) const noexcept
@@ -140,7 +116,8 @@ private:
         }
     };
 
-    using OccupiedVoxels = std::unordered_map<VoxelKey, std::vector<std::size_t>, VoxelKeyHash>;
+    using OccupiedVoxels = std::unordered_map<VoxelKey, std::vector<PointWithCovariance>, VoxelKeyHash>;
+    using SparsePointIndices = std::unordered_map<VoxelKey, std::vector<std::size_t>, VoxelKeyHash>;
 
     VoxelKey pointToVoxel(const Eigen::Vector3f& point) const
     {
@@ -155,41 +132,12 @@ private:
         VoxelKey key{};
     };
 
-	// const float mVoxelSize, mMinSpace;
- //    const int mMaxPoints;
- //    const std::size_t mMaxVoxels;
     const Config mConfig;
-	std::vector<PointWithCovariance> mPoints;
-	std::vector<VoxelEntry> mVoxels;
-	std::vector<VoxelKey> mVoxelKeys;
-	std::unordered_map<VoxelKey, int, VoxelKeyHash> mVoxelMap;
-
-    void initializeLayout(VoxelPointLayout layout)
-    {
-        if (mConfig.max_voxels_num == 0 || layout.voxels.size() > mConfig.max_voxels_num)
-        {
-            throw std::invalid_argument("Initial target exceeds max_target_voxels or the voxel budget is zero");
-        }
-
-        mPoints = std::move(layout.points);
-        mVoxels = std::move(layout.voxels);
-        mVoxelKeys = std::move(layout.voxel_keys);
-        rebuildVoxelMap();
-    }
-
-    void rebuildVoxelMap()
-    {
-        mVoxelMap.clear();
-        mVoxelMap.reserve(mVoxelKeys.size());
-        for (int index = 0; index < static_cast<int>(mVoxelKeys.size()); ++index)
-        {
-            mVoxelMap.emplace(mVoxelKeys[index], index);
-        }
-    }
+    OccupiedVoxels mOccupiedVoxels;
+	std::size_t mPointCount{0};
 
     void estimateCovariances();
+    void estimateCovariances(const std::vector<PointWithCovariance*>& points) const;
 
     std::vector<SparsePoint> makeSparseCloud(const pcl::PointCloud<pcl::PointXYZ>& cloud) const;
-
-    static VoxelPointLayout makeVoxelPointLayout(const std::vector<SparsePoint>& points);
 };

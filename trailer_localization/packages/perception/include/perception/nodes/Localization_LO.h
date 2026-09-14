@@ -80,7 +80,6 @@ private:
     bool mIsShutdown{false};
     std::thread mWorker;
     std::mutex mScanBufferMutex;
-    // std::mutex mFusionMutex;
     std::condition_variable mTrigger;
 
     /* TF tree utilities */

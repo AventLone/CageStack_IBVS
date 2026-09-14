@@ -109,11 +109,11 @@ private:
     SparseVoxel::Config mSparseVoxelConfig{};
     std::unique_ptr<SparseVoxel> mTarget;
 
-    void findCorrespondences(const std::vector<PointWithCovariance>& source, const SparseVoxel& target,
+    void findCorrespondences(const std::vector<const PointWithCovariance*>& source, const SparseVoxel& target,
                              const Sophus::SE3f& source_to_target,
                              std::vector<Correspondence>& correspondences) const;
 
-    bool buildAndSolve(const std::vector<PointWithCovariance>& source, const std::vector<PointWithCovariance>& target,
+    bool buildAndSolve(const std::vector<const PointWithCovariance*>& source,
                        const std::vector<Correspondence>& correspondences, Sophus::SE3f& source_to_target,
                        std::size_t& num_correspondences, float& fitness_score, Sophus::SE3f::Tangent& left_increment) const;
 };

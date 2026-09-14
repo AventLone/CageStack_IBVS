@@ -6,7 +6,6 @@ void SparsityAwareGICP::initializeTarget(const pcl::PointCloud<pcl::PointXYZ>& t
 {
     auto target_index = std::make_unique<SparseVoxel>(mSparseVoxelConfig);
     target_index->initialize(target);
-    // target_index->estimateCovariances();
     mTarget = std::move(target_index);
 }
 
@@ -24,23 +23,23 @@ void SparsityAwareGICP::insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>&
     mTarget->insert(points);
 }
 
-void SparsityAwareGICP::findCorrespondences(const std::vector<PointWithCovariance>& source,
+void SparsityAwareGICP::findCorrespondences(const std::vector<const PointWithCovariance*>& source,
                                             const SparseVoxel& target,
                                             const Sophus::SE3f& source_to_target,
                                             std::vector<Correspondence>& correspondences) const
 {
     std::transform(std::execution::par, source.begin(), source.end(), correspondences.begin(),
-        [&target, &source_to_target, this](const PointWithCovariance& source_point)
+        [&target, &source_to_target, this](const PointWithCovariance* source_point)
         {
-            const Eigen::Vector3f transformed_position = source_to_target * source_point.position;
+            const Eigen::Vector3f transformed_position = source_to_target * source_point->position;
             constexpr int adjacent_voxels = 1;
             const SparseVoxel::Neighbor nearest = target.nearestNeighbor(
                 transformed_position, mConfig.max_correspondence_distance, adjacent_voxels);
-            return Correspondence{nearest.point_index, transformed_position};
+            return Correspondence{nearest.point, transformed_position};
         });
 }
 
-bool SparsityAwareGICP::buildAndSolve(const std::vector<PointWithCovariance>& source, const std::vector<PointWithCovariance>& target,
+bool SparsityAwareGICP::buildAndSolve(const std::vector<const PointWithCovariance*>& source,
                    const std::vector<Correspondence>& correspondences, Sophus::SE3f& source_to_target,
                    std::size_t& num_correspondences, float& fitness_score, Sophus::SE3f::Tangent& left_increment) const
 {
@@ -53,19 +52,18 @@ bool SparsityAwareGICP::buildAndSolve(const std::vector<PointWithCovariance>& so
 
     for (std::size_t index = 0; index < correspondences.size(); ++index)
     {
-        const auto& [target_index, transformed_position] = correspondences[index];
-        if (target_index < 0)
+        const auto& [target_point, transformed_position] = correspondences[index];
+        if (target_point == nullptr)
         {
             continue;
         }
 
-        const PointWithCovariance& source_point = source[index];
-        const PointWithCovariance& target_point = target[target_index];
+        const PointWithCovariance& source_point = *source[index];
 
         Eigen::Matrix3f covariance = Eigen::Matrix3f::Identity();
         if (source_point.covariance_valid)
         {
-            covariance = target_point.covariance_valid ? target_point.covariance : Eigen::Matrix3f::Identity();
+            covariance = target_point->covariance_valid ? target_point->covariance : Eigen::Matrix3f::Identity();
             covariance += rotation * source_point.covariance * rotation.transpose();
         }
 
@@ -75,7 +73,7 @@ bool SparsityAwareGICP::buildAndSolve(const std::vector<PointWithCovariance>& so
             continue;
         }
 
-        const Eigen::Vector3f residual = transformed_position - target_point.position;
+        const Eigen::Vector3f residual = transformed_position - target_point->position;
         const Eigen::Vector3f precision_residual = precision * residual;
 
         const float mahalanobis_error = residual.dot(precision_residual);
@@ -139,9 +137,7 @@ SparsityAwareGICP::Result SparsityAwareGICP::align(const pcl::PointCloud<pcl::Po
         return result;
     }
 
-    // source_index.estimateCovariances();
-    const std::vector<PointWithCovariance>& source_points = source_index.points();
-    const std::vector<PointWithCovariance>& target_points = mTarget->points();
+    const std::vector<const PointWithCovariance*> source_points = source_index.points();
     std::vector<Correspondence> correspondences(source_points.size());
 
     Sophus::SE3f source_to_target(initial_guess.rotation(), initial_guess.translation());
@@ -151,7 +147,7 @@ SparsityAwareGICP::Result SparsityAwareGICP::align(const pcl::PointCloud<pcl::Po
         findCorrespondences(source_points, *mTarget, source_to_target, correspondences);
 
         Sophus::SE3f::Tangent left_increment;
-        if (!buildAndSolve(source_points, target_points, correspondences, source_to_target,
+        if (!buildAndSolve(source_points, correspondences, source_to_target,
                            result.num_correspondences, result.fitness_score, left_increment))
         {
             break;

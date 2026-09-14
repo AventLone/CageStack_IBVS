@@ -13,25 +13,9 @@ public:
         // 增大通常减少保留点、损失细节，但固定体素半径下的物理搜索范围变大；减小则相反。
         float voxel_size{0.05f};
 
-        // 每体素最多保留的点数，按输入顺序筛选，实际至少为 1。
-        // 增大保留更多局部几何、增加计算和内存开销；减小加快处理但可能使邻域过稀。
-        int max_points_per_voxel{26};
-
-        // 有效协方差所需的最少邻居数，包含点自身，实际至少为 3。
-        // 增大对稀疏邻域更严格，更多点回退为无效协方差；减小更易获得协方差，但统计可靠性降低。
-        int min_covariance_neighbors{8};
-
-        // 计算协方差时最多使用的最近邻数 K；实际 K=max(3, min_covariance_neighbors, 本值)。
-        // CPU 实现没有固定的 K 上限。增大通常更平滑、更慢；减小更局部、对噪声敏感。
-        int max_covariance_neighbors{36};
-
         // 最近邻欧氏距离上限，单位 m，要求 > 0；只在 adjacent_voxels 覆盖的体素内查找。
         // 增大放宽匹配但增加误匹配风险；减小更严格、可能无对应点。单独增大不会扩大体素查询范围。
         float max_correspondence_distance{0.5f};
-
-        // 原始样本协方差对角线正则项，单位 m^2，实际至少为 1e-6，之后还会做逆矩阵范数归一化。
-        // 增大改善求逆稳定性，但弱化平面/边缘的方向性；减小保留方向性，但退化邻域更易数值不钱
-        float covariance_regularization{1.0e-3f};
 
         // Cauchy 鲁棒核尺度 s，作用于马氏误差 e：权重= 1 / (1 + e/s^2)，不是直接的欧氏距离阈值。
         // 正值越小越抑制大残差，但也可能削弱有效约束；越大越接近普通 GICP；<= 0 禁用鲁棒降权。
@@ -45,10 +29,6 @@ public:
         // 调用方验收所需的最少有效约束数，不是原始最近邻命中数，也不控制求解器迭代。
         // 增大降低少量匹配被接受的风险，但更易拒绝稀疏扫描；减小更宽松，不保证几何约束充分。
         std::size_t min_correspondences{1000};
-
-        // 目标地图体素容量预算，要求 > 0；不是点数上限。
-        // 初始化体素数超过预算或预算为 0 时抛出 std::invalid_argument，已有目标保持不变。
-        std::size_t max_target_voxels{999999};
 
         // 求解 (H + lambda*I) * delta = -g 的固定阻尼，建议 > 0；不是自适应 LM 阻尼。
         // 增大通常使更新更保守、改善病态系统，但可能减慢收敛；减小更激进，也更易受退化和噪声影响。
@@ -79,11 +59,12 @@ public:
     };
 
     SparsityAwareGICP() : SparsityAwareGICP(Config{})
-    {}
-
-    explicit SparsityAwareGICP(const Config& config)
-        : mConfig(config)
     {
+    }
+
+    explicit SparsityAwareGICP(const Config& config) : mConfig(config)
+    {
+        mSparseVoxelConfig.voxel_size = config.voxel_size;
     }
 
     SparsityAwareGICP(SparsityAwareGICP&&) noexcept = default;
@@ -103,6 +84,7 @@ public:
     void setConfig(const Config& config) noexcept
     {
         mConfig = config;
+        mSparseVoxelConfig.voxel_size = config.voxel_size;
         clearTarget();
     }
 
@@ -124,6 +106,7 @@ public:
 
 private:
     Config mConfig;
+    SparseVoxel::Config mSparseVoxelConfig{};
     std::unique_ptr<SparseVoxel> mTarget;
 
     void findCorrespondences(const std::vector<PointWithCovariance>& source, const SparseVoxel& target,

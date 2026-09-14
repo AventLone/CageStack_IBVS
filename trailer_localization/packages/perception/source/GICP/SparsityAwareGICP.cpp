@@ -4,12 +4,9 @@
 
 void SparsityAwareGICP::initializeTarget(const pcl::PointCloud<pcl::PointXYZ>& target)
 {
-    auto target_index = std::make_unique<SparseVoxel>(
-        mConfig.voxel_size, mConfig.max_points_per_voxel, mConfig.max_target_voxels);
+    auto target_index = std::make_unique<SparseVoxel>(mSparseVoxelConfig);
     target_index->initialize(target);
-    target_index->estimateCovariances(mConfig.min_covariance_neighbors,
-                                      mConfig.max_covariance_neighbors,
-                                      mConfig.covariance_regularization);
+    // target_index->estimateCovariances();
     mTarget = std::move(target_index);
 }
 
@@ -24,9 +21,7 @@ void SparsityAwareGICP::insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>&
         initializeTarget(points);
         return;
     }
-    mTarget->insert(points, mConfig.min_covariance_neighbors,
-                    mConfig.max_covariance_neighbors,
-                    mConfig.covariance_regularization);
+    mTarget->insert(points);
 }
 
 void SparsityAwareGICP::findCorrespondences(const std::vector<PointWithCovariance>& source,
@@ -135,7 +130,7 @@ SparsityAwareGICP::Result SparsityAwareGICP::align(const pcl::PointCloud<pcl::Po
     Result result;
     result.transform = initial_guess;
 
-    SparseVoxel source_index(mConfig.voxel_size, mConfig.max_points_per_voxel);
+    SparseVoxel source_index(mSparseVoxelConfig);
     source_index.initialize(source);
     result.num_source_points = source_index.pointCount();
     result.num_target_points = mTarget->pointCount();
@@ -144,9 +139,7 @@ SparsityAwareGICP::Result SparsityAwareGICP::align(const pcl::PointCloud<pcl::Po
         return result;
     }
 
-    source_index.estimateCovariances(mConfig.min_covariance_neighbors,
-                                     mConfig.max_covariance_neighbors,
-                                     mConfig.covariance_regularization);
+    // source_index.estimateCovariances();
     const std::vector<PointWithCovariance>& source_points = source_index.points();
     const std::vector<PointWithCovariance>& target_points = mTarget->points();
     std::vector<Correspondence> correspondences(source_points.size());

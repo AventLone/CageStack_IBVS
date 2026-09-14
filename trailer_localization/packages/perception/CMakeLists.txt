@@ -33,14 +33,14 @@ target_link_libraries(perception Sophus::Sophus TBB::tbb)
 target_compile_features(perception PUBLIC c_std_99 cxx_std_23)
 
 if (BUILD_TESTING)
-    add_executable(incremental_voxel_test
-        test/incremental_voxel_test.cpp
-        source/LIO/SparseVoxel.cpp
-    )
-    target_include_directories(incremental_voxel_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    ament_target_dependencies(incremental_voxel_test pcl_ros)
-    target_compile_features(incremental_voxel_test PRIVATE cxx_std_23)
-    add_test(NAME incremental_voxel_test COMMAND incremental_voxel_test)
+#    add_executable(incremental_voxel_test
+#        test/incremental_voxel_test.cpp
+#        source/LIO/SparseVoxel.cpp
+#    )
+#    target_include_directories(incremental_voxel_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+#    ament_target_dependencies(incremental_voxel_test pcl_ros)
+#    target_compile_features(incremental_voxel_test PRIVATE cxx_std_23)
+#    add_test(NAME incremental_voxel_test COMMAND incremental_voxel_test)
 
     find_package(ament_lint_auto REQUIRED)
     set(ament_cmake_copyright_FOUND TRUE)

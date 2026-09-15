@@ -1,0 +1,45 @@
+/**:
+  ros__parameters:
+    lio:
+      lidar_topic: /hesai/pandar
+      imu_topic: /imu
+      world_frame: map
+      # Empty frame IDs bind to the first received message; later mismatches are rejected.
+      lidar_frame: ''
+      imu_frame: ''
+      # Replace identity placeholders with measured calibration.
+      lidar_to_imu:
+        translation: [0.0, 0.0, 0.0]
+        quaternion_xyzw: [0.0, 0.0, 0.0, 1.0]
+      base_to_imu:
+        translation: [0.0, 0.0, 0.0]
+        quaternion_xyzw: [0.0, 0.0, 0.0, 1.0]
+      time_field: auto
+      time_mode: auto
+      time_scale: 0.0
+      stamp_is_end: false
+      allow_untimed_cloud: false
+      scan_duration: 0.1
+      max_scan_duration: 0.5
+      imu_time_offset: 0.0
+      imu_wait_timeout: 1.0
+      initialization_duration: 1.0
+      gravity_magnitude: 9.81
+      gyro_noise: 0.01
+      accel_noise: 0.1
+      gyro_bias_noise: 0.0001
+      accel_bias_noise: 0.001
+      max_imu_gap: 0.05
+      max_iterations: 10
+      min_correspondences: 30
+      max_plane_rmse: 0.15
+      lidar_noise: 0.03
+      max_residual: 0.3
+      max_neighbor_distance: 1.0
+      max_plane_distance: 0.05
+      voxel_radius: 2
+      map_voxel_size: 0.5
+      max_map_voxels: 200000
+      scan_resolution: 0.1
+    intensity_threshold: -1.0
+    intensity_keep_ratio: 0.6

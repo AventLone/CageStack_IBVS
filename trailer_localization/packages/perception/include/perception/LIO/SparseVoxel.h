@@ -1,5 +1,9 @@
 #pragma once
 #include <cstddef>
+#include <cmath>
+#include <stdexcept>
+#include <utility>
+#include <Eigen/Dense>
 #include <limits>
 #include <boost/unordered/unordered_flat_map.hpp>
 #include <vector>
@@ -25,6 +29,7 @@ public:
     struct Config
     {
         float voxel_size{0.1f};
+        bool estimate_covariances{true};  // LIO fits planes from positions; GICP uses covariances.
         int max_points_per_voxel{26};
 
         int min_covariance_neighbors{8};

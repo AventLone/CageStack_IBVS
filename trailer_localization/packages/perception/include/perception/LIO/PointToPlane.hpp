@@ -19,7 +19,7 @@ struct PointToPlane
         return result;
     }
 
-    void accumulate(ESKF::Measurement& measurement, double variance, double huber_scale) const
+    void accumulate(ESKF::Measurement& measurement, const double variance, const double huber_scale) const
     {
         const double weight = (std::abs(residual) > huber_scale ? huber_scale / std::abs(residual) : 1.0) / variance;
         measurement.information.noalias() += weight * jacobian * jacobian.transpose();

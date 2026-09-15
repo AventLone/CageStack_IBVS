@@ -250,7 +250,7 @@ void Localization_LO::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src_sca
     pcl::transformPointCloud(side_walls, side_walls, T_trans);
 
     Eigen::Isometry3f T_truck2template = T_trans * T_rot;   // Combined transformation: points_template = T_truck2template * points_truck
-    mBasePose = T_truck2template.inverse();   // Trailer pose in truck frame
+    mBasePose = T_truck2template.cast<double>().inverse();   // Trailer pose in truck frame
 
     mTrailerRoi = ROI::getBBox(side_walls);
     mTrailerRoi.max_x += 0.5f;
@@ -278,7 +278,7 @@ void Localization_LO::updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan_
 {
     // Transform scan into trailer local template frame
     pcl::PointCloud<pcl::PointXYZ> scan_in_trailer;
-    pcl::transformPointCloud(scan_in_truck, scan_in_trailer, mBasePose);
+    pcl::transformPointCloud(scan_in_truck, scan_in_trailer, mBasePose.cast<float>());
 
     *mTrailerVoxelMap += scan_in_trailer;   // Merge into voxel map
 
@@ -488,7 +488,7 @@ void Localization_LO::workerLoop()
         }
 
         pcl::PointCloud<pcl::PointXYZ> transformed_scan;
-        pcl::transformPointCloud(*processed_cloud, transformed_scan, mBasePose);
+        pcl::transformPointCloud(*processed_cloud, transformed_scan, mBasePose.cast<float>());
 
         sensor_msgs::msg::PointCloud2 scan_vis_msg;
         pcl::toROSMsg(transformed_scan, scan_vis_msg);
@@ -505,7 +505,7 @@ void Localization_LO::workerLoop()
         geometry_msgs::msg::PoseStamped pose_msg;
         pose_msg.header = scan_msg.header;
         pose_msg.header.frame_id = "map";
-        pose_msg.pose = tf2::toMsg(mBasePose.cast<double>());
+        pose_msg.pose = tf2::toMsg(mBasePose);
         mBasePosePub->publish(pose_msg);
 
         mBasePosePath.header = pose_msg.header;

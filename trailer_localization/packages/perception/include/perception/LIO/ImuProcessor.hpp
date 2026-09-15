@@ -17,9 +17,8 @@ public:
     // T_IL maps LiDAR coordinates to IMU coordinates: p_I = T_IL * p_L.
     explicit ImuProcessor(const Sophus::SE3d& T_IL) : mTi2l(T_IL) {}
 
-    void process(const std::vector<ImuData>& imu_data, std::vector<PointXYZT>& points,
-                 double scan_begin, double scan_end, ImuState& state,
-                 const StepCallback& before_step = {}, double max_step = 0.01)
+    void process(const std::vector<ImuData>& imu_data, std::vector<PointXYZT>& points, const double scan_begin,
+        const double scan_end, ImuState& state, const StepCallback& before_step = {}, const double max_step = 0.01)
     {
         if (!std::isfinite(scan_begin) || !std::isfinite(scan_end) ||
             scan_end <= scan_begin || state.timestamp > scan_begin)
@@ -69,7 +68,7 @@ public:
 
     // Exact boundary interpolation; never extrapolate beyond received measurements.
     static std::vector<ImuData> buildImuSequence(const std::vector<ImuData>& imu_data,
-                                               double begin, double end, double max_step = 0.01)
+                                                 const double begin, const double end, const double max_step = 0.01)
     {
         validate(imu_data);
         if (!std::isfinite(begin) || !std::isfinite(end) || end < begin ||
@@ -78,19 +77,24 @@ public:
         {
             throw std::invalid_argument("IMU samples do not cover the integration interval.");
         }
-        const auto at = [&imu_data](double time)
+        const auto at = [&imu_data](const double time)
         {
-            auto it = std::lower_bound(imu_data.begin(), imu_data.end(), time,
-                [](const ImuData& imu, double t) { return imu.timestamp < t; });
+            const auto it = std::lower_bound(imu_data.begin(), imu_data.end(), time, [](const ImuData& imu, const double t)
+                {
+                    return imu.timestamp < t;
+                });
             if (it == imu_data.begin() || it->timestamp == time) return *it;
             return interpolateImu(*(it - 1), *it, time);
         };
+
         std::vector<ImuData> knots{at(begin)};
         for (const auto& imu : imu_data)
         {
             if (imu.timestamp > begin && imu.timestamp < end) knots.push_back(imu);
         }
+
         if (end > begin) knots.push_back(at(end));
+
         std::vector<ImuData> result{knots.front()};
         for (std::size_t i = 1; i < knots.size(); ++i)
         {
@@ -138,7 +142,7 @@ public:
         }
     }
 
-    Sophus::SE3d poseAt(double timestamp) const
+    Sophus::SE3d poseAt(const double timestamp) const
     {
         if (mTrajectory.empty() || timestamp < mTrajectory.front().timestamp - 1e-6 ||
             timestamp > mTrajectory.back().timestamp + 1e-6)
@@ -147,8 +151,10 @@ public:
         }
         if (timestamp <= mTrajectory.front().timestamp) return pose(mTrajectory.front());
         if (timestamp >= mTrajectory.back().timestamp) return pose(mTrajectory.back());
-        auto it = std::lower_bound(mTrajectory.begin(), mTrajectory.end(), timestamp,
-            [](const ImuState& state, double t) { return state.timestamp < t; });
+        const auto it = std::lower_bound(mTrajectory.begin(), mTrajectory.end(), timestamp, [](const ImuState& state, const double t)
+            {
+                return state.timestamp < t;
+            });
         const auto& a = *(it - 1);
         const auto& b = *it;
         const double dt = b.timestamp - a.timestamp;
@@ -173,7 +179,10 @@ public:
     }
 
 private:
-    static Sophus::SE3d pose(const ImuState& state) { return {state.R_WI, state.p_WI}; }
+    static Sophus::SE3d pose(const ImuState& state)
+    {
+        return {state.R_WI, state.p_WI};
+    }
     Sophus::SE3d mTi2l;
     std::vector<ImuState> mTrajectory;
 };

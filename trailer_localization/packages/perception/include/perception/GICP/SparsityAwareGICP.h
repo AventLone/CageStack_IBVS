@@ -54,8 +54,8 @@ public:
         std::size_t num_source_points{0};
         std::size_t num_target_points{0};
         std::size_t num_correspondences{0};
-        float fitness_score{std::numeric_limits<float>::infinity()};
-        Eigen::Isometry3f transform{Eigen::Isometry3f::Identity()};
+        double fitness_score{std::numeric_limits<double>::infinity()};
+        Eigen::Isometry3d transform{Eigen::Isometry3d::Identity()};
     };
 
     SparsityAwareGICP() : SparsityAwareGICP(Config{})
@@ -88,8 +88,26 @@ public:
         clearTarget();
     }
 
-    void initializeTarget(const pcl::PointCloud<pcl::PointXYZ>& target);
-    void insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>& points);
+    void initializeTarget(const pcl::PointCloud<pcl::PointXYZ>& target)
+    {
+        auto target_index = std::make_unique<SparseVoxel>(mSparseVoxelConfig);
+        target_index->initialize(target);
+        mTarget = std::move(target_index);
+    }
+
+    void insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>& points)
+    {
+        if (points.empty())
+        {
+            return;
+        }
+        if (!hasTarget())
+        {
+            initializeTarget(points);
+            return;
+        }
+        mTarget->insert(points);
+    }
 
 
     void clearTarget() noexcept
@@ -102,7 +120,7 @@ public:
         return mTarget != nullptr;
     }
 
-    Result align(const pcl::PointCloud<pcl::PointXYZ>& source, const Eigen::Isometry3f& initial_guess) const;
+    Result align(const pcl::PointCloud<pcl::PointXYZ>& source, const Eigen::Isometry3d& initial_guess) const;
 
 private:
     Config mConfig;
@@ -110,10 +128,9 @@ private:
     std::unique_ptr<SparseVoxel> mTarget;
 
     void findCorrespondences(const std::vector<const PointWithCovariance*>& source, const SparseVoxel& target,
-                             const Sophus::SE3f& source_to_target,
-                             std::vector<Correspondence>& correspondences) const;
+                             const Sophus::SE3d& source_to_target, std::vector<Correspondence>& correspondences) const;
 
-    bool buildAndSolve(const std::vector<const PointWithCovariance*>& source,
-                       const std::vector<Correspondence>& correspondences, Sophus::SE3f& source_to_target,
-                       std::size_t& num_correspondences, float& fitness_score, Sophus::SE3f::Tangent& left_increment) const;
+    bool buildAndSolve(const std::vector<const PointWithCovariance*>& source, const std::vector<Correspondence>& correspondences,
+                       Sophus::SE3d& source_to_target, std::size_t& num_correspondences,
+                       double& fitness_score, Sophus::SE3d::Tangent& left_increment) const;
 };

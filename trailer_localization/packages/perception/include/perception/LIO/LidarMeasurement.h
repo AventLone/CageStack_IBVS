@@ -20,9 +20,11 @@ public:
         double lidar_noise{0.03};          // Point-to-plane standard deviation, m.
         double huber_scale{0.1};           // m.
     };
+
     LidarMeasurement(const Config& config, const Sophus::SE3d& T_IL);
-    ESKF::Measurement build(const ImuState& state, const pcl::PointCloud<pcl::PointXYZ>& scan,
-                            const SparseVoxel& map) const;
+
+    ESKF::Measurement build(const ImuState& state, const pcl::PointCloud<pcl::PointXYZ>& scan, const SparseVoxel& map) const;
+
 private:
     Config mConfig;
     Sophus::SE3d mTi2l;

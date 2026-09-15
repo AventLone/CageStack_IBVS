@@ -89,7 +89,7 @@ private:
 
     /* Trailer voxel map and estimated pose */
     pcl::PointCloud<pcl::PointXYZ>::Ptr mTrailerVoxelMap;
-    Eigen::Isometry3f mBasePose{Eigen::Isometry3f::Identity()};   // Pose of the truck
+    Eigen::Isometry3d mBasePose{Eigen::Isometry3d::Identity()};   // Pose of the truck
     nav_msgs::msg::Path mBasePosePath;
     ROI mTrailerRoi{};
     // SparsityAwareGICP mGicp;

@@ -108,25 +108,27 @@ void ESKF::predictCovariance(const ImuState& state, const ImuData& a, const ImuD
     mCovariance = 0.5 * (predicted + predicted.transpose());
 }
 
-void ESKF::predict(const ImuData& imu)
+void ESKF::predict(const ImuData& imu_data)
 {
-    if (!mInitialized || !ImuProcessor::finite(imu)) throw std::invalid_argument("Initialize ESKF before prediction with finite IMU.");
+    if (!mInitialized || !ImuProcessor::finite(imu_data)) throw std::invalid_argument("Initialize ESKF before prediction with finite IMU.");
     if (!mLastImu)
     {
-        if (std::abs(imu.timestamp - mState.timestamp) > 1e-9)
+        if (std::abs(imu_data.timestamp - mState.timestamp) > 1e-9)
             throw std::invalid_argument("First IMU must anchor the current state timestamp.");
-        mLastImu = imu;
+        mLastImu = imu_data;
         return;
     }
-    if (imu.timestamp <= mState.timestamp || imu.timestamp - mState.timestamp > mConfig.max_imu_gap)
+    if (imu_data.timestamp <= mState.timestamp || imu_data.timestamp - mState.timestamp > mConfig.max_imu_gap)
         throw std::invalid_argument("Out-of-order IMU or excessive IMU gap.");
-    const auto samples = ImuProcessor::buildImuSequence({*mLastImu, imu}, mState.timestamp, imu.timestamp, mConfig.max_integration_step);
-    mImuProcessor.propagate(samples, mState, [this](const auto& s, const auto& a, const auto& b) { predictCovariance(s, a, b); });
-    mLastImu = imu;
+    const auto samples = ImuProcessor::buildImuSequence({*mLastImu, imu_data}, mState.timestamp, imu_data.timestamp, mConfig.max_integration_step);
+    mImuProcessor.propagate(samples, mState, [this](const auto& s, const auto& a, const auto& b)
+        {
+            predictCovariance(s, a, b);
+        });
+    mLastImu = imu_data;
 }
 
-void ESKF::processScan(const std::vector<ImuData>& imu_data, std::vector<PointXYZT>& points,
-                       double scan_begin, double scan_end)
+void ESKF::processScan(const std::vector<ImuData>& imu_data, std::vector<PointXYZT>& points, const double scan_begin, const double scan_end)
 {
     if (!mInitialized) throw std::logic_error("Initialize ESKF before processing a scan.");
     ImuProcessor::validate(imu_data);
@@ -136,8 +138,10 @@ void ESKF::processScan(const std::vector<ImuData>& imu_data, std::vector<PointXY
             imu_data[i].timestamp - imu_data[i - 1].timestamp > mConfig.max_imu_gap)
             throw std::invalid_argument("IMU gap exceeds max_imu_gap.");
     }
-    mImuProcessor.process(imu_data, points, scan_begin, scan_end, mState,
-        [this](const auto& s, const auto& a, const auto& b) { predictCovariance(s, a, b); }, mConfig.max_integration_step);
+    mImuProcessor.process(imu_data, points, scan_begin, scan_end, mState, [this](const auto& s, const auto& a, const auto& b)
+        {
+            predictCovariance(s, a, b);
+        }, mConfig.max_integration_step);
     mLastImu = ImuProcessor::buildImuSequence(imu_data, scan_end, scan_end).front();
 }
 
@@ -176,9 +180,11 @@ ESKF::Result ESKF::update(const MeasurementModel& model)
     Result result;
     const ImuState prior = mState;
     const StateCovariance prior_information = mCovariance.llt().solve(StateCovariance::Identity());
+
     ImuState iterate = prior;
     StateCovariance information;
     ErrorStateT gradient;
+
     const auto linearize = [&]()
     {
         const Measurement measurement = model(iterate);
@@ -198,6 +204,7 @@ ESKF::Result ESKF::update(const MeasurementModel& model)
         gradient.head<6>() += measurement.gradient;
         return information.allFinite() && gradient.allFinite();
     };
+
     for (int iteration = 0; iteration < mConfig.max_iterations; ++iteration)
     {
         if (!linearize()) return result;
@@ -207,31 +214,45 @@ ESKF::Result ESKF::update(const MeasurementModel& model)
         if (!increment.allFinite()) return result;
         iterate = boxPlus(iterate, increment);
         ++result.iterations;
-        const ErrorStateT correction = boxMinus(iterate, prior);
-        if (!finite(iterate) || correction.head<3>().norm() > mConfig.max_position_correction ||
-            correction.segment<3>(3).norm() > mConfig.max_rotation_correction) return result;
+        if (const ErrorStateT correction = boxMinus(iterate, prior);
+            !finite(iterate) || correction.head<3>().norm() > mConfig.max_position_correction ||
+            correction.segment<3>(3).norm() > mConfig.max_rotation_correction)
+        {
+            return result;
+        }
         if (increment.head<3>().norm() < mConfig.convergence_translation &&
-            increment.segment<3>(3).norm() < mConfig.convergence_rotation && increment.tail<9>().norm() < 1e-3)
+            increment.segment<3>(3).norm() < mConfig.convergence_rotation &&
+            increment.tail<9>().norm() < 1e-3)
         {
             result.converged = true;
             break;
         }
     }
+
     // Re-linearize in the FINAL state's tangent. This recenters the posterior;
     // applying an additional reset Jacobian would transport it twice.
     // On failure the propagated state and covariance remain untouched.
-    if (!result.converged || !linearize() || result.plane_rmse > mConfig.max_plane_rmse) return result;
+    // if (!result.converged || !linearize() || result.plane_rmse > mConfig.max_plane_rmse)
+    // {
+    //     return result;
+    // }
+
     const Eigen::LLT<StateCovariance> solver(information);
-    if (solver.info() != Eigen::Success) return result;
+    if (solver.info() != Eigen::Success)
+    {
+        return result;
+    }
+
     const StateCovariance posterior = solver.solve(StateCovariance::Identity());
     const StateCovariance symmetric = 0.5 * (posterior + posterior.transpose());
-    if (!symmetric.allFinite() || Eigen::LLT<StateCovariance>(symmetric).info() != Eigen::Success) return result;
+    if (!symmetric.allFinite() || Eigen::LLT<StateCovariance>(symmetric).info() != Eigen::Success)
+    {
+        return result;
+    }
+
     mState = iterate;
     mCovariance = symmetric;
     result.accepted = true;
     return result;
 }
-
-Eigen::Isometry3d ESKF::state() const { return Eigen::Isometry3d(Sophus::SE3d(mState.R_WI, mState.p_WI).matrix()); }
-Eigen::Isometry3d ESKF::lidarPose() const { return Eigen::Isometry3d((Sophus::SE3d(mState.R_WI, mState.p_WI) * mTi2l).matrix()); }
 }  // namespace lio

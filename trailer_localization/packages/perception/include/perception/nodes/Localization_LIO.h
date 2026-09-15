@@ -10,6 +10,9 @@
 #include <nav_msgs/msg/path.hpp>
 #include "perception/LIO/CloudTiming.hpp"
 #include "perception/LIO/LidarMeasurement.h"
+#include <tf2_eigen/tf2_eigen.hpp>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
 
 class Localization_LIO : public rclcpp::Node
 {
@@ -33,6 +36,10 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr mProcessedScanVisPub, mVoxelMapPub;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr mBasePosePub;
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr mBasePosePathPub;
+
+    tf2_ros::Buffer mTfBuffer;
+    tf2_ros::TransformListener mTfListener;
+    // Eigen::Isometry3f T_truck2lidar;
 
     lio::CloudTimingConfig mTimingConfig;
     SparseVoxel::Config mMapConfig;

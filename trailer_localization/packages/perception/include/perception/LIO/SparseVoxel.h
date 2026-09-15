@@ -2,8 +2,6 @@
 #include <cstddef>
 #include <cmath>
 #include <stdexcept>
-#include <utility>
-#include <Eigen/Dense>
 #include <limits>
 #include <boost/unordered/unordered_flat_map.hpp>
 #include <vector>
@@ -20,7 +18,7 @@ struct PointWithCovariance
 struct Correspondence
 {
     const PointWithCovariance* target{nullptr};
-    Eigen::Vector3f transformed_position{Eigen::Vector3f::Zero()};
+    Eigen::Vector3d transformed_position{Eigen::Vector3d::Zero()};
 };
 
 class SparseVoxel

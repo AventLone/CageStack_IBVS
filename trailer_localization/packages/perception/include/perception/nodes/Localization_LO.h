@@ -12,7 +12,7 @@
 #include <pcl/common/transforms.h>
 #include <pcl/filters/voxel_grid.h>
 #include <vector>
-#include "perception/GICP/SparsityAwareGICP.h"
+#include "perception/GICP/GICP.h"
 #include "perception/types/common.hpp"
 
 class Localization_LO : public rclcpp::Node
@@ -35,7 +35,7 @@ public:
         //     }
         // }
 
-        SparsityAwareGICP::Config config{};
+        GICP::Config config{};
         config.voxel_size = MAP_RESOLUTION * 5;
         config.max_fitness_score = 0.1f;  // 平均意义下的点位误差尺度 10 cm
         mGicp.setConfig(config);
@@ -93,7 +93,7 @@ private:
     nav_msgs::msg::Path mBasePosePath;
     ROI mTrailerRoi{};
     // SparsityAwareGICP mGicp;
-    SparsityAwareGICP mGicp;
+    GICP mGicp;
     std::vector<double> mGicpDurationsMs;
     std::size_t mGicpDurationCount{0};
     float mIntensityThreshold{-1.0f};

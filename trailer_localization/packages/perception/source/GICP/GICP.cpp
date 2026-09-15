@@ -1,8 +1,8 @@
-#include "perception/GICP/SparsityAwareGICP.h"
+#include "perception/GICP/GICP.h"
 #include <algorithm>
 #include <execution>
 
-void SparsityAwareGICP::findCorrespondences(const std::vector<const PointWithCovariance*>& source,
+void GICP::findCorrespondences(const std::vector<const PointWithCovariance*>& source,
                                             const SparseVoxel& target,
                                             const Sophus::SE3d& source_to_target,
                                             std::vector<Correspondence>& correspondences) const
@@ -18,7 +18,7 @@ void SparsityAwareGICP::findCorrespondences(const std::vector<const PointWithCov
         });
 }
 
-bool SparsityAwareGICP::buildAndSolve(const std::vector<const PointWithCovariance*>& source,
+bool GICP::buildAndSolve(const std::vector<const PointWithCovariance*>& source,
                    const std::vector<Correspondence>& correspondences, Sophus::SE3d& source_to_target,
                    std::size_t& num_correspondences, double& fitness_score, Sophus::SE3d::Tangent& left_increment) const
 {
@@ -95,7 +95,7 @@ bool SparsityAwareGICP::buildAndSolve(const std::vector<const PointWithCovarianc
     return true;
 }
 
-SparsityAwareGICP::Result SparsityAwareGICP::align(const pcl::PointCloud<pcl::PointXYZ>& source,
+GICP::Result GICP::align(const pcl::PointCloud<pcl::PointXYZ>& source,
                                                    const Eigen::Isometry3d& initial_guess) const
 {
     if (source.empty())

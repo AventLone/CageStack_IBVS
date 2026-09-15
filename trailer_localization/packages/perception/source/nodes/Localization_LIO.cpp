@@ -198,6 +198,7 @@ bool Localization_LIO::collectImu(const double scan_begin, double scan_end, std:
     }
 
     const double begin = mEskf->initialized() ? mEskf->nominalState().timestamp : scan_begin - mInitializationDuration;
+
     if (mEskf->initialized() && scan_begin < begin)
     {
         RCLCPP_WARN(get_logger(), "Skipping overlapping or stale scan.");
@@ -306,13 +307,21 @@ void Localization_LIO::lidarWorkerLoop()
                 {
                     continue;
                 }
-                if (std::abs(point.x) > 0.8f || std::abs(point.y) > 0.8f) points.push_back(point);
+
+                if (std::abs(point.x) > 0.8f || std::abs(point.y) > 0.8f)
+                {
+                    points.push_back(point);
+                }
             }
-            // Check raw (not interpolated) gaps before any propagation/deskew.
-            mEskf->processScan(imu, points, scan.begin, scan.end);
+
+            mEskf->processScan(imu, points, scan.begin, scan.end);  // Check raw (not interpolated) gaps before any propagation/deskew.
+
             const auto cloud = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
             cloud->reserve(points.size());
-            for (const auto& point : points) cloud->emplace_back(point.x, point.y, point.z);
+            for (const auto& point : points)
+            {
+                cloud->emplace_back(point.x, point.y, point.z);
+            }
             pcl::PointCloud<pcl::PointXYZ> filtered;
             pcl::VoxelGrid<pcl::PointXYZ> voxel_filter;
             const auto resolution = static_cast<float>(mScanResolution);

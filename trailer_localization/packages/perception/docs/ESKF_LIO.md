@@ -1,19 +1,103 @@
 # IMU–LiDAR 紧耦合 ESKF
 
-`perception` 的运行入口现在启动 `Localization_LIO`。IMU 在扫描区间内传播状态与协方差，点云补偿到扫描结束时刻；每个点到地图平面的残差直接进入迭代 ESKF，更新位姿、速度和两类 IMU bias。LIO 不调用 `SparsityAwareGICP::align()`，也不把独立配准得到的 6D 位姿当作观测。原来的 `Localization_LO` / GICP 代码仍可单独使用。
+## 1 Scan 去畸变
 
-## 状态与坐标系
+**估计这一帧 LiDAR 扫描期间传感器的连续运动，然后把每个点“搬回”到同一个时刻的坐标系里。**
 
-- 名义状态：`R_WI, p_WI, v_WI, gyro_bias, accel_bias`。
-- 15 维误差：`[dp_W, dtheta_I, dv_W, dbg_I, dba_I]`。
-- 右扰动：`R_true = R_WI * Exp(dtheta_I)`；位置、速度误差在世界系，bias 在 IMU 系。
-- `T_IL`：LiDAR → IMU，`p_I = T_IL * p_L`；`T_WL = T_WI * T_IL`。
+假设一帧 LiDAR scan 从 $t_0$ 扫到 $t_1$。机械式或非瞬时 LiDAR 的点不是同时采集的，所以第 $i$ 个点实际是在 $t_i$ 时刻测到的：
+$$
+t_0 \le t_i \le t_1
+$$
+如果车辆在这一帧期间发生了运动，那么直接把所有点当成在同一时刻采集，就会出现拉伸、弯曲、重影。
+
+### 1.1 IMU 提供 scan 内部的运动
+
+IMU 测量：
+$$
+\begin{align}
+\boldsymbol{\omega}_m &= \boldsymbol{\omega} + \boldsymbol{b}_g + \boldsymbol{n}_g \\
+\boldsymbol{a}_m &= \boldsymbol{R}^\top(\boldsymbol{a}-\boldsymbol{g})+\boldsymbol{b}_a+\boldsymbol{n}_a
+\end{align}
+$$
+其中：
+
+- $\boldsymbol{\omega}_m$：陀螺仪角速度
+- $\boldsymbol{a}_m$：加速度计测量
+- $\boldsymbol{b}_g,\boldsymbol{b}_a$：gyro / accel bias
+- $\boldsymbol{R}$：IMU 姿态
+- $\boldsymbol{g}$：重力
+
+利用 IMU 在 LiDAR scan 的这几十毫秒内做积分，可以得到 $\boldsymbol{R}(t)$，$\boldsymbol{p}(t)$，$\boldsymbol{v}(t)$；也就是 scan 内任意时刻 IMU 的 pose。
+
+最基本的传播形式类似：
+$$
+\begin{align}
+\boldsymbol{R}_{k+1} 
+&= \boldsymbol{R}_k\text{Exp} \big((\boldsymbol{\omega}_k-\boldsymbol{b}_g)\Delta t\big) \\
+\boldsymbol{v}_{k+1} 
+&= \boldsymbol{v}_k+ \big(\boldsymbol{R}_k(\boldsymbol{a}_k-\boldsymbol{b}_a)+\boldsymbol{g} \big)\Delta t \\
+\boldsymbol{p}_{k+1} &= 
+\boldsymbol{p}_k+ \boldsymbol{v}_k\Delta t+ \frac12 \left(\boldsymbol{R}_k(\boldsymbol{a}_k-\boldsymbol{b}_a)+\boldsymbol{g} \right)\Delta t^2
+\end{align}
+$$
+实际 LIO 中通常就是 ESKF/IESKF propagation 的那套 IMU propagation。
+
+### 1.2 每个 LiDAR 点都有自己的时间戳
+
+例如一帧 scan 是 $t_0 = 10.000s$ 到 $t_1 = 10.1 \ \text{s}$，某个点 $\boldsymbol{p}_k$ 采集时间可能是 $t_k = 10.037 \ \text{s}$，IMU 积分可以得到这个时刻的位姿 $\boldsymbol{T}_{w\rightarrow i}(t_k)$ 以及你选定的参考时刻 $\boldsymbol{T}_{w\rightarrow i}(t_{\text{ref}})$。
+
+通常 $t_{\text{ref}}$ 选：
+
+- scan begin
+- scan end
+- scan midpoint
+
+LIO 里很常见的是 **scan end**。
+
+### 1.3 把每个点变换到统一参考时刻
+
+先暂时假设 LiDAR 和 IMU 坐标系相同。
+
+点 $\boldsymbol{p}_k$ 是在 $t_k$ 时刻的坐标 $\boldsymbol{p}_k^{I_k}$，变换到世界坐标 $\boldsymbol{p}_k^w = \boldsymbol{T}_{w\rightarrow i}(t_k) \cdot \boldsymbol{p}_k^{I_k}$，再变到 scan reference time：$\boldsymbol{p}_k^{I_{\text{ref}}} = \boldsymbol{T}_{w\rightarrow i}^{-1}(t_{\text{ref}})\cdot \boldsymbol{T}_{w\rightarrow i}(t_k)\cdot \boldsymbol{p}_k^{I_k}$
+
+因此核心 deskew 公式就是：
+$$
+\boldsymbol{p}_k^{\text{ref}} = \boldsymbol{T}^{-1}(t_{\text{ref}})\cdot \boldsymbol{T}(t_k)\cdot \boldsymbol{p}_k
+$$
+这就是 IMU deskew 的本质。
+
+实际系统中 LiDAR 和 IMU 显然不重合，因此还需要外参 $\boldsymbol{T}_{i\rightarrow l}$。
+
+如果 LiDAR 点为 $\boldsymbol{p}_k^l$，先转到 IMU：
+$$
+\boldsymbol{p}_k^i = \boldsymbol{T}_{i\rightarrow l}\cdot \boldsymbol{p}_i^l
+$$
+进行运动补偿：
+$$
+\boldsymbol{p}_{k,\text{ref}}^{i} = \boldsymbol{T}_{w\rightarrow i}^{-1}(t_{\text{ref}})\cdot \boldsymbol{T}_{w\rightarrow i}(t_k)\cdot \boldsymbol{T}_{i\rightarrow l}\cdot\boldsymbol{p}_k^l
+$$
+最后再转回 LiDAR：
+$$
+\boxed{\boldsymbol{p}_{k,\text{ref}}^{l} = \boldsymbol{T}_{l\rightarrow i}\cdot \boldsymbol{T}_{w\rightarrow i}^{-1}(t_{\text{ref}})\cdot\boldsymbol{T}_{w\rightarrow i}(t_k)\cdot \boldsymbol{T}_{i\rightarrow l}\cdot\boldsymbol{p}_k^l}
+$$
+这基本就是完整的 deskew 变换。
+
+
+
+## 2 状态与坐标系
+
+- 名义状态：`R_wi, p_wi, v_wi, gyro_bias, accel_bias`。
+- 15 维误差：`[dp_w, dtheta_i, dv_w, dbg_i, dba_i]`。
+- 右扰动：`R_true = R_wi * Exp(dtheta_i)`；位置、速度误差在世界系，bias 在 IMU 系。
+- `T_il`：LiDAR → IMU，`p_i = T_il * p_l`；`T_wl = T_wi * T_il`。
 - `T_IB`：车体 → IMU；发布 `/base_pose` 的 `T_WB = T_WI * T_IB`。若使用默认单位外参，这个输出就是 IMU 位姿。
 - 世界系由静止初始化定义，Z 轴向上。位置和 yaw 是局部坐标规范，不是绝对定位。
 
 原先的 `Vector<double, 17>` 只是占位，没有对应的 S² 重力状态。本实现使用完整的 15 状态 ESKF，初始化后固定世界系重力，不估计重力方向的两个自由度，也不在线估计外参或时间偏移。状态、协方差、正规方程使用 `double`；PCL 点和体素存储沿用 `float`。
 
-## IMU 传播
+
+
+## 3 IMU 传播
 
 传入未经去重力的加速度计 specific force（m/s²），以及角速度（rad/s）。先减 bias，再以区间中点姿态积分：
 
@@ -39,7 +123,9 @@ R *= Exp(omega*dt)
 
 噪声参数都是**连续时间标准差密度**，代码平方得到谱密度。状态转移采用二阶近似，过程噪声用 Simpson 积分；默认把积分步长细分到 0.01 s。协方差保留 p–v、theta–bg、v–ba 等交叉项。
 
-## 点到平面迭代更新
+
+
+## 4 点到平面迭代更新
 
 对扫描末端 LiDAR 系中的点 `p_L`，在固定世界地图中查找邻居，从原始坐标拟合平面中心 `q_W` 和单位法向量 `n_W`：
 
@@ -64,7 +150,9 @@ x_next = x_k boxplus delta
 
 验收条件包括有效平面数、收敛、最终残差 RMSE、最大位姿修正和矩阵正定性。验收失败保留本帧 IMU 预测及其协方差，并跳过地图写入。地图只在首帧建立或成功更新后写入。退化方向仍主要受 IMU 先验约束；长走廊中缺少端面时，沿走廊方向可能不可观，不能用更多相同方向平面消除这一几何退化。
 
-## 时间同步与初始化
+
+
+## 5 时间同步与初始化
 
 一个工作线程拥有滤波器和地图，ROS 回调只缓存数据。保留完整 IMU 历史及边界插值所需的两端样本，不再每次只留最后一帧 IMU。超过扫描队列容量时可以丢弃旧扫描，随后仍从上次修正状态连续积分 IMU。
 
@@ -85,6 +173,8 @@ Hesai ROS 2 驱动的 `timestamp` 是 FLOAT64 字段，默认配置针对该格�
 - 静止检测只是均值/方差启发式，恒速运动无法仅靠 IMU 判定；请实际静止启动。
 - 遇到超过 `max_imu_gap` 的缺测或历史缓存丢失时，清空局部地图和轨迹并等待重新静止初始化，日志明确报告坐标原点重置。
 - 重复/乱序 IMU 被丢弃；若 rosbag 循环回放使时钟倒退，应重启节点。
+
+
 
 ## 使用
 
@@ -112,6 +202,8 @@ auto result = filter.update([&](const lio::ImuState& state) {
 ```
 
 `processScan()` 已同时传播状态和协方差，不要对同一区间再调用 `predict()`。`predict()` 用于单独的 IMU 流式传播，reset 后首个样本必须锚定 state.timestamp。`ESKF.h` 不依赖 ROS 或 PCL；ROS 时间读取、体素地图和几何模型分别放在独立文件中。
+
+
 
 ## 验证与边界
 

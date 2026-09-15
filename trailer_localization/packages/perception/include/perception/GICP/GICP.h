@@ -4,7 +4,7 @@
 #include "perception/LIO/SparseVoxel.h"
 #include <sophus/se3.hpp>
 
-class SparsityAwareGICP
+class GICP
 {
 public:
     struct Config
@@ -58,22 +58,22 @@ public:
         Eigen::Isometry3d transform{Eigen::Isometry3d::Identity()};
     };
 
-    SparsityAwareGICP() : SparsityAwareGICP(Config{})
+    GICP() : GICP(Config{})
     {
     }
 
-    explicit SparsityAwareGICP(const Config& config) : mConfig(config)
+    explicit GICP(const Config& config) : mConfig(config)
     {
         mSparseVoxelConfig.voxel_size = config.voxel_size;
     }
 
-    SparsityAwareGICP(SparsityAwareGICP&&) noexcept = default;
-    SparsityAwareGICP& operator=(SparsityAwareGICP&&) noexcept = default;
+    GICP(GICP&&) noexcept = default;
+    GICP& operator=(GICP&&) noexcept = default;
 
-    SparsityAwareGICP(const SparsityAwareGICP&) = delete;
-    SparsityAwareGICP& operator=(const SparsityAwareGICP&) = delete;
+    GICP(const GICP&) = delete;
+    GICP& operator=(const GICP&) = delete;
 
-    ~SparsityAwareGICP() = default;
+    ~GICP() = default;
 
 
     [[nodiscard]] const Config& config() const noexcept

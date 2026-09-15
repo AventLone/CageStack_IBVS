@@ -3,6 +3,7 @@
 #include <limits>
 #include <optional>
 #include "perception/LIO/ImuProcessor.hpp"
+// #include "perception/LIO/SparseVoxel.h"
 
 namespace lio
 {
@@ -11,7 +12,7 @@ namespace lio
 using ErrorStateT = Eigen::Vector<double, 15>;
 using StateCovariance = Eigen::Matrix<double, 15, 15>;
 using PoseInformation = Eigen::Matrix<double, 6, 6>;
-using PoseGradient = Eigen::Vector<double, 6>;
+// using PoseGradient = Eigen::Vector<double, 6>;
 
 class ESKF
 {
@@ -41,7 +42,7 @@ public:
     struct Measurement
     {
         PoseInformation information{PoseInformation::Zero()};
-        PoseGradient gradient{PoseGradient::Zero()};
+        Sophus::SE3d::Tangent gradient{Sophus::SE3d::Tangent::Zero()};
         std::size_t count{0};
         double squared_error{0.0};
     };
@@ -57,8 +58,20 @@ public:
         double plane_rmse{std::numeric_limits<double>::infinity()};
     };
 
-    ESKF();
+    // struct Result
+    // {
+    //     bool converged{false};
+    //     int iterations{0};
+    //     std::size_t num_correspondences{0};
+    //     double fitness_score{std::numeric_limits<double>::infinity()};
+    // };
+
+    ESKF() : ESKF(Config{})
+    {
+    }
+
     explicit ESKF(const Config& config, const Sophus::SE3d& T_IL = Sophus::SE3d());
+
     static StateCovariance initialCovariance();
 
     void clear() noexcept
@@ -108,14 +121,6 @@ public:
         return Eigen::Isometry3d((Sophus::SE3d(mState.R_WI, mState.p_WI) * mTi2l).matrix());
     }
 
-    //  Eigen::Isometry3d lidarPose() const;
-
-    static ImuState boxPlus(const ImuState& state, const ErrorStateT& increment);
-
-    static ErrorStateT boxMinus(const ImuState& state, const ImuState& reference);
-
-    static Eigen::Matrix3d rightJacobianInverse(const Eigen::Vector3d& rotation);
-
 private:
     Config mConfig;
     Sophus::SE3d mTi2l;
@@ -125,6 +130,29 @@ private:
     std::optional<ImuData> mLastImu;
     bool mInitialized{false};
 
+    // std::unique_ptr<SparseVoxel> mVoxelMap;
+
     void predictCovariance(const ImuState& state, const ImuData& a, const ImuData& b);
+
+    static ImuState boxPlus(const ImuState& state, const ErrorStateT& increment)
+    {
+        ImuState result = state;
+        result.p_WI += increment.segment<3>(0);
+        result.R_WI *= Sophus::SO3d::exp(increment.segment<3>(3));
+        result.v_WI += increment.segment<3>(6);
+        result.gyro_bias += increment.segment<3>(9);
+        result.accel_bias += increment.segment<3>(12);
+        return result;
+    }
+
+    static ErrorStateT boxMinus(const ImuState& state, const ImuState& reference)
+    {
+        ErrorStateT result;
+        result << state.p_WI - reference.p_WI, (reference.R_WI.inverse() * state.R_WI).log(),
+                  state.v_WI - reference.v_WI, state.gyro_bias - reference.gyro_bias, state.accel_bias - reference.accel_bias;
+        return result;
+    }
+
+    static Eigen::Matrix3d rightJacobianInverse(const Eigen::Vector3d& rotation);
 };
 }  // namespace lio

@@ -15,7 +15,7 @@ public:
     using StepCallback = std::function<void(const ImuState&, const ImuData&, const ImuData&)>;
 
     // T_IL maps LiDAR coordinates to IMU coordinates: p_I = T_IL * p_L.
-    explicit ImuProcessor(const Sophus::SE3d& T_IL) : mTi2l(T_IL) {}
+    explicit ImuProcessor(const Sophus::SE3d& T_i2l) : mTi2l(T_i2l) {}
 
     void process(const std::vector<ImuData>& imu_data, std::vector<PointXYZT>& points, const double scan_begin,
         const double scan_end, ImuState& state, const StepCallback& before_step = {}, const double max_step = 0.01)
@@ -59,7 +59,7 @@ public:
         }
     }
 
-    static ImuData interpolateImu(const ImuData& a, const ImuData& b, double timestamp)
+    static ImuData interpolateImu(const ImuData& a, const ImuData& b, const double timestamp)
     {
         const double alpha = (timestamp - a.timestamp) / (b.timestamp - a.timestamp);
         return {timestamp, (1.0 - alpha) * a.gyro + alpha * b.gyro,
@@ -162,10 +162,10 @@ public:
         const auto R = a.R_WI * Sophus::SO3d::exp((t / dt) * (a.R_WI.inverse() * b.R_WI).log());
         // Constant acceleration interpolation is consistent with midpoint propagation.
         const Eigen::Vector3d p = a.p_WI + a.v_WI * t + 0.5 * (b.v_WI - a.v_WI) * (t * t / dt);
-        return Sophus::SE3d(R, p);
+        return {R, p};
     }
 
-    void deskew(std::vector<PointXYZT>& points, double scan_begin, double scan_end) const
+    void deskew(std::vector<PointXYZT>& points, const double scan_begin, const double scan_end) const
     {
         const Sophus::SE3d T_Lend_W = (poseAt(scan_end) * mTi2l).inverse();
         for (auto& point : points)

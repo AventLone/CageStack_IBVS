@@ -90,15 +90,24 @@ inline TimedCloud readTimedCloud(const sensor_msgs::msg::PointCloud2& msg, const
         };
         switch (f.datatype)
         {
-            case Field::INT8: return value.template operator()<std::int8_t>();
-            case Field::UINT8: return value.template operator()<std::uint8_t>();
-            case Field::INT16: return value.template operator()<std::int16_t>();
-            case Field::UINT16: return value.template operator()<std::uint16_t>();
-            case Field::INT32: return value.template operator()<std::int32_t>();
-            case Field::UINT32: return value.template operator()<std::uint32_t>();
-            case Field::FLOAT32: return value.template operator()<float>();
-            case Field::FLOAT64: return value.template operator()<double>();
-            default: throw std::invalid_argument("Unsupported point datatype.");
+            case Field::INT8:
+                return value.template operator()<std::int8_t>();
+            case Field::UINT8:
+                return value.template operator()<std::uint8_t>();
+            case Field::INT16:
+                return value.template operator()<std::int16_t>();
+            case Field::UINT16:
+                return value.template operator()<std::uint16_t>();
+            case Field::INT32:
+                return value.template operator()<std::int32_t>();
+            case Field::UINT32:
+                return value.template operator()<std::uint32_t>();
+            case Field::FLOAT32:
+                return value.template operator()<float>();
+            case Field::FLOAT64:
+                return value.template operator()<double>();
+            default:
+                throw std::invalid_argument("Unsupported point datatype.");
         }
     };
     double scale = config.time_scale;

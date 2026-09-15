@@ -337,7 +337,7 @@ bool Localization_LO::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& curren
     }
 
     const auto start_time = std::chrono::high_resolution_clock::now();
-    SparsityAwareGICP::Result result;
+    GICP::Result result;
     try
     {
         result = mGicp.align(*current_scan, mBasePose);

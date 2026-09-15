@@ -2,7 +2,8 @@
 #include <algorithm>
 #include <cmath>
 #include <execution>
-#include <unordered_set>
+#include <ranges>
+#include <boost/unordered/unordered_flat_set.hpp>
 
 void SparseVoxel::initialize(const pcl::PointCloud<pcl::PointXYZ>& cloud)
 {
@@ -12,7 +13,8 @@ void SparseVoxel::initialize(const pcl::PointCloud<pcl::PointXYZ>& cloud)
 	}
 
 	const std::vector<SparsePoint> sparse_points = makeSparseCloud(cloud);
-	std::unordered_set<VoxelKey, VoxelKeyHash> voxel_keys;
+
+	boost::unordered_flat_set<VoxelKey> voxel_keys;
 	voxel_keys.reserve(sparse_points.size());
 	for (const SparsePoint& point : sparse_points)
 	{
@@ -50,7 +52,8 @@ bool SparseVoxel::insert(const pcl::PointCloud<pcl::PointXYZ>& cloud)
 
 	const int max_points_per_voxel = std::max(1, mConfig.max_points_per_voxel);
 	const float min_spacing_square = std::pow(std::max(0.001f, mConfig.voxel_size * 0.1f), 2.0f);
-	std::unordered_set<VoxelKey, VoxelKeyHash> touched_voxels;
+
+	boost::unordered_flat_set<VoxelKey> touched_voxels;
 	touched_voxels.reserve(cloud.size());
 
 	for (const auto& pcl_point : cloud)
@@ -99,7 +102,7 @@ bool SparseVoxel::insert(const pcl::PointCloud<pcl::PointXYZ>& cloud)
 		return false;
 	}
 
-	std::unordered_set<VoxelKey, VoxelKeyHash> affected_voxels;
+	boost::unordered_flat_set<VoxelKey> affected_voxels;
 	affected_voxels.reserve(touched_voxels.size() * 27);
 	for (const VoxelKey& key : touched_voxels)
 	{
@@ -137,7 +140,7 @@ void SparseVoxel::estimateCovariances()
 {
 	std::vector<PointWithCovariance*> points;
 	points.reserve(mPointCount);
-	for (auto& [_, cell_points] : mOccupiedVoxels)
+	for (auto& cell_points : mOccupiedVoxels | std::views::values)
 	{
 		for (PointWithCovariance& point : cell_points)
 		{
@@ -160,8 +163,7 @@ void SparseVoxel::estimateCovariances(const std::vector<PointWithCovariance*>& p
 			point->covariance_valid = false;
 
 			constexpr int voxel_radius = 1;
-			const std::vector<Neighbor> neighbors =
-				nearestNeighbors(point->position, neighbor_limit, voxel_radius);
+			const std::vector<Neighbor> neighbors = nearestNeighbors(point->position, neighbor_limit, voxel_radius);
 			if (static_cast<int>(neighbors.size()) < required_neighbors)
 			{
 				return;
@@ -203,7 +205,7 @@ std::vector<const PointWithCovariance*> SparseVoxel::points() const
 {
 	std::vector<const PointWithCovariance*> points;
 	points.reserve(mPointCount);
-	for (const auto& [_, cell_points] : mOccupiedVoxels)
+	for (const auto& cell_points : mOccupiedVoxels | std::views::values)
 	{
 		for (const PointWithCovariance& point : cell_points)
 		{

@@ -1,7 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <limits>
-#include <unordered_map>
+#include <boost/unordered/unordered_flat_map.hpp>
 #include <vector>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
@@ -91,33 +91,18 @@ private:
             return i == other.i && j == other.j && k == other.k;
         }
 
-        bool operator<(const VoxelKey& other) const noexcept
+        friend std::size_t hash_value(const VoxelKey& key) noexcept
         {
-            if (i != other.i)
-            {
-                return i < other.i;
-            }
-            if (j != other.j)
-            {
-                return j < other.j;
-            }
-            return k < other.k;
+            std::size_t seed = 0;
+            boost::hash_combine(seed, key.i);
+            boost::hash_combine(seed, key.j);
+            boost::hash_combine(seed, key.k);
+            return seed;
         }
     };
 
-    struct VoxelKeyHash
-    {
-        std::size_t operator()(const VoxelKey& key) const noexcept
-        {
-            const auto x = static_cast<std::size_t>(key.i);
-            const auto y = static_cast<std::size_t>(key.j);
-            const auto z = static_cast<std::size_t>(key.k);
-            return (x * 73856093ULL) ^ (y * 19349663ULL) ^ (z * 83492791ULL);
-        }
-    };
-
-    using OccupiedVoxels = std::unordered_map<VoxelKey, std::vector<PointWithCovariance>, VoxelKeyHash>;
-    using SparsePointIndices = std::unordered_map<VoxelKey, std::vector<std::size_t>, VoxelKeyHash>;
+    using OccupiedVoxels = boost::unordered_flat_map<VoxelKey, std::vector<PointWithCovariance>>;
+    using SparsePointIndices = boost::unordered_flat_map<VoxelKey, std::vector<std::size_t>>;
 
     VoxelKey pointToVoxel(const Eigen::Vector3f& point) const
     {

@@ -17,7 +17,7 @@ ESKF::ESKF(const Config& config, const Sophus::SE3d& T_IL) : mConfig(config), mT
 {
     for (const double value : {config.gyro_noise, config.accel_noise, config.gyro_bias_noise,
                         config.accel_bias_noise, config.gravity_magnitude, config.max_imu_gap,
-                        config.max_integration_step, config.max_plane_rmse,
+                        config.max_integration_step, config.damping_factor, config.max_fitness_score,
                         config.convergence_translation, config.convergence_rotation,
                         config.max_position_correction, config.max_rotation_correction})
     {
@@ -161,6 +161,26 @@ void ESKF::processScan(const std::vector<ImuData>& imu_data, std::vector<PointXY
     mLastImu = ImuProcessor::buildImuSequence(imu_data, scan_end, scan_end).front();
 }
 
+ImuState ESKF::boxPlus(const ImuState& state, const ErrorStateT& increment)
+{
+    ImuState result = state;
+    result.p_WI += increment.segment<3>(0);
+    result.R_WI *= Sophus::SO3d::exp(increment.segment<3>(3));
+    result.v_WI += increment.segment<3>(6);
+    result.gyro_bias += increment.segment<3>(9);
+    result.accel_bias += increment.segment<3>(12);
+    return result;
+}
+
+ErrorStateT ESKF::boxMinus(const ImuState& state, const ImuState& reference)
+{
+    ErrorStateT result;
+    result << state.p_WI - reference.p_WI, (reference.R_WI.inverse() * state.R_WI).log(),
+              state.v_WI - reference.v_WI, state.gyro_bias - reference.gyro_bias,
+              state.accel_bias - reference.accel_bias;
+    return result;
+}
+
 Eigen::Matrix3d ESKF::rightJacobianInverse(const Eigen::Vector3d& rotation)
 {
     const double theta2 = rotation.squaredNorm();
@@ -189,9 +209,9 @@ ESKF::Result ESKF::update(const MeasurementModel& model)
     {
         const Measurement measurement = model(iterate);
         result.num_correspondences = measurement.count;
-        result.plane_rmse = measurement.count > 0 ? std::sqrt(measurement.squared_error / measurement.count) :
-                            std::numeric_limits<double>::infinity();
-        if (measurement.count < mConfig.min_correspondences || !std::isfinite(result.plane_rmse) ||
+        result.fitness_score = measurement.count > 0 ? measurement.squared_error / measurement.count :
+                               std::numeric_limits<double>::infinity();
+        if (measurement.count < mConfig.min_correspondences || !std::isfinite(result.fitness_score) ||
             !measurement.information.allFinite() || !measurement.gradient.allFinite()) return false;
         const ErrorStateT error = boxMinus(iterate, prior);
         StateCovariance A = StateCovariance::Identity();
@@ -210,19 +230,21 @@ ESKF::Result ESKF::update(const MeasurementModel& model)
     {
         if (!linearize())
         {
-            return result;
+            break;
         }
 
-        const Eigen::LLT<StateCovariance> solver(information);
+        StateCovariance damped_information = information;
+        damped_information.topLeftCorner<6, 6>().diagonal().array() += mConfig.damping_factor;
+        const Eigen::LLT<StateCovariance> solver(damped_information);
         if (solver.info() != Eigen::Success)
         {
-            return result;
+            break;
         }
 
         const ErrorStateT increment = solver.solve(-gradient);
         if (!increment.allFinite())
         {
-            return result;
+            break;
         }
 
         iterate = boxPlus(iterate, increment);
@@ -235,21 +257,27 @@ ESKF::Result ESKF::update(const MeasurementModel& model)
         }
 
         if (increment.head<3>().norm() < mConfig.convergence_translation &&
-            increment.segment<3>(3).norm() < mConfig.convergence_rotation &&
-            increment.tail<9>().norm() < 1e-3)
+            increment.segment<3>(3).norm() < mConfig.convergence_rotation)
         {
             result.converged = true;
             break;
         }
     }
 
+    // Match GICP::align(): keep a finite last iteration when the strict
+    // increment threshold is not reached within the iteration budget.
+    if (!result.converged && result.iterations > 0 && std::isfinite(result.fitness_score))
+    {
+        result.converged = true;
+    }
+
     // Re-linearize in the FINAL state's tangent. This recenters the posterior;
     // applying an additional reset Jacobian would transport it twice.
     // On failure the propagated state and covariance remain untouched.
-    // if (!result.converged || !linearize() || result.plane_rmse > mConfig.max_plane_rmse)
-    // {
-    //     return result;
-    // }
+    if (!result.converged || !linearize() || result.fitness_score > mConfig.max_fitness_score)
+    {
+        return result;
+    }
 
     const Eigen::LLT<StateCovariance> solver(information);
     if (solver.info() != Eigen::Success)

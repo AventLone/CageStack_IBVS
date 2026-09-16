@@ -92,7 +92,6 @@ private:
     Eigen::Isometry3d mBasePose{Eigen::Isometry3d::Identity()};   // Pose of the truck
     nav_msgs::msg::Path mBasePosePath;
     ROI mTrailerRoi{};
-    // SparsityAwareGICP mGicp;
     GICP mGicp;
     std::vector<double> mGicpDurationsMs;
     std::size_t mGicpDurationCount{0};

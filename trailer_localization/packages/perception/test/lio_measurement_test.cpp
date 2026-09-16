@@ -1,4 +1,4 @@
-#include "perception/LIO/LidarMeasurement.h"
+#include "perception/LIO/GicpMeasurement.h"
 #include "perception/LIO/CloudTiming.hpp"
 #include <iostream>
 
@@ -85,7 +85,7 @@ void scanToMap()
     SparseVoxel::Config map_config;
     map_config.voxel_size = 0.5f;
     map_config.max_points_per_voxel = 100;
-    map_config.estimate_covariances = false;
+    map_config.estimate_covariances = true;
     pcl::PointCloud<pcl::PointXYZ> world;
     for (int i = -10; i <= 10; ++i)
     {
@@ -112,23 +112,63 @@ void scanToMap()
     lio::StateCovariance covariance = lio::StateCovariance::Identity() * 0.1;
     covariance(5, 11) = covariance(11, 5) = -0.02;
     filter.reset(prior, covariance);
-    const lio::LidarMeasurement builder({}, T_IL);
-    const auto result = filter.update([&](const auto& state) { return builder.build(state, scan, map); });
-    require(result.accepted && result.num_correspondences > 500 && result.plane_rmse < 0.001, "Three-plane map update failed");
+    lio::GicpMeasurement::Config measurement_config;
+    measurement_config.voxel_size = map_config.voxel_size;
+    const lio::GicpMeasurement builder(measurement_config, T_IL);
+    const auto source = builder.prepareScan(scan);
+    const auto result = filter.update([&](const auto& state) { return builder.build(state, *source, map); });
+    require(result.accepted && result.num_correspondences > 500 && result.fitness_score < 1e-6,
+            "Three-plane tightly coupled GICP update failed");
     require(filter.nominalState().p_WI.norm() < 0.001 && filter.nominalState().R_WI.log().norm() < 0.001,
             "Failed to recover IMU pose with non-identity LiDAR extrinsics");
     require(filter.nominalState().gyro_bias.norm() > 0.001, "Geometric constraints did not correct gyro bias");
     pcl::PointCloud<pcl::PointXYZ> empty;
-    require(builder.build(prior, empty, map).count == 0, "Empty geometry accepted");
-    pcl::PointCloud<pcl::PointXYZ> line;
-    for (int i = 0; i < 100; ++i) line.emplace_back(0.01f * i, 0.0f, 0.0f);
-    map.initialize(line);
-    require(lio::LidarMeasurement({}, Sophus::SE3d()).build({}, line, map).count == 0, "Collinear neighbors fitted as a plane");
+    const auto empty_source = builder.prepareScan(empty);
+    require(builder.build(prior, *empty_source, map).count == 0, "Empty geometry accepted");
+
+    auto far_state = prior;
+    far_state.p_WI = Eigen::Vector3d(10.0, 0.0, 0.0);
+    require(builder.build(far_state, *source, map).count == 0, "GICP correspondence distance gate failed");
+}
+
+void gicpEskfJacobian()
+{
+    lio::GicpMeasurement::Config config;
+    config.voxel_size = 1.0f;
+    config.max_correspondence_distance = 2.0f;
+    config.cauchy_kernel_scale = 0.0f;
+    config.lidar_noise = 1.0;
+    const Sophus::SE3d T_IL(Sophus::SO3d::exp(Eigen::Vector3d(-0.1, 0.2, 0.05)),
+                            Eigen::Vector3d(0.2, -0.1, 0.05));
+    const lio::GicpMeasurement builder(config, T_IL);
+    pcl::PointCloud<pcl::PointXYZ> scan_cloud;
+    scan_cloud.emplace_back(0.4f, -0.2f, 0.3f);
+    pcl::PointCloud<pcl::PointXYZ> map_cloud;
+    map_cloud.emplace_back(0.9f, -0.1f, 0.4f);
+    const auto scan = builder.prepareScan(scan_cloud);
+    SparseVoxel::Config map_config;
+    map_config.voxel_size = config.voxel_size;
+    SparseVoxel map(map_config);
+    map.initialize(map_cloud);
+    lio::ImuState state;
+    state.p_WI = Eigen::Vector3d(0.1, -0.05, 0.02);
+    state.R_WI = Sophus::SO3d::exp(Eigen::Vector3d(0.2, -0.1, 0.15));
+    const auto measurement = builder.build(state, *scan, map);
+    require(measurement.count == 1, "Synthetic GICP correspondence missing");
+
+    const Eigen::Vector3d p_I = T_IL * Eigen::Vector3d(0.4, -0.2, 0.3);
+    const Eigen::Vector3d residual = state.R_WI * p_I + state.p_WI -
+                                     Eigen::Vector3d(0.9, -0.1, 0.4);
+    Eigen::Matrix<double, 3, 6> jacobian;
+    jacobian.leftCols<3>().setIdentity();
+    jacobian.rightCols<3>() = -state.R_WI.matrix() * Sophus::SO3d::hat(p_I);
+    require((measurement.gradient - jacobian.transpose() * residual).norm() < 1e-5,
+            "GICP right increment was mapped incorrectly into the ESKF right-error state");
 }
 }
 
 int main()
 {
-    try { cloudTimes(); scanToMap(); std::cout << "PASS: cloud timing/layout, scan-to-map pose/bias correction and degenerate plane rejection\n"; return 0; }
+    try { cloudTimes(); scanToMap(); gicpEskfJacobian(); std::cout << "PASS: cloud timing/layout, shared right-perturbation GICP update, pose/bias correction and frame Jacobian\n"; return 0; }
     catch (const std::exception& error) { std::cerr << "FAIL: " << error.what() << '\n'; return 1; }
 }

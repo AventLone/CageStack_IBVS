@@ -1,4 +1,6 @@
 #pragma once
+#include <limits>
+#include <memory>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include "perception/LIO/SparseVoxel.h"
@@ -7,6 +9,9 @@
 class GICP
 {
 public:
+    using Hessian = Eigen::Matrix<double, 6, 6>;
+    using Gradient = Eigen::Vector<double, 6>;
+
     struct Config
     {
         // 体素边长，单位 m，必须 > 0；同时用于稀疏化、协方差邻域和对应搜索。
@@ -38,7 +43,7 @@ public:
         // CPU 最多执行这么多轮；达到收敛阈值或求解失败时，会提前停止。
         int max_iterations{60};
 
-        // SE(3) 增量中平移分量的范数阈值，单位 m，要求 > 0；需与旋转阈值同时满足才停止更新。
+        // 右扰动 SE(3) 增量中平移分量的范数阈值，单位 m，要求 > 0；需与旋转阈值同时满足才停止更新。
         // 增大更早停止、精细程度降低；减小更严格、可能因浮点精度或噪声持续迭代；1e-6 m 为 1 微米。
         float convergence_translation{1.0e-5f};
 
@@ -56,6 +61,24 @@ public:
         std::size_t num_correspondences{0};
         double fitness_score{std::numeric_limits<double>::infinity()};
         Eigen::Isometry3d transform{Eigen::Isometry3d::Identity()};
+    };
+
+    // A single GICP Gauss-Newton linearization in right SE(3) coordinates:
+    // T_next = T * Exp(delta). Standalone registration and the tightly coupled
+    // ESKF share this exact correspondence, covariance and robust weighting.
+    struct Linearization
+    {
+        Hessian hessian{Hessian::Zero()};
+        Gradient gradient{Gradient::Zero()};
+        std::size_t num_correspondences{0};
+        double squared_error_sum{0.0};
+
+        [[nodiscard]] double fitnessScore() const noexcept
+        {
+            return num_correspondences > 0
+                ? squared_error_sum / static_cast<double>(num_correspondences)
+                : std::numeric_limits<double>::infinity();
+        }
     };
 
     GICP() : GICP(Config{})
@@ -109,6 +132,12 @@ public:
         mTarget->insert(points);
     }
 
+    [[nodiscard]] std::unique_ptr<SparseVoxel> createSourceIndex(
+        const pcl::PointCloud<pcl::PointXYZ>& source) const;
+
+    [[nodiscard]] Linearization linearize(const SparseVoxel& source,
+                                          const SparseVoxel& target,
+                                          const Sophus::SE3d& source_to_target) const;
 
     void clearTarget() noexcept
     {
@@ -130,7 +159,4 @@ private:
     void findCorrespondences(const std::vector<const PointWithCovariance*>& source, const SparseVoxel& target,
                              const Sophus::SE3d& source_to_target, std::vector<Correspondence>& correspondences) const;
 
-    bool buildAndSolve(const std::vector<const PointWithCovariance*>& source, const std::vector<Correspondence>& correspondences,
-                       Sophus::SE3d& source_to_target, std::size_t& num_correspondences,
-                       double& fitness_score, Sophus::SE3d::Tangent& left_increment) const;
 };

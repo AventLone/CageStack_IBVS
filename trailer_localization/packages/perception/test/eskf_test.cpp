@@ -1,4 +1,4 @@
-#include "perception/LIO/PointToPlane.hpp"
+#include "perception/LIO/ESKF.h"
 #include <Eigen/Cholesky>
 #include <iostream>
 #include <stdexcept>
@@ -17,24 +17,8 @@ template<class Function> void rejects(Function&& function)
     require(threw, "Invalid input was not rejected");
 }
 
-void geometryJacobians()
+void priorJacobian()
 {
-    ImuState state;
-    state.R_WI = Sophus::SO3d::exp(Eigen::Vector3d(0.3, -0.2, 0.1));
-    state.p_WI = Eigen::Vector3d(1.0, -2.0, 0.4);
-    const Sophus::SE3d T_IL(Sophus::SO3d::exp(Eigen::Vector3d(-0.1, 0.4, 0.2)), Eigen::Vector3d(0.4, 0.1, -0.2));
-    const Eigen::Vector3d point = T_IL * Eigen::Vector3d(2.0, -1.0, 0.7);
-    const Eigen::Vector3d normal = Eigen::Vector3d(0.2, 0.3, 0.7).normalized();
-    const Eigen::Vector3d center(1.0, 2.0, 3.0);
-    const auto analytic = PointToPlane::linearize(state, point, normal, center);
-    for (int i = 0; i < 6; ++i)
-    {
-        ErrorStateT delta = ErrorStateT::Zero();
-        delta[i] = 1e-6;
-        const auto a = PointToPlane::linearize(ESKF::boxPlus(state, delta), point, normal, center);
-        const auto b = PointToPlane::linearize(ESKF::boxPlus(state, -delta), point, normal, center);
-        require(std::abs((a.residual - b.residual) / 2e-6 - analytic.jacobian[i]) < 1e-8, "Point-plane Jacobian sign/frame error");
-    }
     const Eigen::Vector3d rotation(0.3, -0.4, 0.2);
     const auto J = ESKF::rightJacobianInverse(rotation);
     for (int i = 0; i < 3; ++i)
@@ -94,14 +78,26 @@ void linearPosteriorAndRejection()
     require((ESKF::boxMinus(filter.nominalState(), state) - expected).norm() < 1e-9, "Full-state Kalman update incorrect");
     require((filter.covariance() - posterior).norm() < 1e-10, "Prior/measurement counted more than once");
     require(std::abs(filter.nominalState().accel_bias.x()) > 1e-3, "LiDAR failed to update accel bias");
+
+    ESKF::Config one_step_config;
+    one_step_config.max_iterations = 1;
+    one_step_config.max_fitness_score = 1.0;
+    one_step_config.convergence_translation = 1e-12;
+    one_step_config.convergence_rotation = 1e-12;
+    ESKF one_step(one_step_config);
+    one_step.reset(state, prior);
+    const auto one_step_result = one_step.update(model);
+    require(one_step_result.accepted && one_step_result.converged && one_step_result.iterations == 1,
+            "Finite last GICP-style iteration was discarded at the iteration limit");
+
     const auto saved_state = filter.nominalState();
     const auto saved_covariance = filter.covariance();
     require(!filter.update([](const auto&) { return ESKF::Measurement{}; }).accepted, "Empty scan accepted");
     require(ESKF::boxMinus(filter.nominalState(), saved_state).norm() == 0.0 &&
             filter.covariance() == saved_covariance, "Rejected update changed prior");
     require(!filter.update([](const auto&) { ESKF::Measurement m; m.count = 30; m.squared_error = 30.0; return m; }).accepted,
-            "Bad final RMSE accepted");
-    require(filter.covariance() == saved_covariance, "Rejected RMSE shrank covariance");
+            "Bad final GICP fitness accepted");
+    require(filter.covariance() == saved_covariance, "Rejected fitness shrank covariance");
 }
 
 void deskewAndScanGap()
@@ -196,9 +192,9 @@ int main()
 {
     try
     {
-        geometryJacobians(); propagationAndBias(); linearPosteriorAndRejection();
+        priorJacobian(); propagationAndBias(); linearPosteriorAndRejection();
         deskewAndScanGap(); initializationAndInputValidation(); propagationJacobian();
-        std::cout << "PASS: geometry/prior Jacobians, propagation/cross covariance, analytic posterior/bias correction, rejection, deskew/gaps, initialization and invalid input\n";
+        std::cout << "PASS: prior Jacobian, propagation/cross covariance, analytic posterior/bias correction, rejection, deskew/gaps, initialization and invalid input\n";
         return 0;
     }
     catch (const std::exception& error) { std::cerr << "FAIL: " << error.what() << '\n'; return 1; }

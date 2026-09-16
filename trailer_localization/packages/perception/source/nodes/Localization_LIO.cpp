@@ -60,6 +60,11 @@ Localization_LIO::Localization_LIO(const std::string& node_name) : Node(node_nam
     filter.gravity_magnitude = declare_parameter("lio.gravity_magnitude", filter.gravity_magnitude);
     filter.max_imu_gap = declare_parameter("lio.max_imu_gap", filter.max_imu_gap);
     filter.max_iterations = declare_parameter("lio.max_iterations", filter.max_iterations);
+    filter.damping_factor = declare_parameter("lio.damping_factor", filter.damping_factor);
+    filter.convergence_translation = declare_parameter(
+        "lio.convergence_translation", filter.convergence_translation);
+    filter.convergence_rotation = declare_parameter(
+        "lio.convergence_rotation", filter.convergence_rotation);
     const int min_matches = declare_parameter("lio.min_correspondences", 30);
 
     if (min_matches < 3)
@@ -68,23 +73,24 @@ Localization_LIO::Localization_LIO(const std::string& node_name) : Node(node_nam
     }
 
     filter.min_correspondences = static_cast<std::size_t>(min_matches);
-    filter.max_plane_rmse = declare_parameter("lio.max_plane_rmse", filter.max_plane_rmse);
+    filter.max_fitness_score = declare_parameter("lio.max_fitness_score", filter.max_fitness_score);
     mEskf = std::make_unique<lio::ESKF>(filter, T_IL);
 
-    lio::LidarMeasurement::Config measurement;
-    measurement.lidar_noise = declare_parameter("lio.lidar_noise", measurement.lidar_noise);
-    measurement.max_residual = declare_parameter("lio.max_residual", measurement.max_residual);
-    measurement.max_neighbor_distance = declare_parameter("lio.max_neighbor_distance", measurement.max_neighbor_distance);
-    measurement.max_plane_distance = declare_parameter("lio.max_plane_distance", measurement.max_plane_distance);
-    measurement.voxel_radius = declare_parameter("lio.voxel_radius", measurement.voxel_radius);
-
-    mLidarMeasurement = std::make_unique<lio::LidarMeasurement>(measurement, T_IL);
-    mMapConfig.estimate_covariances = false;
+    mMapConfig.estimate_covariances = true;
     mMapConfig.voxel_size = static_cast<float>(declare_parameter("lio.map_voxel_size", 0.5));
     const int max_voxels = declare_parameter("lio.max_map_voxels", 200000);
     if (max_voxels <= 0) throw std::invalid_argument("max_map_voxels must be positive.");
     mMapConfig.max_voxels_num = static_cast<std::size_t>(max_voxels);
     mMap = std::make_unique<SparseVoxel>(mMapConfig);
+
+    lio::GicpMeasurement::Config measurement;
+    measurement.voxel_size = mMapConfig.voxel_size;
+    measurement.max_correspondence_distance = static_cast<float>(declare_parameter(
+        "lio.max_correspondence_distance", static_cast<double>(measurement.max_correspondence_distance)));
+    measurement.cauchy_kernel_scale = static_cast<float>(declare_parameter(
+        "lio.cauchy_kernel_scale", static_cast<double>(measurement.cauchy_kernel_scale)));
+    measurement.lidar_noise = declare_parameter("lio.lidar_noise", measurement.lidar_noise);
+    mGicpMeasurement = std::make_unique<lio::GicpMeasurement>(measurement, T_IL);
     mScanResolution = declare_parameter("lio.scan_resolution", mScanResolution);
     mImuWaitTimeout = declare_parameter("lio.imu_wait_timeout", mImuWaitTimeout);
     mInitializationDuration = declare_parameter("lio.initialization_duration", mInitializationDuration);
@@ -339,9 +345,10 @@ void Localization_LIO::lidarWorkerLoop()
             }
             else
             {
+                const auto source_index = mGicpMeasurement->prepareScan(filtered);
                 const auto result = mEskf->update([&](const lio::ImuState& state)
                     {
-                        return mLidarMeasurement->build(state, filtered, *mMap);
+                        return mGicpMeasurement->build(state, *source_index, *mMap);
                     });
 
                 if (result.accepted)
@@ -352,8 +359,11 @@ void Localization_LIO::lidarWorkerLoop()
                 }
                 else
                 {
-                    RCLCPP_WARN(get_logger(), "LiDAR update rejected: %zu planes, RMSE %.4f, iterations %d; keeping IMU prior.",
-                                result.num_correspondences, result.plane_rmse, result.iterations);
+                    RCLCPP_WARN(get_logger(),
+                        "GICP update rejected: %zu correspondences, fitness %.6f m^2 (RMSE %.4f m), "
+                        "iterations %d; keeping IMU prior.",
+                        result.num_correspondences, result.fitness_score,
+                        std::sqrt(result.fitness_score), result.iterations);
                 }
             }
             publish(filtered, scan.end);

@@ -2,6 +2,14 @@
 #include <algorithm>
 #include <execution>
 
+std::unique_ptr<SparseVoxel> GICP::createSourceIndex(
+    const pcl::PointCloud<pcl::PointXYZ>& source) const
+{
+    auto source_index = std::make_unique<SparseVoxel>(mSparseVoxelConfig);
+    source_index->initialize(source);
+    return source_index;
+}
+
 void GICP::findCorrespondences(const std::vector<const PointWithCovariance*>& source,
                                             const SparseVoxel& target,
                                             const Sophus::SE3d& source_to_target,
@@ -18,15 +26,19 @@ void GICP::findCorrespondences(const std::vector<const PointWithCovariance*>& so
         });
 }
 
-bool GICP::buildAndSolve(const std::vector<const PointWithCovariance*>& source,
-                   const std::vector<Correspondence>& correspondences, Sophus::SE3d& source_to_target,
-                   std::size_t& num_correspondences, double& fitness_score, Sophus::SE3d::Tangent& left_increment) const
+GICP::Linearization GICP::linearize(const SparseVoxel& source,
+                                    const SparseVoxel& target,
+                                    const Sophus::SE3d& source_to_target) const
 {
-    Eigen::Matrix<double, 6, 6> hessian = Eigen::Matrix<double, 6, 6>::Zero();
-    Eigen::Vector<double, 6> gradient = Eigen::Vector<double, 6>::Zero();
+    Linearization result;
+    const std::vector<const PointWithCovariance*> source_points = source.points();
+    if (source_points.empty() || target.empty())
+    {
+        return result;
+    }
 
-    double squared_error_sum = 0.0;
-    int valid_count = 0;
+    std::vector<Correspondence> correspondences(source_points.size());
+    findCorrespondences(source_points, target, source_to_target, correspondences);
     const Eigen::Matrix3d rotation = source_to_target.rotationMatrix();
 
     for (std::size_t index = 0; index < correspondences.size(); ++index)
@@ -37,7 +49,7 @@ bool GICP::buildAndSolve(const std::vector<const PointWithCovariance*>& source,
             continue;
         }
 
-        const PointWithCovariance& source_point = *source[index];
+        const PointWithCovariance& source_point = *source_points[index];
 
         Eigen::Matrix3d covariance = Eigen::Matrix3d::Identity();
         if (source_point.covariance_valid)
@@ -49,7 +61,7 @@ bool GICP::buildAndSolve(const std::vector<const PointWithCovariance*>& source,
             covariance += rotation * source_point.covariance.cast<double>() * rotation.transpose();
         }
 
-        const Eigen::Matrix3d precision = covariance.cast<double>().inverse();
+        const Eigen::Matrix3d precision = covariance.inverse();
         if (!precision.allFinite())
         {
             continue;
@@ -63,36 +75,16 @@ bool GICP::buildAndSolve(const std::vector<const PointWithCovariance*>& source,
         const double weight = mConfig.cauchy_kernel_scale > 0.0 ? 1.0 / (1.0 + mahalanobis_error / kernel_scale2) : 1.0;
 
         Eigen::Matrix<double, 3, 6> jacobian;
-        jacobian.leftCols<3>().setIdentity();
-        jacobian.rightCols<3>() = -Sophus::SO3d::hat(transformed_position);
-        hessian.noalias() += jacobian.transpose() * weight * precision * jacobian;
-        gradient.noalias() += jacobian.transpose() * weight * precision_residual;
-        squared_error_sum += residual.squaredNorm();
-        ++valid_count;
+        // Right perturbation: T' = T * Exp(delta_rho_L, delta_theta_L).
+        // Both increments are expressed in the source/LiDAR frame.
+        jacobian.leftCols<3>() = rotation;
+        jacobian.rightCols<3>() = -rotation * Sophus::SO3d::hat(source_point.position.cast<double>());
+        result.hessian.noalias() += jacobian.transpose() * weight * precision * jacobian;
+        result.gradient.noalias() += jacobian.transpose() * weight * precision_residual;
+        result.squared_error_sum += residual.squaredNorm();
+        ++result.num_correspondences;
     }
-
-    num_correspondences = static_cast<std::size_t>(valid_count);
-    fitness_score = valid_count > 0 ? squared_error_sum / static_cast<double>(valid_count) : std::numeric_limits<double>::infinity();
-    if (valid_count == 0 || !std::isfinite(squared_error_sum))
-    {
-        return false;
-    }
-
-    hessian.diagonal().array() += mConfig.damping_factor;
-    const Eigen::LDLT<Eigen::Matrix<double, 6, 6>> decomposition(hessian);
-    if (decomposition.info() != Eigen::Success)
-    {
-        return false;
-    }
-
-    left_increment = decomposition.solve(-gradient);
-    if (decomposition.info() != Eigen::Success || !left_increment.allFinite())
-    {
-        return false;
-    }
-
-    source_to_target = Sophus::SE3d::exp(left_increment) * source_to_target;
-    return true;
+    return result;
 }
 
 GICP::Result GICP::align(const pcl::PointCloud<pcl::PointXYZ>& source,
@@ -110,36 +102,40 @@ GICP::Result GICP::align(const pcl::PointCloud<pcl::PointXYZ>& source,
     Result result;
     result.transform = initial_guess;
 
-    SparseVoxel source_index(mSparseVoxelConfig);
-    source_index.initialize(source);
-    result.num_source_points = source_index.pointCount();
+    const auto source_index = createSourceIndex(source);
+    result.num_source_points = source_index->pointCount();
     result.num_target_points = mTarget->pointCount();
-    if (source_index.empty() || mTarget->empty())
+    if (source_index->empty() || mTarget->empty())
     {
         return result;
     }
-
-    const std::vector<const PointWithCovariance*> source_points = source_index.points();
-    std::vector<Correspondence> correspondences(source_points.size());
 
     Sophus::SE3d source_to_target(initial_guess.rotation(), initial_guess.translation());
 
     for (int iteration = 0; iteration < mConfig.max_iterations; ++iteration)
     {
-        findCorrespondences(source_points, *mTarget, source_to_target, correspondences);
-
-        Sophus::SE3d::Tangent left_increment;
-        if (!buildAndSolve(source_points, correspondences, source_to_target,
-                           result.num_correspondences, result.fitness_score, left_increment))
+        const Linearization system = linearize(*source_index, *mTarget, source_to_target);
+        result.num_correspondences = system.num_correspondences;
+        result.fitness_score = system.fitnessScore();
+        if (system.num_correspondences == 0 || !std::isfinite(system.squared_error_sum))
         {
             break;
         }
 
+        Hessian damped_hessian = system.hessian;
+        damped_hessian.diagonal().array() += mConfig.damping_factor;
+        const Eigen::LDLT<Hessian> decomposition(damped_hessian);
+        if (decomposition.info() != Eigen::Success) break;
+        const Sophus::SE3d::Tangent right_increment = decomposition.solve(-system.gradient);
+        if (decomposition.info() != Eigen::Success || !right_increment.allFinite()) break;
+
+        source_to_target = source_to_target * Sophus::SE3d::exp(right_increment);
+
         ++result.iterations;
         result.transform = Eigen::Isometry3d(source_to_target.matrix());
 
-        if (left_increment.head<3>().norm() < mConfig.convergence_translation &&
-            left_increment.tail<3>().norm() < mConfig.convergence_rotation)
+        if (right_increment.head<3>().norm() < mConfig.convergence_translation &&
+            right_increment.tail<3>().norm() < mConfig.convergence_rotation)
         {
             result.converged = true;
             break;

@@ -31,13 +31,15 @@
       accel_bias_noise: 0.001
       max_imu_gap: 0.05
       max_iterations: 10
+      damping_factor: 0.001
+      convergence_translation: 0.00001
+      convergence_rotation: 0.00001
       min_correspondences: 30
-      max_plane_rmse: 0.15
+      # Mean squared Euclidean GICP residual; 0.01 m^2 corresponds to 0.1 m RMSE.
+      max_fitness_score: 0.01
       lidar_noise: 0.03
-      max_residual: 0.3
-      max_neighbor_distance: 1.0
-      max_plane_distance: 0.05
-      voxel_radius: 2
+      max_correspondence_distance: 0.5
+      cauchy_kernel_scale: 0.3
       map_voxel_size: 0.5
       max_map_voxels: 200000
       scan_resolution: 0.1

@@ -9,7 +9,7 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <nav_msgs/msg/path.hpp>
 #include "perception/LIO/CloudTiming.hpp"
-#include "perception/LIO/LidarMeasurement.h"
+#include "perception/LIO/GicpMeasurement.h"
 #include <tf2_eigen/tf2_eigen.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
@@ -44,7 +44,7 @@ private:
     lio::CloudTimingConfig mTimingConfig;
     SparseVoxel::Config mMapConfig;
     std::unique_ptr<lio::ESKF> mEskf;
-    std::unique_ptr<lio::LidarMeasurement> mLidarMeasurement;
+    std::unique_ptr<lio::GicpMeasurement> mGicpMeasurement;
     std::unique_ptr<SparseVoxel> mMap;
     nav_msgs::msg::Path mBasePosePath;
     std::string mWorldFrame, mImuFrame, mLidarFrame;

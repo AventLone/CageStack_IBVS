@@ -1,6 +1,6 @@
-# SparsityAwareGICP Mathematical Principles
+# GICP Mathematical Principles
 
-本文档解释 `SparsityAwareGICP` 使用的稀疏 GICP 原理与数学约定。实现和数据结构细节请参考 [SparsityAwareGICP_algorithm.md](SparsityAwareGICP_algorithm.md)。
+本文档解释 `GICP` 使用的稀疏 GICP 原理与数学约定。实现和数据结构细节请参考 [SparsityAwareGICP_algorithm.md](SparsityAwareGICP_algorithm.md)。
 
 ## 1 问题定义
 
@@ -192,11 +192,11 @@ $$
 \end{bmatrix}^T
 $$
 
-其中 $\rho\in\mathbb{R}^3$ 是平移小量，$\omega\in\mathbb{R}^3$ 是旋转向量小量。Sophus 的 `SE3f::Tangent` 使用的正是这个排列。
+其中 $\rho\in\mathbb{R}^3$ 是平移小量，$\omega\in\mathbb{R}^3$ 是旋转向量小量。Sophus 的 `SE3d::Tangent` 使用的正是这个排列。
 
 ### 6.2 左扰动：增量在目标坐标系表达
 
-当前实现采用左扰动：
+左扰动的定义是：
 
 $$
 T \leftarrow \exp(\delta)T
@@ -252,11 +252,11 @@ I & -[T p_i]_\times
 \end{bmatrix}
 $$
 
-这解释了实现中的：
+对应实现形式为：
 
 ```cpp
 jacobian.leftCols<3>().setIdentity();
-jacobian.rightCols<3>() = -Sophus::SO3f::hat(transformed_position);
+jacobian.rightCols<3>() = -Sophus::SO3d::hat(transformed_position);
 ```
 
 这里的左侧不是代码风格，而是群乘法中增量的位置。由于增量乘在 $T$ 左侧，$\rho$ 和 $\omega$ 都在目标坐标系中表达。这很**适合残差、地图或外部修正在目标/世界坐标系中表达的情况**。
@@ -296,16 +296,16 @@ R & -R[p_i]_\times
 \end{bmatrix}
 $$
 
-它依赖原始源点 $p_i$ 与当前旋转 $R$，而不是变换后的点 $Tp_i$。若将当前实现改为右扰动，必须成对修改为：
+它依赖原始源点 $p_i$ 与当前旋转 $R$，而不是变换后的点 $Tp_i$。当前实现采用这一右扰动形式，并成对使用：
 
 ```cpp
 jacobian.leftCols<3>() = source_to_target.rotationMatrix();
 jacobian.rightCols<3>() = -source_to_target.rotationMatrix() *
-                           Sophus::SO3f::hat(source_point.position);
-source_to_target = source_to_target * Sophus::SE3f::exp(right_increment);
+                           Sophus::SO3d::hat(source_point.position.cast<double>());
+source_to_target = source_to_target * Sophus::SE3d::exp(right_increment);
 ```
 
-这里只展示数学上配对的关键变化；变量名、收敛阈值说明和文档中的增量参考系也应同步更新。
+Jacobian 和更新乘法顺序必须保持这组配对关系。
 
 ### 6.4 两种增量如何表示同一个物理修正
 
@@ -350,7 +350,7 @@ $$
 | 左扰动 | $T\leftarrow\exp(\delta_l)T$ | 目标/世界坐标系 | $[I,-[Tp_i]_\times]$ | 扫描到地图配准；地图残差、全局位置修正或世界系先验直接进入优化 |
 | 右扰动 | $T\leftarrow T\exp(\delta_r)$ | 源/机体系 | $[R,-R[p_i]_\times]$ | 连续时间轨迹、里程计或 IMU 预积分中以传感器/机体系表达的小运动和先验 |
 
-对于纯扫描到地图 GICP，两种约定都可用。当前残差是在目标地图坐标系中计算，且 `source_to_target` 表达源点到目标地图的变换，因此实现采用左扰动较直接。若后续把车体/传感器坐标系中的运动模型或先验直接作为增量优化变量，右扰动可能更符合该先验的物理表达；此时应将先验、协方差和 Jacobian 一起转换到右扰动坐标系，而不是只交换位姿更新的乘法顺序。
+对于纯扫描到地图 GICP，两种约定都可用。当前实现采用右扰动，使增量在源/LiDAR 系表达，并便于与使用右旋转误差的 IMU 状态结合。任何世界系位置先验仍需连同协方差和 Jacobian 一起映射，不能只交换位姿更新的乘法顺序。
 
 
 
@@ -406,13 +406,13 @@ $$
 求解成功后，Sophus 使用指数映射将李代数增量投影回刚体变换群：
 
 $$
-T_{k+1}=\exp(\delta_k)T_k
+T_{k+1}=T_k\exp(\delta_k)
 $$
 
 对应实现为：
 
 ```cpp
-source_to_target = Sophus::SE3f::exp(left_increment) * source_to_target;
+source_to_target = source_to_target * Sophus::SE3d::exp(right_increment);
 ```
 
 
@@ -493,13 +493,13 @@ for each source point p_i:
 
     e_i = r_i^T * W_i * r_i
     w_i = CauchyWeight(e_i)
-    J_i = [I, -hat(x_i)]
+    J_i = [R, -R * hat(p_i)]
 
     H += J_i^T * w_i * W_i * J_i
     g += J_i^T * w_i * W_i * r_i
 
 solve (H + lambda * I) * delta = -g
-T = Exp(delta) * T
+T = T * Exp(delta)
 ```
 
 下一轮会用更新后的 $T$ 重新搜索对应、重新计算残差、协方差旋转和鲁棒权重，直到达到停止条件或耗尽 `max_iterations`。

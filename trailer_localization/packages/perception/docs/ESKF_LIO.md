@@ -1,5 +1,7 @@
 # IMU–LiDAR 紧耦合 ESKF
 
+点云补偿到扫描结束时刻后，`GICP` 的逐点三维残差、源/目标协方差、Cauchy 权重和右扰动线性化直接进入 ESKF 正规方程。LIO 不先运行独立配准，也不把 GICP 输出的 6D 位姿当作观测，因此仍是紧耦合。
+
 ## 1 Scan 去畸变
 
 **估计这一帧 LiDAR 扫描期间传感器的连续运动，然后把每个点“搬回”到同一个时刻的坐标系里。**
@@ -125,17 +127,35 @@ R *= Exp(omega*dt)
 
 
 
-## 4 点到平面迭代更新
+## 4 GICP 紧耦合迭代更新
 
-对扫描末端 LiDAR 系中的点 `p_L`，在固定世界地图中查找邻居，从原始坐标拟合平面中心 `q_W` 和单位法向量 `n_W`：
+每帧仅建立一次源点 `SparseVoxel` 和局部协方差。每次迭代根据当前 `T_WL` 重新查找地图最近邻，并调用与 `GICP::align()` 完全相同的 `linearize()`：
 
 ```text
-p_I = T_IL * p_L
-r = n_Wᵀ (R_WI * p_I + p_WI - q_W)
-H = [n_Wᵀ, -n_Wᵀ R_WI hat(p_I), 0, 0, 0]
+r_i = T_WL * p_Li - q_Wi
+C_i = C_target_i + R_WL * C_source_i * R_WLᵀ
+e_i = r_iᵀ C_i⁻¹ r_i
+w_i = 1 / (1 + e_i / cauchy_scale²)
+J_right = [R_WL, -R_WL * hat(p_Li)]
 ```
 
-不使用 SparseVoxel 中经过归一化的 GICP 协方差作为物理观测方差。平面拟合会拒绝邻居不足、距离过远、共线和明显非平面的邻域；残差采用距离门限和 Huber 权重。默认测量标准差为 0.03 m，需要根据真实点云噪声和下采样密度调整。
+`GICP::linearize()` 同时供独立 GICP 和 LIO 使用，避免两套对应搜索、协方差或权重实现发生偏差。`SparseVoxel` 归一化协方差只提供各向异性形状；`lidar_noise²` 为它补充与 ESKF 先验比较所需的物理尺度：
+
+```text
+Omega_i = (lidar_noise² * C_i)⁻¹
+```
+
+这不是把无量纲归一化协方差直接冒充物理协方差。`lidar_noise` 是整体尺度，需要用真实残差或 NIS 标定。
+
+GICP 使用 LiDAR 系右扰动 `T_WL' = T_WL * Exp(delta_right_L)`；ESKF 使用世界系加法位置误差和 IMU 系右旋转误差。实现通过解析变换把 GICP 的 6×6 Hessian 和梯度映射到 `[dp_W, dtheta_I]`。其中 `t_IL` 是 LiDAR 原点在 IMU 系的位置：
+
+```text
+delta_right_L = M * [dp_W, dtheta_I]
+M = [R_WLᵀ, -R_WLᵀ R_WI hat(t_IL);
+     0,                         R_ILᵀ]
+H_eskf = Mᵀ H_gicp M
+g_eskf = Mᵀ g_gicp
+```
 
 令 IMU 传播先验为 `x_bar, P_bar`，第 k 次迭代为 `x_k`，`e = x_k boxminus x_bar`。姿态部分的先验切空间雅可比为 SO(3) 右雅可比的逆 `Jr⁻¹(e_theta)`，其余块为单位阵，合成 A：
 
@@ -146,9 +166,9 @@ delta  = -Lambda⁻¹ b
 x_next = x_k boxplus delta
 ```
 
-虽然 LiDAR 的 H 只有位姿列非零，15×15 的先验信息会使速度和 bias 同时获得修正。每轮重新查找对应和拟合平面；**整个迭代只使用同一份 P_bar**。收敛后在最终状态切空间重新线性化并求逆，得到已重置到新名义状态的后验协方差，不再额外乘一次 reset Jacobian。
+虽然 GICP 信息只有位姿块非零，15×15 的先验信息会使速度和 bias 同时获得修正。每轮重新查找对应，但源点协方差只计算一次；**整个迭代只使用同一份 P_bar**。求解时在位姿块加入与独立 GICP 相同的固定阻尼，最终后验协方差使用未加阻尼的信息矩阵。收敛只检查位姿增量；与 `GICP::align()` 一样，达到最大迭代次数后保留最后一次有限迭代。
 
-验收条件包括有效平面数、收敛、最终残差 RMSE、最大位姿修正和矩阵正定性。验收失败保留本帧 IMU 预测及其协方差，并跳过地图写入。地图只在首帧建立或成功更新后写入。退化方向仍主要受 IMU 先验约束；长走廊中缺少端面时，沿走廊方向可能不可观，不能用更多相同方向平面消除这一几何退化。
+验收条件包括有效对应数、最终 fitness、最大位姿修正和矩阵正定性。fitness 与独立 GICP 一致，是未加权欧氏残差平方均值，单位 `m²`。验收失败保留本帧 IMU 预测及其协方差，并跳过地图写入。地图只在首帧建立或成功更新后写入。退化方向仍主要受 IMU 先验约束。
 
 
 
@@ -195,8 +215,9 @@ lio::ESKF filter(config, T_IL);
 filter.initialize(stationary_imu);  // 检查返回值；也可 reset(known_state, covariance)
 filter.processScan(imu_covering_interval, timed_points, scan_begin, scan_end);
 // 将 timed_points 转为扫描末端 LiDAR 系的 pcl cloud 并下采样。
+auto source_index = gicp_measurement.prepareScan(scan);
 auto result = filter.update([&](const lio::ImuState& state) {
-    return lidar_measurement.build(state, scan, world_map);
+    return gicp_measurement.build(state, *source_index, world_map);
 });
 // result.accepted 才把 scan 通过 filter.lidarPose() 变换后写入地图。
 ```
@@ -209,7 +230,7 @@ auto result = filter.update([&](const lio::ImuState& state) {
 
 `eskf_test` 检查有限差分几何/先验雅可比、带 bias 的静止传播、常加速度积分、协方差交叉项、解析卡尔曼后验、拒绝更新回滚、非单位外参下的旋转/平移去畸变、扫描间隙、初始化和非法输入。
 
-`lio_measurement_test` 检查组织化点云/行 padding/字节序、绝对秒/相对纳秒、缺失与错误时间字段、三平面地图的位姿/gyro bias 修正及共线邻域拒绝。
+`lio_measurement_test` 检查组织化点云/行 padding/字节序、绝对秒/相对纳秒、缺失与错误时间字段、共享 GICP 右扰动线性化、LiDAR 右扰动到 ESKF 误差状态的解析映射、三平面地图的位姿与 gyro bias 修正，以及对应距离门限。
 
 ```bash
 ctest --test-dir build/perception --output-on-failure -R '^(eskf_test|lio_measurement_test)$'

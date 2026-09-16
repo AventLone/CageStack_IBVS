@@ -43,7 +43,8 @@ if (BUILD_TESTING)
     add_test(NAME eskf_test COMMAND eskf_test)
 
     add_executable(lio_measurement_test test/lio_measurement_test.cpp
-        source/LIO/LidarMeasurement.cpp source/LIO/SparseVoxel.cpp source/LIO/ESKF.cpp)
+        source/LIO/GicpMeasurement.cpp source/LIO/SparseVoxel.cpp source/LIO/ESKF.cpp
+        source/GICP/GICP.cpp)
     target_include_directories(lio_measurement_test PRIVATE include ${Boost_INCLUDE_DIRS})
     target_link_libraries(lio_measurement_test Sophus::Sophus TBB::tbb)
     ament_target_dependencies(lio_measurement_test pcl_ros sensor_msgs)

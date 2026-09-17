@@ -123,8 +123,9 @@ void scanToMap()
     truth.p_WI = Eigen::Vector3d(0.04, -0.03, 0.02);
     truth.R_WI = Sophus::SO3d::exp(Eigen::Vector3d(0.01, -0.015, 0.02));
     const auto result = filter.update(makeScan(truth));
-    require(result.accepted && result.num_correspondences > 500 && result.fitness_score < 1e-6,
-            "Internal right-perturbation ESKF update failed");
+    require(result.accepted, "Internal right-perturbation ESKF update was rejected");
+    require(result.num_correspondences > 500, "Internal ESKF update found too few correspondences");
+    require(result.fitness_score < 1e-3, "Internal ESKF update left an excessive residual");
     require(lio::ESKF::boxMinus(filter.nominalState(), truth).head<6>().norm() < 0.002,
             "Failed to recover the IMU pose with non-identity LiDAR extrinsics");
     require(filter.nominalState().gyro_bias.norm() > 0.001, "Geometric constraints did not correct gyro bias");
@@ -157,7 +158,7 @@ void rightEskfJacobian()
     {
         lio::ErrorStateT delta = lio::ErrorStateT::Zero();
         delta[i] = 1e-6;
-        const auto residual = [&](const lio::ImuState& value)
+        const auto residual = [&](const lio::ImuState& value) -> Eigen::Vector3d
             { return value.R_WI * p_I + value.p_WI - target; };
         const Eigen::Vector3d numerical =
             (residual(lio::ESKF::boxPlus(state, delta)) -

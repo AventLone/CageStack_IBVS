@@ -102,7 +102,7 @@ flowchart TD
     G --> H[CPU 对应搜索]
     H --> I[构建 Hessian 和 gradient]
     I --> J[Eigen LDLT 求解]
-    J --> K[Sophus 右乘更新]
+    J --> K[Sophus 左乘更新]
     K --> L{增量足够小?}
     L -->|否| H
     L -->|是| M[输出 Result]
@@ -263,7 +263,7 @@ $$
 
 
 
-## 7 GICP 线性系统：`linearize()`
+## 7 GICP 线性系统：`buildAndSolve()`
 
 每一轮对应搜索后，CPU 遍历所有有效对应，构建一个稠密的 $6 \times 6$ Hessian 和 $6 \times 1$ gradient。
 
@@ -310,12 +310,12 @@ $$
 
 当 $s \leq 0$ 时，鲁棒核关闭，$w = 1$。
 
-### 7.3 右扰动 Jacobian
+### 7.3 左扰动 Jacobian
 
-内部位姿 `source_to_target` 是 `Sophus::SE3d`，采用右乘增量：
+内部位姿 `source_to_target` 是 `Sophus::SE3d`，采用左乘增量：
 
 $$
-T \leftarrow T\exp(\delta)
+T \leftarrow \exp(\delta)T
 $$
 
 其中：
@@ -327,24 +327,24 @@ $$
 \end{bmatrix}^T
 $$
 
-前三维是源/LiDAR 系平移增量，后三维是源/LiDAR 系旋转向量。对 $T=(R,t)$ 和源点 $p_s$，Jacobian 为：
+前三维是目标/世界系平移增量，后三维是目标/世界系旋转向量。令已变换源点 $x=T p_s$，Jacobian 为：
 
 $$
-J = \begin{bmatrix}R & -R[p_s]_\times\end{bmatrix}
+J = \begin{bmatrix}I & -[x]_\times\end{bmatrix}
 $$
 
 其中：
 
 $$
-[p_s]_\times =
+[x]_\times =
 \begin{bmatrix}
-0 & -p_{s,z} & p_{s,y} \\
-p_{s,z} & 0 & -p_{s,x} \\
--p_{s,y} & p_{s,x} & 0
+0 & -x_z & x_y \\
+x_z & 0 & -x_x \\
+-x_y & x_x & 0
 \end{bmatrix}
 $$
 
-代码使用 `Sophus::SO3d::hat(source_point.position.cast<double>())` 构造源点反对称矩阵。
+代码使用 `Sophus::SO3d::hat(transformed_position)` 构造已变换点的反对称矩阵。
 
 每个有效对应的贡献为：
 
@@ -382,10 +382,10 @@ $$
 H'\delta = -g
 $$
 
-若分解或求解失败，或 `right_increment.allFinite()` 为假，迭代停止。成功后由 Sophus 完成指数映射和右乘更新：
+若分解或求解失败，或 `left_increment.allFinite()` 为假，迭代停止。成功后由 Sophus 完成指数映射和左乘更新：
 
 ```cpp
-source_to_target = source_to_target * Sophus::SE3d::exp(right_increment);
+source_to_target = Sophus::SE3d::exp(left_increment) * source_to_target;
 ```
 
 因此不再维护手写 Rodrigues 或 $SE(3)$ 左雅可比实现。
@@ -426,9 +426,9 @@ source_points = estimateCovariances(source_layout)
 source_to_target = Sophus::SE3d(initial_guess rotation, initial_guess translation)
 
 repeat at most max_iterations times:
-    system = linearize(...)
-    solve(system.hessian + damping, system.gradient)
-    if linearization or solve failed:
+    correspondences = findCorrespondences(...)
+    buildAndSolve(correspondences, ...)
+    if correspondence search or solve failed:
         stop
     write updated transform to result
     if increment is below both convergence thresholds:

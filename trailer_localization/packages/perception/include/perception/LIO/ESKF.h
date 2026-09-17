@@ -1,8 +1,9 @@
 #pragma once
-#include <functional>
 #include <limits>
+#include <memory>
 #include <optional>
 #include "perception/LIO/ImuProcessor.hpp"
+#include "perception/LIO/SparseVoxel.h"
 
 namespace lio
 {
@@ -34,25 +35,18 @@ public:
         double convergence_rotation{1e-5};
         double max_position_correction{1.0};
         double max_rotation_correction{0.5};
+        double lidar_noise{0.03};
+        double cauchy_kernel_scale{0.3};
+        float max_correspondence_distance{0.5f};
+        float map_voxel_size{0.5f};
+        std::size_t max_map_voxels{200000};
     };
-
-    // Sums of raw geometric constraints H^T R^-1 H and H^T R^-1 r.
-    // H has six nonzero columns [dp, dtheta]; the full prior couples v and biases.
-    // Rebuild at EVERY iteration with a fixed map and fresh correspondences.
-    struct Measurement
-    {
-        PoseInformation information{PoseInformation::Zero()};
-        PoseGradient gradient{PoseGradient::Zero()};
-        std::size_t count{0};
-        double squared_error{0.0};
-    };
-
-    using MeasurementModel = std::function<Measurement(const ImuState&)>;
 
     struct Result
     {
         bool accepted{false};
         bool converged{false};
+        bool map_initialized{false};
         int iterations{0};
         std::size_t num_correspondences{0};
         double fitness_score{std::numeric_limits<double>::infinity()};
@@ -66,10 +60,7 @@ public:
 
     static StateCovariance initialCovariance();
 
-    void clear() noexcept
-    {
-        mInitialized = false; mLastImu.reset();
-    }
+    void clear() noexcept;
 
     void reset(const ImuState& state, const StateCovariance& covariance = initialCovariance());
 
@@ -81,7 +72,9 @@ public:
 
     void processScan(const std::vector<ImuData>& imu_data, std::vector<PointXYZT>& points, double scan_begin, double scan_end);
 
-    Result update(const MeasurementModel& model);
+    // The cloud must already be deskewed into the scan-end LiDAR frame.
+    // The first valid cloud initializes the internal world-frame voxel map.
+    Result update(const pcl::PointCloud<pcl::PointXYZ>& cloud);
 
     [[nodiscard]] bool initialized() const noexcept
     {
@@ -101,6 +94,11 @@ public:
     [[nodiscard]] const Config& config() const noexcept
     {
         return mConfig;
+    }
+
+    [[nodiscard]] const SparseVoxel& map() const noexcept
+    {
+        return *mMap;
     }
 
     [[nodiscard]] Eigen::Isometry3d state() const // T_WI
@@ -124,8 +122,23 @@ private:
     ImuState mState;
     StateCovariance mCovariance{initialCovariance()};
     std::optional<ImuData> mLastImu;
+    SparseVoxel::Config mVoxelConfig;
+    std::unique_ptr<SparseVoxel> mMap;
     bool mInitialized{false};
 
     void predictCovariance(const ImuState& state, const ImuData& a, const ImuData& b);
+    void findCorrespondences(const std::vector<const PointWithCovariance*>& source,
+                             const ImuState& state,
+                             std::vector<Correspondence>& correspondences) const;
+    bool buildAndSolve(const std::vector<const PointWithCovariance*>& source,
+                       const std::vector<Correspondence>& correspondences,
+                       const ImuState& prior,
+                       const StateCovariance& prior_information,
+                       const ImuState& iterate,
+                       StateCovariance& information,
+                       ErrorStateT& increment,
+                       std::size_t& num_correspondences,
+                       double& squared_error_sum) const;
+    void insertCloud(const pcl::PointCloud<pcl::PointXYZ>& cloud, bool initialize);
 };
 }  // namespace lio

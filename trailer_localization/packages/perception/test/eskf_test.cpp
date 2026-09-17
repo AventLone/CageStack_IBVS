@@ -53,51 +53,24 @@ void propagationAndBias()
             std::abs(accelerated.nominalState().v_WI.x() - 2.0) < 1e-10, "Constant-acceleration integration incorrect");
 }
 
-void linearPosteriorAndRejection()
+void internalMapLifecycle()
 {
-    ESKF filter;
+    ESKF::Config config;
+    config.min_correspondences = 3;
+    ESKF filter(config);
     ImuState state;
-    StateCovariance prior = StateCovariance::Identity() * 0.1;
-    prior(0, 6) = prior(6, 0) = 0.02;
-    prior(0, 12) = prior(12, 0) = -0.015;
-    filter.reset(state, prior);
-    const double target = 0.2;
-    const auto model = [target](const ImuState& s)
-    {
-        ESKF::Measurement m;
-        m.count = 30;
-        m.information(0, 0) = 3000.0;
-        m.gradient[0] = 3000.0 * (s.p_WI.x() - target);
-        m.squared_error = 30.0 * std::pow(s.p_WI.x() - target, 2);
-        return m;
-    };
-    const auto result = filter.update(model);
-    require(result.accepted && result.iterations > 1, "Linear measurement was not accepted");
-    const ErrorStateT expected = prior.col(0) * target / (prior(0, 0) + 1.0 / 3000.0);
-    const StateCovariance posterior = prior - prior.col(0) * prior.row(0) / (prior(0, 0) + 1.0 / 3000.0);
-    require((ESKF::boxMinus(filter.nominalState(), state) - expected).norm() < 1e-9, "Full-state Kalman update incorrect");
-    require((filter.covariance() - posterior).norm() < 1e-10, "Prior/measurement counted more than once");
-    require(std::abs(filter.nominalState().accel_bias.x()) > 1e-3, "LiDAR failed to update accel bias");
-
-    ESKF::Config one_step_config;
-    one_step_config.max_iterations = 1;
-    one_step_config.max_fitness_score = 1.0;
-    one_step_config.convergence_translation = 1e-12;
-    one_step_config.convergence_rotation = 1e-12;
-    ESKF one_step(one_step_config);
-    one_step.reset(state, prior);
-    const auto one_step_result = one_step.update(model);
-    require(one_step_result.accepted && one_step_result.converged && one_step_result.iterations == 1,
-            "Finite last GICP-style iteration was discarded at the iteration limit");
-
-    const auto saved_state = filter.nominalState();
-    const auto saved_covariance = filter.covariance();
-    require(!filter.update([](const auto&) { return ESKF::Measurement{}; }).accepted, "Empty scan accepted");
-    require(ESKF::boxMinus(filter.nominalState(), saved_state).norm() == 0.0 &&
-            filter.covariance() == saved_covariance, "Rejected update changed prior");
-    require(!filter.update([](const auto&) { ESKF::Measurement m; m.count = 30; m.squared_error = 30.0; return m; }).accepted,
-            "Bad final GICP fitness accepted");
-    require(filter.covariance() == saved_covariance, "Rejected fitness shrank covariance");
+    filter.reset(state);
+    pcl::PointCloud<pcl::PointXYZ> cloud;
+    cloud.emplace_back(0.0f, 0.0f, 0.0f);
+    cloud.emplace_back(1.0f, 0.0f, 0.0f);
+    cloud.emplace_back(0.0f, 1.0f, 0.0f);
+    const auto initialized = filter.update(cloud);
+    require(initialized.accepted && initialized.map_initialized && !filter.map().empty(),
+            "First scan did not initialize the ESKF-owned map");
+    filter.clear();
+    require(filter.map().empty(), "ESKF clear did not clear its internal map");
+    filter.reset(state);
+    require(!filter.update(pcl::PointCloud<pcl::PointXYZ>{}).accepted, "Empty scan accepted");
 }
 
 void deskewAndScanGap()
@@ -192,9 +165,9 @@ int main()
 {
     try
     {
-        priorJacobian(); propagationAndBias(); linearPosteriorAndRejection();
+        priorJacobian(); propagationAndBias(); internalMapLifecycle();
         deskewAndScanGap(); initializationAndInputValidation(); propagationJacobian();
-        std::cout << "PASS: prior Jacobian, propagation/cross covariance, analytic posterior/bias correction, rejection, deskew/gaps, initialization and invalid input\n";
+        std::cout << "PASS: prior Jacobian, propagation/cross covariance, internal map lifecycle, deskew/gaps, initialization and invalid input\n";
         return 0;
     }
     catch (const std::exception& error) { std::cerr << "FAIL: " << error.what() << '\n'; return 1; }

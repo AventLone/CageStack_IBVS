@@ -36,15 +36,15 @@ target_link_libraries(perception Sophus::Sophus TBB::tbb Threads::Threads)
 target_compile_features(perception PUBLIC c_std_99 cxx_std_23)
 
 if (BUILD_TESTING)
-    add_executable(eskf_test test/eskf_test.cpp source/LIO/ESKF.cpp)
-    target_include_directories(eskf_test PRIVATE include)
-    target_link_libraries(eskf_test Sophus::Sophus)
-    target_compile_features(eskf_test PRIVATE cxx_std_20)
+    add_executable(eskf_test test/eskf_test.cpp source/LIO/ESKF.cpp source/LIO/SparseVoxel.cpp)
+    target_include_directories(eskf_test PRIVATE include ${Boost_INCLUDE_DIRS})
+    target_link_libraries(eskf_test Sophus::Sophus TBB::tbb)
+    ament_target_dependencies(eskf_test pcl_ros)
+    target_compile_features(eskf_test PRIVATE cxx_std_23)
     add_test(NAME eskf_test COMMAND eskf_test)
 
     add_executable(lio_measurement_test test/lio_measurement_test.cpp
-        source/LIO/GicpMeasurement.cpp source/LIO/SparseVoxel.cpp source/LIO/ESKF.cpp
-        source/GICP/GICP.cpp)
+        source/LIO/SparseVoxel.cpp source/LIO/ESKF.cpp)
     target_include_directories(lio_measurement_test PRIVATE include ${Boost_INCLUDE_DIRS})
     target_link_libraries(lio_measurement_test Sophus::Sophus TBB::tbb)
     ament_target_dependencies(lio_measurement_test pcl_ros sensor_msgs)

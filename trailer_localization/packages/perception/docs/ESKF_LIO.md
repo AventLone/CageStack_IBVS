@@ -1,6 +1,6 @@
 # IMU–LiDAR 紧耦合 ESKF
 
-点云补偿到扫描结束时刻后，`GICP` 的逐点三维残差、源/目标协方差、Cauchy 权重和右扰动线性化直接进入 ESKF 正规方程。LIO 不先运行独立配准，也不把 GICP 输出的 6D 位姿当作观测，因此仍是紧耦合。
+点云补偿到扫描结束时刻后，ESKF 在内部完成 GICP 式对应搜索、逐点三维残差、协方差加权和 Cauchy 鲁棒处理，再以右误差状态直接构建迭代 ESKF 正规方程。LIO 不先运行独立配准，也不把 GICP 输出的 6D 位姿当作观测，因此仍是紧耦合。独立 `GICP` 保持原来的左扰动，与 ESKF 没有代码依赖。
 
 ## 1 Scan 去畸变
 
@@ -127,19 +127,22 @@ R *= Exp(omega*dt)
 
 
 
-## 4 GICP 紧耦合迭代更新
+## 4 ESKF 内部的 GICP 式紧耦合更新
 
-每帧仅建立一次源点 `SparseVoxel` 和局部协方差。每次迭代根据当前 `T_WL` 重新查找地图最近邻，并调用与 `GICP::align()` 完全相同的 `linearize()`：
+每帧仅建立一次源点 `SparseVoxel` 和局部协方差。`ESKF` 直接持有 `std::unique_ptr<SparseVoxel> mMap`；每次迭代由 `findCorrespondences()` 根据当前 `T_WL` 重新查找地图最近邻，再由 `buildAndSolve()` 构建并求解 15 维系统：
 
 ```text
 r_i = T_WL * p_Li - q_Wi
 C_i = C_target_i + R_WL * C_source_i * R_WLᵀ
 e_i = r_iᵀ C_i⁻¹ r_i
 w_i = 1 / (1 + e_i / cauchy_scale²)
-J_right = [R_WL, -R_WL * hat(p_Li)]
+H_i = [I, -R_WI * hat(p_Ii), 0, 0, 0]
+p_Ii = T_IL * p_Li
 ```
 
-`GICP::linearize()` 同时供独立 GICP 和 LIO 使用，避免两套对应搜索、协方差或权重实现发生偏差。`SparseVoxel` 归一化协方差只提供各向异性形状；`lidar_noise²` 为它补充与 ESKF 先验比较所需的物理尺度：
+ESKF 不包含 `GICP.h`，也不再通过 `Measurement`/`MeasurementModel` 回调接收外部线性化结果。独立 `GICP` 继续使用左扰动 $T\leftarrow\exp(\delta)T$；ESKF 在自己的右误差状态上直接使用上述 Jacobian，两者不共享线性化接口。
+
+`SparseVoxel` 归一化协方差只提供各向异性形状；`lidar_noise²` 为它补充与 ESKF 先验比较所需的物理尺度：
 
 ```text
 Omega_i = (lidar_noise² * C_i)⁻¹
@@ -147,15 +150,7 @@ Omega_i = (lidar_noise² * C_i)⁻¹
 
 这不是把无量纲归一化协方差直接冒充物理协方差。`lidar_noise` 是整体尺度，需要用真实残差或 NIS 标定。
 
-GICP 使用 LiDAR 系右扰动 `T_WL' = T_WL * Exp(delta_right_L)`；ESKF 使用世界系加法位置误差和 IMU 系右旋转误差。实现通过解析变换把 GICP 的 6×6 Hessian 和梯度映射到 `[dp_W, dtheta_I]`。其中 `t_IL` 是 LiDAR 原点在 IMU 系的位置：
-
-```text
-delta_right_L = M * [dp_W, dtheta_I]
-M = [R_WLᵀ, -R_WLᵀ R_WI hat(t_IL);
-     0,                         R_ILᵀ]
-H_eskf = Mᵀ H_gicp M
-g_eskf = Mᵀ g_gicp
-```
+因为 $p_W=p_{WI}+R_{WI}p_I$，对右旋转误差 $R'_{WI}=R_{WI}\exp(\delta\theta_I)$ 直接求导即得 $[I,-R_{WI}[p_I]_\times]$。外参的旋转和杆臂已包含在 $p_I=T_{IL}p_L$ 中，不需要先求 LiDAR 位姿增量再映射回 ESKF。
 
 令 IMU 传播先验为 `x_bar, P_bar`，第 k 次迭代为 `x_k`，`e = x_k boxminus x_bar`。姿态部分的先验切空间雅可比为 SO(3) 右雅可比的逆 `Jr⁻¹(e_theta)`，其余块为单位阵，合成 A：
 
@@ -166,7 +161,7 @@ delta  = -Lambda⁻¹ b
 x_next = x_k boxplus delta
 ```
 
-虽然 GICP 信息只有位姿块非零，15×15 的先验信息会使速度和 bias 同时获得修正。每轮重新查找对应，但源点协方差只计算一次；**整个迭代只使用同一份 P_bar**。求解时在位姿块加入与独立 GICP 相同的固定阻尼，最终后验协方差使用未加阻尼的信息矩阵。收敛只检查位姿增量；与 `GICP::align()` 一样，达到最大迭代次数后保留最后一次有限迭代。
+虽然激光信息只有位姿块非零，15×15 的先验信息会使速度和 bias 同时获得修正。每轮重新查找对应，但源点协方差只计算一次；**整个迭代只使用同一份 P_bar**。求解时在位姿块加入固定阻尼，最终后验协方差使用未加阻尼的信息矩阵。收敛只检查位姿增量；达到最大迭代次数后保留最后一次有限迭代。
 
 验收条件包括有效对应数、最终 fitness、最大位姿修正和矩阵正定性。fitness 与独立 GICP 一致，是未加权欧氏残差平方均值，单位 `m²`。验收失败保留本帧 IMU 预测及其协方差，并跳过地图写入。地图只在首帧建立或成功更新后写入。退化方向仍主要受 IMU 先验约束。
 
@@ -174,7 +169,7 @@ x_next = x_k boxplus delta
 
 ## 5 时间同步与初始化
 
-一个工作线程拥有滤波器和地图，ROS 回调只缓存数据。保留完整 IMU 历史及边界插值所需的两端样本，不再每次只留最后一帧 IMU。超过扫描队列容量时可以丢弃旧扫描，随后仍从上次修正状态连续积分 IMU。
+一个工作线程拥有滤波器，地图由滤波器内部唯一管理，ROS 回调只缓存数据。保留完整 IMU 历史及边界插值所需的两端样本，不再每次只留最后一帧 IMU。超过扫描队列容量时可以丢弃旧扫描，随后仍从上次修正状态连续积分 IMU。
 
 | 逐点时间字段 | `auto` 解释 |
 |---|---|
@@ -215,22 +210,19 @@ lio::ESKF filter(config, T_IL);
 filter.initialize(stationary_imu);  // 检查返回值；也可 reset(known_state, covariance)
 filter.processScan(imu_covering_interval, timed_points, scan_begin, scan_end);
 // 将 timed_points 转为扫描末端 LiDAR 系的 pcl cloud 并下采样。
-auto source_index = gicp_measurement.prepareScan(scan);
-auto result = filter.update([&](const lio::ImuState& state) {
-    return gicp_measurement.build(state, *source_index, world_map);
-});
-// result.accepted 才把 scan 通过 filter.lidarPose() 变换后写入地图。
+auto result = filter.update(scan);
+// 首帧在 ESKF 内初始化地图；后续仅在 result.accepted 时内部写入地图。
 ```
 
-`processScan()` 已同时传播状态和协方差，不要对同一区间再调用 `predict()`。`predict()` 用于单独的 IMU 流式传播，reset 后首个样本必须锚定 state.timestamp。`ESKF.h` 不依赖 ROS 或 PCL；ROS 时间读取、体素地图和几何模型分别放在独立文件中。
+`processScan()` 已同时传播状态和协方差，不要对同一区间再调用 `predict()`。`predict()` 用于单独的 IMU 流式传播，reset 后首个样本必须锚定 state.timestamp。`ESKF.h` 因 `update()` 和内部地图而依赖 PCL/SparseVoxel，但不依赖 ROS 或 `GICP.h`。
 
 
 
 ## 验证与边界
 
-`eskf_test` 检查有限差分几何/先验雅可比、带 bias 的静止传播、常加速度积分、协方差交叉项、解析卡尔曼后验、拒绝更新回滚、非单位外参下的旋转/平移去畸变、扫描间隙、初始化和非法输入。
+`eskf_test` 检查有限差分几何/先验雅可比、带 bias 的静止传播、常加速度积分、协方差交叉项、非单位外参下的旋转/平移去畸变、扫描间隙、初始化、内部地图生命周期和非法输入。
 
-`lio_measurement_test` 检查组织化点云/行 padding/字节序、绝对秒/相对纳秒、缺失与错误时间字段、共享 GICP 右扰动线性化、LiDAR 右扰动到 ESKF 误差状态的解析映射、三平面地图的位姿与 gyro bias 修正，以及对应距离门限。
+`lio_measurement_test` 检查组织化点云/行 padding/字节序、绝对秒/相对纳秒、缺失与错误时间字段、ESKF 右扰动 Jacobian、内部地图的三平面位姿与 gyro bias 修正，以及对应距离门限。
 
 ```bash
 ctest --test-dir build/perception --output-on-failure -R '^(eskf_test|lio_measurement_test)$'

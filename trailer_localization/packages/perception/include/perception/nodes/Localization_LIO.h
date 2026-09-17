@@ -9,7 +9,7 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <nav_msgs/msg/path.hpp>
 #include "perception/LIO/CloudTiming.hpp"
-#include "perception/LIO/GicpMeasurement.h"
+#include "perception/LIO/ESKF.h"
 #include <tf2_eigen/tf2_eigen.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
@@ -42,10 +42,7 @@ private:
     // Eigen::Isometry3f T_truck2lidar;
 
     lio::CloudTimingConfig mTimingConfig;
-    SparseVoxel::Config mMapConfig;
     std::unique_ptr<lio::ESKF> mEskf;
-    std::unique_ptr<lio::GicpMeasurement> mGicpMeasurement;
-    std::unique_ptr<SparseVoxel> mMap;
     nav_msgs::msg::Path mBasePosePath;
     std::string mWorldFrame, mImuFrame, mLidarFrame;
     Sophus::SE3d mTi2b;  // Base -> IMU; T_WB = T_WI * T_IB.

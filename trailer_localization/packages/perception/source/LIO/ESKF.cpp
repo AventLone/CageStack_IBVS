@@ -1,5 +1,7 @@
 #include "perception/LIO/ESKF.h"
 #include <Eigen/Cholesky>
+#include <algorithm>
+#include <execution>
 
 namespace lio
 {
@@ -19,17 +21,25 @@ ESKF::ESKF(const Config& config, const Sophus::SE3d& T_IL) : mConfig(config), mT
                         config.accel_bias_noise, config.gravity_magnitude, config.max_imu_gap,
                         config.max_integration_step, config.damping_factor, config.max_fitness_score,
                         config.convergence_translation, config.convergence_rotation,
-                        config.max_position_correction, config.max_rotation_correction})
+                        config.max_position_correction, config.max_rotation_correction,
+                        config.lidar_noise, static_cast<double>(config.max_correspondence_distance),
+                        static_cast<double>(config.map_voxel_size)})
     {
         if (!std::isfinite(value) || value <= 0.0)
         {
             throw std::invalid_argument("ESKF noise densities and thresholds must be positive and finite.");
         }
     }
-    if (config.max_iterations <= 0 || config.min_correspondences < 3 || !T_IL.matrix().allFinite())
+    if (config.max_iterations <= 0 || config.min_correspondences < 3 || config.max_map_voxels == 0 ||
+        !std::isfinite(config.cauchy_kernel_scale) || config.cauchy_kernel_scale < 0.0 ||
+        !T_IL.matrix().allFinite())
     {
         throw std::invalid_argument("Invalid ESKF iterations, correspondence count or extrinsic.");
     }
+    mVoxelConfig.voxel_size = config.map_voxel_size;
+    mVoxelConfig.max_voxels_num = config.max_map_voxels;
+    mVoxelConfig.estimate_covariances = true;
+    mMap = std::make_unique<SparseVoxel>(mVoxelConfig);
 }
 
 StateCovariance ESKF::initialCovariance()
@@ -51,7 +61,15 @@ void ESKF::reset(const ImuState& state, const StateCovariance& covariance)
     mState = state;
     mCovariance = covariance;
     mLastImu.reset();
+    mMap->clear();
     mInitialized = true;
+}
+
+void ESKF::clear() noexcept
+{
+    mInitialized = false;
+    mLastImu.reset();
+    mMap->clear();
 }
 
 bool ESKF::initialize(const std::vector<ImuData>& samples)
@@ -190,62 +208,153 @@ Eigen::Matrix3d ESKF::rightJacobianInverse(const Eigen::Vector3d& rotation)
     return Eigen::Matrix3d::Identity() + 0.5 * hat + coefficient * hat * hat;
 }
 
-ESKF::Result ESKF::update(const MeasurementModel& model)
+void ESKF::findCorrespondences(const std::vector<const PointWithCovariance*>& source,
+                               const ImuState& state,
+                               std::vector<Correspondence>& correspondences) const
 {
-    if (!mInitialized || !model)
+    const Sophus::SE3d T_WL = Sophus::SE3d(state.R_WI, state.p_WI) * mTi2l;
+    std::transform(std::execution::par, source.begin(), source.end(), correspondences.begin(),
+        [this, &T_WL](const PointWithCovariance* source_point)
+        {
+            const Eigen::Vector3d transformed = T_WL * source_point->position.cast<double>();
+            constexpr int adjacent_voxels = 1;
+            const SparseVoxel::Neighbor nearest = mMap->nearestNeighbor(
+                transformed.cast<float>(), mConfig.max_correspondence_distance, adjacent_voxels);
+            return Correspondence{nearest.point, transformed};
+        });
+}
+
+bool ESKF::buildAndSolve(const std::vector<const PointWithCovariance*>& source,
+                         const std::vector<Correspondence>& correspondences,
+                         const ImuState& prior,
+                         const StateCovariance& prior_information,
+                         const ImuState& iterate,
+                         StateCovariance& information,
+                         ErrorStateT& increment,
+                         std::size_t& num_correspondences,
+                         double& squared_error_sum) const
+{
+    PoseInformation lidar_information = PoseInformation::Zero();
+    PoseGradient lidar_gradient = PoseGradient::Zero();
+    num_correspondences = 0;
+    squared_error_sum = 0.0;
+
+    const Eigen::Matrix3d R_WI = iterate.R_WI.matrix();
+    const Eigen::Matrix3d R_WL = R_WI * mTi2l.rotationMatrix();
+    const double inverse_variance = 1.0 / (mConfig.lidar_noise * mConfig.lidar_noise);
+    const double kernel_scale2 = mConfig.cauchy_kernel_scale * mConfig.cauchy_kernel_scale;
+
+    for (std::size_t index = 0; index < correspondences.size(); ++index)
     {
-        throw std::logic_error("ESKF update requires initialization and a measurement model.");
+        const auto& [target_point, transformed_position] = correspondences[index];
+        if (target_point == nullptr) continue;
+
+        const PointWithCovariance& source_point = *source[index];
+        Eigen::Matrix3d covariance = Eigen::Matrix3d::Identity();
+        if (source_point.covariance_valid)
+        {
+            if (target_point->covariance_valid)
+            {
+                covariance = target_point->covariance.cast<double>();
+            }
+            covariance += R_WL * source_point.covariance.cast<double>() * R_WL.transpose();
+        }
+
+        const Eigen::Matrix3d precision = covariance.inverse();
+        if (!precision.allFinite()) continue;
+
+        const Eigen::Vector3d residual = transformed_position - target_point->position.cast<double>();
+        const Eigen::Vector3d precision_residual = precision * residual;
+        const double mahalanobis_error = residual.dot(precision_residual);
+        const double weight = mConfig.cauchy_kernel_scale > 0.0 ?
+            1.0 / (1.0 + mahalanobis_error / kernel_scale2) : 1.0;
+
+        // ESKF error: additive world translation and right IMU rotation.
+        // p_I includes the LiDAR-to-IMU lever arm, so this is the direct
+        // right-perturbation Jacobian without a separate pose-frame mapping.
+        const Eigen::Vector3d p_I = mTi2l * source_point.position.cast<double>();
+        Eigen::Matrix<double, 3, 6> jacobian;
+        jacobian.leftCols<3>().setIdentity();
+        jacobian.rightCols<3>() = -R_WI * Sophus::SO3d::hat(p_I);
+        lidar_information.noalias() += inverse_variance * jacobian.transpose() * weight * precision * jacobian;
+        lidar_gradient.noalias() += inverse_variance * jacobian.transpose() * weight * precision_residual;
+        squared_error_sum += residual.squaredNorm();
+        ++num_correspondences;
     }
 
+    if (num_correspondences < mConfig.min_correspondences || !std::isfinite(squared_error_sum) ||
+        !lidar_information.allFinite() || !lidar_gradient.allFinite()) return false;
+
+    const ErrorStateT error = boxMinus(iterate, prior);
+    StateCovariance prior_jacobian = StateCovariance::Identity();
+    prior_jacobian.block<3, 3>(3, 3) = rightJacobianInverse(error.segment<3>(3));
+    information = prior_jacobian.transpose() * prior_information * prior_jacobian;
+    ErrorStateT gradient = prior_jacobian.transpose() * prior_information * error;
+    information.topLeftCorner<6, 6>() += lidar_information;
+    gradient.head<6>() += lidar_gradient;
+    if (!information.allFinite() || !gradient.allFinite()) return false;
+
+    StateCovariance damped_information = information;
+    damped_information.topLeftCorner<6, 6>().diagonal().array() += mConfig.damping_factor;
+    const Eigen::LLT<StateCovariance> solver(damped_information);
+    if (solver.info() != Eigen::Success) return false;
+    increment = solver.solve(-gradient);
+    return solver.info() == Eigen::Success && increment.allFinite();
+}
+
+void ESKF::insertCloud(const pcl::PointCloud<pcl::PointXYZ>& cloud, const bool initialize)
+{
+    const Sophus::SE3d T_WL = Sophus::SE3d(mState.R_WI, mState.p_WI) * mTi2l;
+    pcl::PointCloud<pcl::PointXYZ> world;
+    world.reserve(cloud.size());
+    for (const auto& point : cloud)
+    {
+        const Eigen::Vector3d transformed = T_WL * Eigen::Vector3d(point.x, point.y, point.z);
+        world.emplace_back(static_cast<float>(transformed.x()),
+                           static_cast<float>(transformed.y()),
+                           static_cast<float>(transformed.z()));
+    }
+    if (initialize) mMap->initialize(world);
+    else mMap->insert(world);
+}
+
+ESKF::Result ESKF::update(const pcl::PointCloud<pcl::PointXYZ>& cloud)
+{
+    if (!mInitialized) throw std::logic_error("Initialize ESKF before a LiDAR update.");
+
     Result result;
+    if (cloud.empty()) return result;
+
+    SparseVoxel source_index(mVoxelConfig);
+    source_index.initialize(cloud);
+    if (source_index.pointCount() < mConfig.min_correspondences) return result;
+    if (mMap->empty())
+    {
+        insertCloud(cloud, true);
+        result.accepted = true;
+        result.converged = true;
+        result.map_initialized = true;
+        return result;
+    }
+
+    const std::vector<const PointWithCovariance*> source = source_index.points();
+    std::vector<Correspondence> correspondences(source.size());
     const ImuState prior = mState;
-    const StateCovariance prior_information = mCovariance.llt().solve(StateCovariance::Identity());
+    const Eigen::LLT<StateCovariance> prior_solver(mCovariance);
+    if (prior_solver.info() != Eigen::Success) return result;
+    const StateCovariance prior_information = prior_solver.solve(StateCovariance::Identity());
 
     ImuState iterate = prior;
     StateCovariance information;
-    ErrorStateT gradient;
-
-    const auto linearize = [&]()
-    {
-        const Measurement measurement = model(iterate);
-        result.num_correspondences = measurement.count;
-        result.fitness_score = measurement.count > 0 ? measurement.squared_error / measurement.count :
-                               std::numeric_limits<double>::infinity();
-        if (measurement.count < mConfig.min_correspondences || !std::isfinite(result.fitness_score) ||
-            !measurement.information.allFinite() || !measurement.gradient.allFinite()) return false;
-        const ErrorStateT error = boxMinus(iterate, prior);
-        StateCovariance A = StateCovariance::Identity();
-        A.block<3, 3>(3, 3) = rightJacobianInverse(error.segment<3>(3));
-
-        // Count the same propagated prior ONCE. A transports its tangent to this
-        // iterate. Do not recursively shrink P inside the optimization loop.
-        information = A.transpose() * prior_information * A;
-        gradient = A.transpose() * prior_information * error;
-        information.topLeftCorner<6, 6>() += measurement.information;
-        gradient.head<6>() += measurement.gradient;
-        return information.allFinite() && gradient.allFinite();
-    };
+    ErrorStateT increment;
+    double squared_error_sum = 0.0;
 
     for (int iteration = 0; iteration < mConfig.max_iterations; ++iteration)
     {
-        if (!linearize())
-        {
-            break;
-        }
-
-        StateCovariance damped_information = information;
-        damped_information.topLeftCorner<6, 6>().diagonal().array() += mConfig.damping_factor;
-        const Eigen::LLT<StateCovariance> solver(damped_information);
-        if (solver.info() != Eigen::Success)
-        {
-            break;
-        }
-
-        const ErrorStateT increment = solver.solve(-gradient);
-        if (!increment.allFinite())
-        {
-            break;
-        }
+        findCorrespondences(source, iterate, correspondences);
+        if (!buildAndSolve(source, correspondences, prior, prior_information, iterate,
+                           information, increment, result.num_correspondences, squared_error_sum)) break;
+        result.fitness_score = squared_error_sum / static_cast<double>(result.num_correspondences);
 
         iterate = boxPlus(iterate, increment);
         ++result.iterations;
@@ -264,20 +373,20 @@ ESKF::Result ESKF::update(const MeasurementModel& model)
         }
     }
 
-    // Match GICP::align(): keep a finite last iteration when the strict
-    // increment threshold is not reached within the iteration budget.
     if (!result.converged && result.iterations > 0 && std::isfinite(result.fitness_score))
     {
         result.converged = true;
     }
 
-    // Re-linearize in the FINAL state's tangent. This recenters the posterior;
-    // applying an additional reset Jacobian would transport it twice.
-    // On failure the propagated state and covariance remain untouched.
-    if (!result.converged || !linearize() || result.fitness_score > mConfig.max_fitness_score)
-    {
-        return result;
-    }
+    if (!result.converged) return result;
+
+    // Rebuild correspondences and the undamped information matrix at the final
+    // state. The solved increment is intentionally discarded here.
+    findCorrespondences(source, iterate, correspondences);
+    if (!buildAndSolve(source, correspondences, prior, prior_information, iterate,
+                       information, increment, result.num_correspondences, squared_error_sum)) return result;
+    result.fitness_score = squared_error_sum / static_cast<double>(result.num_correspondences);
+    if (result.fitness_score > mConfig.max_fitness_score) return result;
 
     const Eigen::LLT<StateCovariance> solver(information);
     if (solver.info() != Eigen::Success)
@@ -294,6 +403,7 @@ ESKF::Result ESKF::update(const MeasurementModel& model)
 
     mState = iterate;
     mCovariance = symmetric;
+    insertCloud(cloud, false);
     result.accepted = true;
     return result;
 }

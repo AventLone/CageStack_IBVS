@@ -74,23 +74,16 @@ Localization_LIO::Localization_LIO(const std::string& node_name) : Node(node_nam
 
     filter.min_correspondences = static_cast<std::size_t>(min_matches);
     filter.max_fitness_score = declare_parameter("lio.max_fitness_score", filter.max_fitness_score);
-    mEskf = std::make_unique<lio::ESKF>(filter, T_IL);
-
-    mMapConfig.estimate_covariances = true;
-    mMapConfig.voxel_size = static_cast<float>(declare_parameter("lio.map_voxel_size", 0.5));
+    filter.map_voxel_size = static_cast<float>(declare_parameter(
+        "lio.map_voxel_size", static_cast<double>(filter.map_voxel_size)));
     const int max_voxels = declare_parameter("lio.max_map_voxels", 200000);
     if (max_voxels <= 0) throw std::invalid_argument("max_map_voxels must be positive.");
-    mMapConfig.max_voxels_num = static_cast<std::size_t>(max_voxels);
-    mMap = std::make_unique<SparseVoxel>(mMapConfig);
-
-    lio::GicpMeasurement::Config measurement;
-    measurement.voxel_size = mMapConfig.voxel_size;
-    measurement.max_correspondence_distance = static_cast<float>(declare_parameter(
-        "lio.max_correspondence_distance", static_cast<double>(measurement.max_correspondence_distance)));
-    measurement.cauchy_kernel_scale = static_cast<float>(declare_parameter(
-        "lio.cauchy_kernel_scale", static_cast<double>(measurement.cauchy_kernel_scale)));
-    measurement.lidar_noise = declare_parameter("lio.lidar_noise", measurement.lidar_noise);
-    mGicpMeasurement = std::make_unique<lio::GicpMeasurement>(measurement, T_IL);
+    filter.max_map_voxels = static_cast<std::size_t>(max_voxels);
+    filter.max_correspondence_distance = static_cast<float>(declare_parameter(
+        "lio.max_correspondence_distance", static_cast<double>(filter.max_correspondence_distance)));
+    filter.cauchy_kernel_scale = declare_parameter("lio.cauchy_kernel_scale", filter.cauchy_kernel_scale);
+    filter.lidar_noise = declare_parameter("lio.lidar_noise", filter.lidar_noise);
+    mEskf = std::make_unique<lio::ESKF>(filter, T_IL);
     mScanResolution = declare_parameter("lio.scan_resolution", mScanResolution);
     mImuWaitTimeout = declare_parameter("lio.imu_wait_timeout", mImuWaitTimeout);
     mInitializationDuration = declare_parameter("lio.initialization_duration", mInitializationDuration);
@@ -216,7 +209,6 @@ bool Localization_LIO::collectImu(const double scan_begin, double scan_end, std:
         if (mEskf->initialized())
         {
             mEskf->clear();
-            mMap->clear();
             mBasePosePath.poses.clear();
             RCLCPP_ERROR(get_logger(), "IMU history was lost: resetting local map; stationary reinitialization required.");
         }
@@ -244,7 +236,6 @@ bool Localization_LIO::collectImu(const double scan_begin, double scan_end, std:
         if (imu[i].timestamp - imu[i - 1].timestamp > mEskf->config().max_imu_gap)
         {
             mEskf->clear();
-            mMap->clear();
             mBasePosePath.poses.clear();
             RCLCPP_ERROR(get_logger(), "IMU gap: resetting local map; stationary reinitialization required.");
             return false;
@@ -334,37 +325,14 @@ void Localization_LIO::lidarWorkerLoop()
             voxel_filter.setLeafSize(resolution, resolution, resolution);
             voxel_filter.setInputCloud(cloud);
             voxel_filter.filter(filtered);
-            if (mMap->empty())
+            const auto result = mEskf->update(filtered);
+            if (!result.accepted)
             {
-                if (filtered.size() >= mEskf->config().min_correspondences)
-                {
-                    pcl::PointCloud<pcl::PointXYZ> world;
-                    pcl::transformPointCloud(filtered, world, mEskf->lidarPose().cast<float>());
-                    mMap->initialize(world);
-                }
-            }
-            else
-            {
-                const auto source_index = mGicpMeasurement->prepareScan(filtered);
-                const auto result = mEskf->update([&](const lio::ImuState& state)
-                    {
-                        return mGicpMeasurement->build(state, *source_index, *mMap);
-                    });
-
-                if (result.accepted)
-                {
-                    pcl::PointCloud<pcl::PointXYZ> world;
-                    pcl::transformPointCloud(filtered, world, mEskf->lidarPose().cast<float>());
-                    mMap->insert(world);
-                }
-                else
-                {
-                    RCLCPP_WARN(get_logger(),
-                        "GICP update rejected: %zu correspondences, fitness %.6f m^2 (RMSE %.4f m), "
-                        "iterations %d; keeping IMU prior.",
-                        result.num_correspondences, result.fitness_score,
-                        std::sqrt(result.fitness_score), result.iterations);
-                }
+                RCLCPP_WARN(get_logger(),
+                    "ESKF GICP update rejected: %zu correspondences, fitness %.6f m^2 (RMSE %.4f m), "
+                    "iterations %d; keeping IMU prior.",
+                    result.num_correspondences, result.fitness_score,
+                    std::sqrt(result.fitness_score), result.iterations);
             }
             publish(filtered, scan.end);
         }
@@ -388,7 +356,7 @@ void Localization_LIO::publish(const pcl::PointCloud<pcl::PointXYZ>& scan, doubl
     if (mVoxelMapPub->get_subscription_count() > 0)
     {
         pcl::PointCloud<pcl::PointXYZ> map_cloud;
-        for (const auto* point : mMap->points())
+        for (const auto* point : mEskf->map().points())
         {
             map_cloud.emplace_back(point->position.x(), point->position.y(), point->position.z());
         }

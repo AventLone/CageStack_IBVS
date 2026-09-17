@@ -40,7 +40,7 @@ void SparseVoxel::initialize(const pcl::PointCloud<pcl::PointXYZ>& cloud)
 		cell->second.push_back(PointWithCovariance{.position = point.position});
 		++mPointCount;
 	}
-	estimateCovariances();
+	if (mConfig.estimate_covariances) estimateCovariances();
 }
 
 bool SparseVoxel::insert(const pcl::PointCloud<pcl::PointXYZ>& cloud)
@@ -96,6 +96,8 @@ bool SparseVoxel::insert(const pcl::PointCloud<pcl::PointXYZ>& cloud)
 		++mPointCount;
 		touched_voxels.insert(point.key);
 	}
+
+	if (!mConfig.estimate_covariances) return !touched_voxels.empty();
 
 	if (touched_voxels.empty())
 	{

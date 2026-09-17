@@ -1,12 +1,12 @@
-# SparsityAwareGICP Algorithm Flow
+# GICP Algorithm Flow
 
-本文档描述当前 `SparsityAwareGICP` 的 CPU 实现、数据流和数值约定。稀疏化、协方差估计、对应搜索、法方程构建和位姿更新都在 CPU 上完成；实现不依赖 CUDA、`cuco`、CUB 或设备端数据结构。
+本文档描述当前 `GICP` 的 CPU 实现、数据流和数值约定。稀疏化、协方差估计、对应搜索、法方程构建和位姿更新都在 CPU 上完成；实现不依赖 CUDA、`cuco`、CUB 或设备端数据结构。
 
 实现位于以下文件：
 
 - `include/perception/GICP/preprocess.hpp`：点云稀疏化、体素 key 与体素布局。
-- `include/perception/GICP/SparsityAwareGICP.h`：公开配置、结果和目标缓存定义。
-- `source/GICP/SparsityAwareGICP.cpp`：协方差估计、对应搜索、GICP 求解和目标地图操作。
+- `include/perception/GICP/GICP.h`：公开配置、结果和目标缓存定义。
+- `source/GICP/GICP.cpp`：协方差估计、对应搜索、GICP 求解和目标地图操作。
 
 ## 1 数据对象
 
@@ -245,7 +245,7 @@ $$
 
 每次迭代对每个源点执行：
 
-1. 用当前 `Sophus::SE3f source_to_target` 将源点变换到目标坐标系；
+1. 用当前 `Sophus::SE3d source_to_target` 将源点变换到目标坐标系；
 2. 找到该位置所在体素；
 3. 枚举该体素及其每轴相邻一层体素，即固定的 $3^3 = 27$ 个 key；
 4. 通过 `TargetCache::voxel_map` 查找每个存在的目标体素；
@@ -312,7 +312,7 @@ $$
 
 ### 7.3 左扰动 Jacobian
 
-内部位姿 `source_to_target` 是 `Sophus::SE3f`，采用左乘增量：
+内部位姿 `source_to_target` 是 `Sophus::SE3d`，采用左乘增量：
 
 $$
 T \leftarrow \exp(\delta)T
@@ -327,24 +327,24 @@ $$
 \end{bmatrix}^T
 $$
 
-前三维是平移增量，后三维是旋转向量。令 $q = T p_s$，Jacobian 为：
+前三维是目标/世界系平移增量，后三维是目标/世界系旋转向量。令已变换源点 $x=T p_s$，Jacobian 为：
 
 $$
-J = \begin{bmatrix}I & -[q]_\times\end{bmatrix}
+J = \begin{bmatrix}I & -[x]_\times\end{bmatrix}
 $$
 
 其中：
 
 $$
-[q]_\times =
+[x]_\times =
 \begin{bmatrix}
-0 & -q_z & q_y \\
-q_z & 0 & -q_x \\
--q_y & q_x & 0
+0 & -x_z & x_y \\
+x_z & 0 & -x_x \\
+-x_y & x_x & 0
 \end{bmatrix}
 $$
 
-代码使用 `Sophus::SO3f::hat(transformed_position)` 构造该反对称矩阵。
+代码使用 `Sophus::SO3d::hat(transformed_position)` 构造已变换点的反对称矩阵。
 
 每个有效对应的贡献为：
 
@@ -385,7 +385,7 @@ $$
 若分解或求解失败，或 `left_increment.allFinite()` 为假，迭代停止。成功后由 Sophus 完成指数映射和左乘更新：
 
 ```cpp
-source_to_target = Sophus::SE3f::exp(left_increment) * source_to_target;
+source_to_target = Sophus::SE3d::exp(left_increment) * source_to_target;
 ```
 
 因此不再维护手写 Rodrigues 或 $SE(3)$ 左雅可比实现。
@@ -423,12 +423,12 @@ if source_layout or target map has no points:
     return result
 
 source_points = estimateCovariances(source_layout)
-source_to_target = Sophus::SE3f(initial_guess rotation, initial_guess translation)
+source_to_target = Sophus::SE3d(initial_guess rotation, initial_guess translation)
 
 repeat at most max_iterations times:
-    findCorrespondences(...)
-    buildAndSolve(...)
-    if solve failed:
+    correspondences = findCorrespondences(...)
+    buildAndSolve(correspondences, ...)
+    if correspondence search or solve failed:
         stop
     write updated transform to result
     if increment is below both convergence thresholds:
@@ -451,7 +451,7 @@ $$
 
 ## 10 输出结果与调用方验收
 
-`SparsityAwareGICP::Result` 包含：
+`GICP::Result` 包含：
 
 - `converged`：是否满足严格阈值，或触发成功迭代后的宽松回退；
 - `iterations`：成功完成位姿更新的次数；

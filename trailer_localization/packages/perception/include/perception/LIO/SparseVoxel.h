@@ -1,6 +1,10 @@
 #pragma once
 #include <cstddef>
+#include <cmath>
+#include <stdexcept>
 #include <limits>
+#include <utility>
+#include <Eigen/Dense>
 #include <boost/unordered/unordered_flat_map.hpp>
 #include <vector>
 #include <pcl/point_cloud.h>
@@ -16,7 +20,7 @@ struct PointWithCovariance
 struct Correspondence
 {
     const PointWithCovariance* target{nullptr};
-    Eigen::Vector3f transformed_position{Eigen::Vector3f::Zero()};
+    Eigen::Vector3d transformed_position{Eigen::Vector3d::Zero()};
 };
 
 class SparseVoxel
@@ -25,6 +29,7 @@ public:
     struct Config
     {
         float voxel_size{0.1f};
+        bool estimate_covariances{true};  // Required by standalone and tightly coupled GICP.
         int max_points_per_voxel{26};
 
         int min_covariance_neighbors{8};

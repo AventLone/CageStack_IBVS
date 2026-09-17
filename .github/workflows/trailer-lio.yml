@@ -1,0 +1,42 @@
+name: Trailer LIO
+on:
+  pull_request:
+    paths:
+      - 'trailer_localization/packages/perception/**'
+      - '.github/workflows/trailer-lio.yml'
+  push:
+    branches: ['codex/tightly-coupled-eskf']
+    paths:
+      - 'trailer_localization/packages/perception/**'
+      - '.github/workflows/trailer-lio.yml'
+permissions:
+  contents: read
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    container: ros:jazzy-ros-base
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          apt-get update -qq
+          apt-get install -y --no-install-recommends cmake libboost-dev libtbb-dev \
+            ros-jazzy-sophus ros-jazzy-pcl-ros ros-jazzy-pcl-conversions \
+            ros-jazzy-cv-bridge ros-jazzy-tf2-eigen ros-jazzy-ament-lint-auto \
+            ros-jazzy-ament-lint-common
+      - name: Build perception and regression tests
+        shell: bash
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon build --base-paths trailer_localization/packages/perception \
+            --packages-select perception --executor sequential \
+            --cmake-args -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS_RELEASE='-O1 -DNDEBUG'
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: '2'
+      - name: Run LIO regression tests
+        shell: bash
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          source install/setup.bash
+          ctest --test-dir build/perception --output-on-failure -R '^(eskf_test|lio_measurement_test)$'

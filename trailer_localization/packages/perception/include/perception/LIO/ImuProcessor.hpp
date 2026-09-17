@@ -1,376 +1,189 @@
 #pragma once
 #include <algorithm>
-#include <cstddef>
+#include <cmath>
+#include <functional>
 #include <stdexcept>
 #include <vector>
-#include <sophus/se3.hpp>
-#include <sensor_msgs/msg/imu.hpp>
-#include <rclcpp/time.hpp>
+#include "perception/LIO/ImuTypes.hpp"
 
 namespace lio
 {
-struct ImuData
-{
-    double timestamp = 0.0;
-
-    // Raw IMU measurements.
-    Eigen::Vector3d gyro = Eigen::Vector3d::Zero();   // rad/s
-    Eigen::Vector3d accel = Eigen::Vector3d::Zero();  // m/s^2
-};
-
-static ImuData fromMsg(const sensor_msgs::msg::Imu& imu_msg)
-{
-    return ImuData{.timestamp = rclcpp::Time(imu_msg.header.stamp).seconds(),
-                   .gyro = Eigen::Vector3d(imu_msg.angular_velocity.x,
-                                           imu_msg.angular_velocity.y,
-                                           imu_msg.angular_velocity.z),
-                   .accel = Eigen::Vector3d(imu_msg.linear_acceleration.x,
-                                            imu_msg.linear_acceleration.y,
-                                            imu_msg.linear_acceleration.z)};
-}
-
-struct PointXYZT
-{
-    float x = 0.0f;
-    float y = 0.0f;
-    float z = 0.0f;
-    double relative_time = 0.0;   // Time relative to scan begin [s].
-};
-
-/**
- * Nominal IMU state.
- *
- * Frame convention:
- *
- *   R_WI : IMU -> World
- *   p_WI : IMU position in World
- *   v_WI : IMU velocity in World
- *
- * IMU biases are part of the state because they should normally
- * be estimated by IESKF rather than treated as fixed parameters.
- */
-struct ImuState
-{
-    double timestamp = 0.0;
-
-    Sophus::SO3d R_WI;
-    Eigen::Vector3d p_WI = Eigen::Vector3d::Zero();
-    Eigen::Vector3d v_WI = Eigen::Vector3d::Zero();
-
-    Eigen::Vector3d gyro_bias = Eigen::Vector3d::Zero();
-    Eigen::Vector3d accel_bias = Eigen::Vector3d::Zero();
-
-    Eigen::Vector3d gravity = Eigen::Vector3d(0.0, 0.0, -9.81);
-};
-
 class ImuProcessor
 {
 public:
-    /**
-     * T_IL:
-     *   LiDAR -> IMU
-     *   p_I = T_IL * p_L
-     */
-    explicit ImuProcessor(const Sophus::SE3d& T_IL) : mTi2l(T_IL)
+    // Called BEFORE each nominal integration step, using the same midpoint inputs.
+    using StepCallback = std::function<void(const ImuState&, const ImuData&, const ImuData&)>;
+
+    // T_IL maps LiDAR coordinates to IMU coordinates: p_I = T_IL * p_L.
+    explicit ImuProcessor(const Sophus::SE3d& T_i2l) : mTi2l(T_i2l) {}
+
+    void process(const std::vector<ImuData>& imu_data, std::vector<PointXYZT>& points, const double scan_begin,
+        const double scan_end, ImuState& state, const StepCallback& before_step = {}, const double max_step = 0.01)
     {
-    }
-
-    /**
-     * Process one LiDAR scan.
-     *
-     * 1. Integrate IMU from scan_begin to scan_end.
-     * 2. Save the IMU trajectory during this scan.
-     * 3. Deskew all LiDAR points to scan_end.
-     * 4. Update state to scan_end.
-     *
-     * Requirement:
-     *   state.timestamp == scan_begin
-     * IMU data must cover:
-     *   [scan_begin, scan_end]
-     */
-    void process(const std::vector<ImuData>& imu_data, std::vector<PointXYZT>& points,
-                 const double scan_begin, const double scan_end, ImuState& state)
-    {
-        if (imu_data.size() < 2)
+        if (!std::isfinite(scan_begin) || !std::isfinite(scan_end) ||
+            scan_end <= scan_begin || state.timestamp > scan_begin)
         {
-            throw std::runtime_error("Insufficient IMU measurements.");
+            throw std::invalid_argument("Invalid or overlapping LiDAR scan interval.");
         }
-
-        if (constexpr double kTimeEpsilon = 1e-6;
-            std::abs(state.timestamp - scan_begin) > kTimeEpsilon)
+        for (const auto& point : points)
         {
-            throw std::runtime_error("IMU state timestamp must equal scan_begin.");
+            if (!std::isfinite(point.relative_time) || point.relative_time < -1e-6 ||
+                point.relative_time > scan_end - scan_begin + 1e-6)
+            {
+                throw std::invalid_argument("LiDAR point time is outside the scan interval.");
+            }
         }
-
-        if (imu_data.front().timestamp > scan_begin || imu_data.back().timestamp < scan_end)
-        {
-            throw std::runtime_error("IMU measurements do not cover LiDAR scan.");
-        }
-
-        const auto samples = buildImuSequence(imu_data, scan_begin, scan_end);
-        propagate(samples, state);
+        // Include gaps between scans. The previous corrected state is the only prior.
+        const auto samples = buildImuSequence(imu_data, state.timestamp, scan_end, max_step);
+        propagate(samples, state, before_step);
         deskew(points, scan_begin, scan_end);
     }
 
-    /**
-     * Propagate nominal IMU state.
-     * This only propagates: R, p, v
-     * Bias is assumed constant during one scan.
-     * Bias covariance/random walk should be handled by the IESKF.
-     */
-    void propagate(const std::vector<ImuData>& imu_data, ImuState& state)
+    static bool finite(const ImuData& imu)
+    {
+        return std::isfinite(imu.timestamp) && imu.gyro.allFinite() && imu.accel.allFinite();
+    }
+
+    static void validate(const std::vector<ImuData>& imu_data)
     {
         if (imu_data.size() < 2)
         {
-            return;
+            throw std::invalid_argument("At least two IMU samples are required.");
         }
-
-        mTrajectory.clear();
-        mTrajectory.reserve(imu_data.size());
-
-        mTrajectory.push_back(
-            PoseState{
-                .timestamp = state.timestamp,
-                .R_WI = state.R_WI,
-                .p_WI = state.p_WI,
-                .v_WI = state.v_WI,
-            });
-
-        for (std::size_t i = 0; i + 1 < imu_data.size(); ++i)
+        for (std::size_t i = 0; i < imu_data.size(); ++i)
         {
-            const ImuData& imu0 = imu_data[i];
-            const ImuData& imu1 = imu_data[i + 1];
-
-            const double dt = imu1.timestamp - imu0.timestamp;
-
-            if (dt <= 0.0)
+            if (!finite(imu_data[i]) || (i > 0 && imu_data[i].timestamp <= imu_data[i - 1].timestamp))
             {
-                continue;
+                throw std::invalid_argument("IMU samples must be finite and strictly time ordered.");
             }
-
-            /*
-             * Bias corrected angular velocity.
-             * Midpoint integration:
-             *   ω = (ω0 + ω1) / 2 - bg
-             */
-            const Eigen::Vector3d omega = 0.5 * (imu0.gyro + imu1.gyro) - state.gyro_bias;
-
-            /*
-             * Bias corrected specific force.
-             * Accelerometer measures:
-             *   f = R_IW (a_W - g_W)
-             * therefore: a_W = R_WI * f + g_W
-             */
-            const Eigen::Vector3d specific_force = 0.5 * (imu0.accel + imu1.accel)- state.accel_bias;
-
-            /*
-             * Orientation at middle of the interval.
-             *
-             * This gives better acceleration integration
-             * than simply using R_k.
-             */
-            const Sophus::SO3d R_mid = state.R_WI * Sophus::SO3d::exp(omega * (0.5 * dt));
-
-            const Eigen::Vector3d accel_world = R_mid * specific_force + state.gravity;
-
-            /*
-             * Position / velocity integration.
-             */
-            state.p_WI += state.v_WI * dt + 0.5 * accel_world * dt * dt;
-            state.v_WI += accel_world * dt;
-
-            /*
-             * Rotation integration.
-             */
-            state.R_WI = state.R_WI * Sophus::SO3d::exp(omega * dt);
-            state.timestamp = imu1.timestamp;
-
-            mTrajectory.push_back(
-                PoseState{
-                    .timestamp = state.timestamp,
-                    .R_WI = state.R_WI,
-                    .p_WI = state.p_WI,
-                    .v_WI = state.v_WI,
-                });
         }
     }
 
-    /**
-     * Deskew LiDAR points to scan_end.
-     * For a point captured at time t:
-     *   p_L_end =
-     *       T_WL(end)^-1
-     *       T_WL(t)
-     *       p_L(t)
-     * where: T_WL = T_WI * T_IL
-     */
-    void deskew(std::vector<PointXYZT>& points, const double scan_begin, const double scan_end) const
+    static ImuData interpolateImu(const ImuData& a, const ImuData& b, const double timestamp)
     {
-        if (mTrajectory.empty())
+        const double alpha = (timestamp - a.timestamp) / (b.timestamp - a.timestamp);
+        return {timestamp, (1.0 - alpha) * a.gyro + alpha * b.gyro,
+                           (1.0 - alpha) * a.accel + alpha * b.accel};
+    }
+
+    // Exact boundary interpolation; never extrapolate beyond received measurements.
+    static std::vector<ImuData> buildImuSequence(const std::vector<ImuData>& imu_data,
+                                                 const double begin, const double end, const double max_step = 0.01)
+    {
+        validate(imu_data);
+        if (!std::isfinite(begin) || !std::isfinite(end) || end < begin ||
+            !std::isfinite(max_step) || max_step <= 0.0 ||
+            imu_data.front().timestamp > begin || imu_data.back().timestamp < end)
         {
-            throw std::runtime_error("IMU trajectory is empty.");
+            throw std::invalid_argument("IMU samples do not cover the integration interval.");
+        }
+        const auto at = [&imu_data](const double time)
+        {
+            const auto it = std::lower_bound(imu_data.begin(), imu_data.end(), time, [](const ImuData& imu, const double t)
+                {
+                    return imu.timestamp < t;
+                });
+            if (it == imu_data.begin() || it->timestamp == time) return *it;
+            return interpolateImu(*(it - 1), *it, time);
+        };
+
+        std::vector<ImuData> knots{at(begin)};
+        for (const auto& imu : imu_data)
+        {
+            if (imu.timestamp > begin && imu.timestamp < end) knots.push_back(imu);
         }
 
-        const Sophus::SE3d T_WI_end = poseAt(scan_end);
-        const Sophus::SE3d T_WL_end = T_WI_end * mTi2l;
-        const Sophus::SE3d T_Lend_W = T_WL_end.inverse();
+        if (end > begin) knots.push_back(at(end));
 
-        for (auto& [x, y, z, relative_time] : points)
+        std::vector<ImuData> result{knots.front()};
+        for (std::size_t i = 1; i < knots.size(); ++i)
         {
-            const double point_time = std::clamp(scan_begin + relative_time, scan_begin, scan_end);
-            const Sophus::SE3d T_WI_t = poseAt(point_time);
-            const Sophus::SE3d T_WL_t = T_WI_t * mTi2l;
-            const Eigen::Vector3d p_L(x, y, z);
-            const Eigen::Vector3d p_deskewed = T_Lend_W * (T_WL_t * p_L);
+            const auto& a = knots[i - 1];
+            const auto& b = knots[i];
+            const int steps = static_cast<int>(std::ceil((b.timestamp - a.timestamp) / max_step));
+            for (int k = 1; k < steps; ++k)
+            {
+                result.push_back(interpolateImu(a, b, a.timestamp + (b.timestamp - a.timestamp) * k / steps));
+            }
+            result.push_back(b);
+        }
+        return result;
+    }
 
-            x = static_cast<float>(p_deskewed.x());
-            y = static_cast<float>(p_deskewed.y());
-            z = static_cast<float>(p_deskewed.z());
+    static void integrate(const ImuData& a, const ImuData& b, ImuState& state)
+    {
+        const double dt = b.timestamp - a.timestamp;
+        const Eigen::Vector3d omega = 0.5 * (a.gyro + b.gyro) - state.gyro_bias;
+        const Eigen::Vector3d force = 0.5 * (a.accel + b.accel) - state.accel_bias;
+        const Sophus::SO3d R_mid = state.R_WI * Sophus::SO3d::exp(omega * (0.5 * dt));
+        const Eigen::Vector3d acceleration = R_mid * force + state.gravity;
+        state.p_WI += state.v_WI * dt + 0.5 * acceleration * dt * dt;
+        state.v_WI += acceleration * dt;
+        state.R_WI *= Sophus::SO3d::exp(omega * dt);
+        state.timestamp = b.timestamp;
+    }
+
+    void propagate(const std::vector<ImuData>& samples, ImuState& state,
+                   const StepCallback& before_step = {})
+    {
+        validate(samples);
+        if (std::abs(state.timestamp - samples.front().timestamp) > 1e-9)
+        {
+            throw std::invalid_argument("IMU sequence must start at the nominal state timestamp.");
+        }
+        mTrajectory.clear();
+        mTrajectory.reserve(samples.size());
+        mTrajectory.push_back(state);
+        for (std::size_t i = 1; i < samples.size(); ++i)
+        {
+            if (before_step) before_step(state, samples[i - 1], samples[i]);
+            integrate(samples[i - 1], samples[i], state);
+            mTrajectory.push_back(state);
         }
     }
 
-    /**
-     * Get interpolated IMU pose at arbitrary timestamp.
-     */
     Sophus::SE3d poseAt(const double timestamp) const
     {
-        if (mTrajectory.empty())
+        if (mTrajectory.empty() || timestamp < mTrajectory.front().timestamp - 1e-6 ||
+            timestamp > mTrajectory.back().timestamp + 1e-6)
         {
-            throw std::runtime_error("IMU trajectory is empty.");
+            throw std::out_of_range("Requested pose is outside the IMU trajectory.");
         }
+        if (timestamp <= mTrajectory.front().timestamp) return pose(mTrajectory.front());
+        if (timestamp >= mTrajectory.back().timestamp) return pose(mTrajectory.back());
+        const auto it = std::lower_bound(mTrajectory.begin(), mTrajectory.end(), timestamp, [](const ImuState& state, const double t)
+            {
+                return state.timestamp < t;
+            });
+        const auto& a = *(it - 1);
+        const auto& b = *it;
+        const double dt = b.timestamp - a.timestamp;
+        const double t = timestamp - a.timestamp;
+        const auto R = a.R_WI * Sophus::SO3d::exp((t / dt) * (a.R_WI.inverse() * b.R_WI).log());
+        // Constant acceleration interpolation is consistent with midpoint propagation.
+        const Eigen::Vector3d p = a.p_WI + a.v_WI * t + 0.5 * (b.v_WI - a.v_WI) * (t * t / dt);
+        return {R, p};
+    }
 
-        if (timestamp <= mTrajectory.front().timestamp)
+    void deskew(std::vector<PointXYZT>& points, const double scan_begin, const double scan_end) const
+    {
+        const Sophus::SE3d T_Lend_W = (poseAt(scan_end) * mTi2l).inverse();
+        for (auto& point : points)
         {
-            return toSE3(mTrajectory.front());
+            const double t = std::clamp(scan_begin + point.relative_time, scan_begin, scan_end);
+            const Eigen::Vector3d p = T_Lend_W * (poseAt(t) * (mTi2l * Eigen::Vector3d(point.x, point.y, point.z)));
+            point.x = static_cast<float>(p.x());
+            point.y = static_cast<float>(p.y());
+            point.z = static_cast<float>(p.z());
         }
-
-        if (timestamp >= mTrajectory.back().timestamp)
-        {
-            return toSE3(mTrajectory.back());
-        }
-
-        const auto iter = std::lower_bound(mTrajectory.begin(), mTrajectory.end(), timestamp,
-            [](const PoseState& state, const double time)
-                {
-                    return state.timestamp < time;
-                });
-
-        const PoseState& s1 = *iter;
-        const PoseState& s0 = *(iter - 1);
-
-        const double dt = s1.timestamp - s0.timestamp;
-
-        const double alpha = (timestamp - s0.timestamp) / dt;
-
-        /* Translation interpolation */
-        const Eigen::Vector3d position = (1.0 - alpha) * s0.p_WI + alpha * s1.p_WI;
-
-        /*
-         * SO(3) interpolation.
-         * Instead of directly doing quaternion SLERP:
-         *   R = R0 * Exp(alpha * Log(R0^-1 R1))
-         * This fits naturally with Sophus.
-         */
-        const Sophus::SO3d delta_R = s0.R_WI.inverse() * s1.R_WI;
-        const Sophus::SO3d rotation = s0.R_WI * Sophus::SO3d::exp(alpha * delta_R.log());
-
-        return Sophus::SE3d(rotation, position);
     }
 
 private:
-    struct PoseState
+    static Sophus::SE3d pose(const ImuState& state)
     {
-        double timestamp = 0.0;
-        Sophus::SO3d R_WI;
-        Eigen::Vector3d p_WI = Eigen::Vector3d::Zero();
-        Eigen::Vector3d v_WI = Eigen::Vector3d::Zero();
-    };
-
-    Sophus::SE3d mTi2l;   // LiDAR -> IMU extrinsic.
-
-    std::vector<PoseState> mTrajectory;    // IMU trajectory of current LiDAR scan.
-
-    static Sophus::SE3d toSE3(const PoseState& state)
-    {
-        return Sophus::SE3d(state.R_WI, state.p_WI);
+        return {state.R_WI, state.p_WI};
     }
-
-    /**
-     * Linear interpolation of raw IMU measurements.
-     */
-    static ImuData interpolateImu(const ImuData& imu0, const ImuData& imu1, const double timestamp)
-    {
-        const double dt = imu1.timestamp - imu0.timestamp;
-
-        if (dt <= 0.0)
-        {
-            return imu0;
-        }
-
-        const double alpha = std::clamp((timestamp - imu0.timestamp) / dt, 0.0, 1.0);
-
-        ImuData result;
-        result.timestamp = timestamp;
-        result.gyro = (1.0 - alpha) * imu0.gyro + alpha * imu1.gyro;
-        result.accel = (1.0 - alpha) * imu0.accel + alpha * imu1.accel;
-
-        return result;
-    }
-
-    static ImuData imuAt(const std::vector<ImuData>& imu_data, const double timestamp)
-    {
-        const auto iter = std::lower_bound(imu_data.begin(), imu_data.end(), timestamp, [](const ImuData& imu, const double time)
-                {
-                    return imu.timestamp < time;
-                });
-
-        if (iter == imu_data.begin())
-        {
-            return *iter;
-        }
-
-        if (iter == imu_data.end())
-        {
-            return imu_data.back();
-        }
-
-        if (std::abs(iter->timestamp - timestamp) < 1e-9)
-        {
-            return *iter;
-        }
-
-        return interpolateImu(*(iter - 1), *iter, timestamp);
-    }
-
-    /**
-     * Create:
-     * scan_begin
-     *     ↓
-     * IMU
-     * IMU
-     * IMU
-     *     ↓
-     * scan_end
-     *
-     * so integration begins and ends exactly at
-     * LiDAR timestamps.
-     */
-    static std::vector<ImuData> buildImuSequence(const std::vector<ImuData>& imu_data, const double scan_begin, const double scan_end)
-    {
-        std::vector<ImuData> result;
-        result.reserve(imu_data.size() + 2);
-        result.push_back(imuAt(imu_data, scan_begin));
-
-        for (const auto& imu : imu_data)
-        {
-            if (imu.timestamp > scan_begin && imu.timestamp < scan_end)
-            {
-                result.push_back(imu);
-            }
-        }
-
-        result.push_back(imuAt(imu_data, scan_end));
-        return result;
-    }
+    Sophus::SE3d mTi2l;
+    std::vector<ImuState> mTrajectory;
 };
 }  // namespace lio

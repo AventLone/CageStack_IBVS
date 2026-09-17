@@ -1,10 +1,12 @@
 #pragma once
+#include <limits>
+#include <memory>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include "perception/LIO/SparseVoxel.h"
 #include <sophus/se3.hpp>
 
-class SparsityAwareGICP
+class GICP
 {
 public:
     struct Config
@@ -54,26 +56,26 @@ public:
         std::size_t num_source_points{0};
         std::size_t num_target_points{0};
         std::size_t num_correspondences{0};
-        float fitness_score{std::numeric_limits<float>::infinity()};
-        Eigen::Isometry3f transform{Eigen::Isometry3f::Identity()};
+        double fitness_score{std::numeric_limits<double>::infinity()};
+        Eigen::Isometry3d transform{Eigen::Isometry3d::Identity()};
     };
 
-    SparsityAwareGICP() : SparsityAwareGICP(Config{})
+    GICP() : GICP(Config{})
     {
     }
 
-    explicit SparsityAwareGICP(const Config& config) : mConfig(config)
+    explicit GICP(const Config& config) : mConfig(config)
     {
         mSparseVoxelConfig.voxel_size = config.voxel_size;
     }
 
-    SparsityAwareGICP(SparsityAwareGICP&&) noexcept = default;
-    SparsityAwareGICP& operator=(SparsityAwareGICP&&) noexcept = default;
+    GICP(GICP&&) noexcept = default;
+    GICP& operator=(GICP&&) noexcept = default;
 
-    SparsityAwareGICP(const SparsityAwareGICP&) = delete;
-    SparsityAwareGICP& operator=(const SparsityAwareGICP&) = delete;
+    GICP(const GICP&) = delete;
+    GICP& operator=(const GICP&) = delete;
 
-    ~SparsityAwareGICP() = default;
+    ~GICP() = default;
 
 
     [[nodiscard]] const Config& config() const noexcept
@@ -88,9 +90,26 @@ public:
         clearTarget();
     }
 
-    void initializeTarget(const pcl::PointCloud<pcl::PointXYZ>& target);
-    void insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>& points);
+    void initializeTarget(const pcl::PointCloud<pcl::PointXYZ>& target)
+    {
+        auto target_index = std::make_unique<SparseVoxel>(mSparseVoxelConfig);
+        target_index->initialize(target);
+        mTarget = std::move(target_index);
+    }
 
+    void insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>& points)
+    {
+        if (points.empty())
+        {
+            return;
+        }
+        if (!hasTarget())
+        {
+            initializeTarget(points);
+            return;
+        }
+        mTarget->insert(points);
+    }
 
     void clearTarget() noexcept
     {
@@ -102,7 +121,7 @@ public:
         return mTarget != nullptr;
     }
 
-    Result align(const pcl::PointCloud<pcl::PointXYZ>& source, const Eigen::Isometry3f& initial_guess) const;
+    Result align(const pcl::PointCloud<pcl::PointXYZ>& source, const Eigen::Isometry3d& initial_guess) const;
 
 private:
     Config mConfig;
@@ -110,10 +129,10 @@ private:
     std::unique_ptr<SparseVoxel> mTarget;
 
     void findCorrespondences(const std::vector<const PointWithCovariance*>& source, const SparseVoxel& target,
-                             const Sophus::SE3f& source_to_target,
-                             std::vector<Correspondence>& correspondences) const;
+                             const Sophus::SE3d& source_to_target, std::vector<Correspondence>& correspondences) const;
 
     bool buildAndSolve(const std::vector<const PointWithCovariance*>& source,
-                       const std::vector<Correspondence>& correspondences, Sophus::SE3f& source_to_target,
-                       std::size_t& num_correspondences, float& fitness_score, Sophus::SE3f::Tangent& left_increment) const;
+                       const std::vector<Correspondence>& correspondences,
+                       Sophus::SE3d& source_to_target, std::size_t& num_correspondences,
+                       double& fitness_score, Sophus::SE3d::Tangent& left_increment) const;
 };

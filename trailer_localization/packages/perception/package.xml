@@ -17,6 +17,12 @@
     <depend>cv_bridge</depend>
     <depend>message_filters</depend>
     <depend>pcl_ros</depend>
+    <depend>pcl_conversions</depend>
+    <depend>tf2_eigen</depend>
+    <depend>sophus</depend>
+    <depend>eigen</depend>
+    <depend>libtbb-dev</depend>
+    <depend>boost</depend>
 
     <test_depend>ament_lint_auto</test_depend>
     <test_depend>ament_lint_common</test_depend>

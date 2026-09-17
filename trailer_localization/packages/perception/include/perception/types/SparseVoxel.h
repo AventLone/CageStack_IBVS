@@ -16,7 +16,7 @@ struct PointWithCovariance
 struct Correspondence
 {
     const PointWithCovariance* target{nullptr};
-    Eigen::Vector3f transformed_position{Eigen::Vector3f::Zero()};
+    Eigen::Vector3d transformed_position{Eigen::Vector3d::Zero()};
 };
 
 class SparseVoxel
@@ -75,9 +75,9 @@ public:
 
     std::vector<const PointWithCovariance*> points() const;
 
-	Neighbor nearestNeighbor(const Eigen::Vector3f& query, float max_distance, int voxel_radius = 1) const;
+	Neighbor nearestNeighbor(const Eigen::Vector3f& query, float max_distance) const;
 
-	std::vector<Neighbor> nearestNeighbors(const Eigen::Vector3f& query, int max_neighbors, int voxel_radius = 1) const;
+	std::vector<Neighbor> nearestNeighbors(const Eigen::Vector3f& query, int max_neighbors) const;
 
 private:
     struct VoxelKey

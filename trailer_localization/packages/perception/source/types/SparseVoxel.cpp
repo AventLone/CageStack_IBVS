@@ -1,4 +1,4 @@
-#include "perception/LIO/SparseVoxel.h"
+#include "perception/types/SparseVoxel.h"
 #include <algorithm>
 #include <cmath>
 #include <execution>
@@ -162,8 +162,7 @@ void SparseVoxel::estimateCovariances(const std::vector<PointWithCovariance*>& p
 			point->covariance = Eigen::Matrix3f::Identity();
 			point->covariance_valid = false;
 
-			constexpr int voxel_radius = 1;
-			const std::vector<Neighbor> neighbors = nearestNeighbors(point->position, neighbor_limit, voxel_radius);
+			const std::vector<Neighbor> neighbors = nearestNeighbors(point->position, neighbor_limit);
 			if (static_cast<int>(neighbors.size()) < required_neighbors)
 			{
 				return;
@@ -215,12 +214,13 @@ std::vector<const PointWithCovariance*> SparseVoxel::points() const
 	return points;
 }
 
-SparseVoxel::Neighbor SparseVoxel::nearestNeighbor(const Eigen::Vector3f& query, const float max_distance, const int voxel_radius) const
+SparseVoxel::Neighbor SparseVoxel::nearestNeighbor(const Eigen::Vector3f& query, const float max_distance) const
 {
 	Neighbor nearest;
 	nearest.squared_distance = max_distance * max_distance;
 	const auto [i, j, k] = pointToVoxel(query);
 
+    constexpr int voxel_radius = 1;
 	for (int dx = -voxel_radius; dx <= voxel_radius; ++dx)
 	{
 		for (int dy = -voxel_radius; dy <= voxel_radius; ++dy)
@@ -248,8 +248,7 @@ SparseVoxel::Neighbor SparseVoxel::nearestNeighbor(const Eigen::Vector3f& query,
 }
 
 std::vector<SparseVoxel::Neighbor> SparseVoxel::nearestNeighbors(const Eigen::Vector3f& query,
-                                                                 const int max_neighbors,
-																 const int voxel_radius) const
+                                                                 const int max_neighbors) const
 {
 	std::vector<Neighbor> neighbors;
 	if (max_neighbors <= 0)
@@ -259,6 +258,8 @@ std::vector<SparseVoxel::Neighbor> SparseVoxel::nearestNeighbors(const Eigen::Ve
 
 	neighbors.reserve(std::min(static_cast<std::size_t>(max_neighbors), mPointCount));
 	const auto [i, j, k] = pointToVoxel(query);
+
+    constexpr int voxel_radius = 1;
 	for (int dx = -voxel_radius; dx <= voxel_radius; ++dx)
 	{
 		for (int dy = -voxel_radius; dy <= voxel_radius; ++dy)

@@ -67,7 +67,7 @@ void Localization_LIO::updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan
 {
     // Transform scan into trailer local template frame
     pcl::PointCloud<pcl::PointXYZ> scan_in_trailer;
-    pcl::transformPointCloud(scan_in_truck, scan_in_trailer, mBasePose);
+    pcl::transformPointCloud(scan_in_truck, scan_in_trailer, mBasePose.cast<float>());
 
     *mMap += scan_in_trailer;   // Merge into voxel map
 
@@ -94,7 +94,7 @@ bool Localization_LIO::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& curre
         return false;
     }
 
-    SparsityAwareGICP::Result result;
+    GICP::Result result;
     try
     {
         result = mGicp.align(*current_scan, mBasePose);
@@ -238,7 +238,7 @@ void Localization_LIO::lidarWorkerLoop()
         }
 
         pcl::PointCloud<pcl::PointXYZ> transformed_scan;
-        pcl::transformPointCloud(*processed_cloud, transformed_scan, mBasePose);
+        pcl::transformPointCloud(*processed_cloud, transformed_scan, mBasePose.cast<float>());
 
         sensor_msgs::msg::PointCloud2 scan_vis_msg;
         pcl::toROSMsg(transformed_scan, scan_vis_msg);

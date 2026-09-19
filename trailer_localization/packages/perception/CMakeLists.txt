@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.38)
+cmake_minimum_required(VERSION 3.22)
 project(perception LANGUAGES C CXX)
 
 if (NOT CMAKE_BUILD_TYPE)
@@ -23,24 +23,22 @@ file(GLOB_RECURSE SOURCE_FILES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/sou
 
 find_package(Sophus REQUIRED)
 find_package(TBB REQUIRED)
+find_package(Threads REQUIRED)
 
 ament_auto_add_executable(perception ${SOURCE_FILES})
 target_include_directories(perception PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
 )
-target_link_libraries(perception Sophus::Sophus TBB::tbb)
+target_link_libraries(perception Sophus::Sophus TBB::tbb Threads::Threads)
 target_compile_features(perception PUBLIC c_std_99 cxx_std_23)
 
 if (BUILD_TESTING)
-#    add_executable(incremental_voxel_test
-#        test/incremental_voxel_test.cpp
-#        source/LIO/SparseVoxel.cpp
-#    )
-#    target_include_directories(incremental_voxel_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-#    ament_target_dependencies(incremental_voxel_test pcl_ros)
-#    target_compile_features(incremental_voxel_test PRIVATE cxx_std_23)
-#    add_test(NAME incremental_voxel_test COMMAND incremental_voxel_test)
+    add_executable(lio_core_test test/lio_core_test.cpp source/LIO/ESKF.cpp source/LIO/ImuProcessor.cpp)
+    target_include_directories(lio_core_test PRIVATE include)
+    target_link_libraries(lio_core_test Sophus::Sophus)
+    target_compile_features(lio_core_test PRIVATE cxx_std_23)
+    add_test(NAME lio_core_test COMMAND lio_core_test)
 
     find_package(ament_lint_auto REQUIRED)
     set(ament_cmake_copyright_FOUND TRUE)
@@ -51,4 +49,4 @@ endif ()
 # --------------------------------------------------------------------------------
 # Install
 # --------------------------------------------------------------------------------
-ament_auto_package(INSTALL_TO_SHARE)
+ament_auto_package(INSTALL_TO_SHARE config docs)

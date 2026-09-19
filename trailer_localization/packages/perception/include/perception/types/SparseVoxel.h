@@ -22,6 +22,8 @@ struct Correspondence
 class SparseVoxel
 {
 public:
+    using Ptr = std::unique_ptr<SparseVoxel>;
+
     struct Config
     {
         float voxel_size{0.1f};

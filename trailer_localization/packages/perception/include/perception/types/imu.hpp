@@ -29,9 +29,10 @@ struct ImuState
     Eigen::Vector3d p_wi = Eigen::Vector3d::Zero();
     Eigen::Vector3d v_wi = Eigen::Vector3d::Zero();
 
+    /* Fixed after initialization. */
     Eigen::Vector3d gyro_bias = Eigen::Vector3d::Zero();
     Eigen::Vector3d accel_bias = Eigen::Vector3d::Zero();
 
-    Eigen::Vector3d gravity = Eigen::Vector3d(0.0, 0.0, -9.81);
+    Eigen::Vector3d gravity = Eigen::Vector3d(0.0, 0.0, -9.81);    // Fixed in world frame.
 };
 }  // namespace lio

@@ -107,7 +107,7 @@ public:
 private:
     Config mConfig;
     SparseVoxel::Config mSparseVoxelConfig{};
-    std::unique_ptr<SparseVoxel> mTarget;
+    SparseVoxel::Ptr mTarget;
 
     void findCorrespondences(const std::vector<const PointWithCovariance*>& source, const SparseVoxel& target,
                              const Sophus::SE3d& source_to_target, std::vector<Correspondence>& correspondences) const;

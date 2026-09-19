@@ -4,6 +4,8 @@
 #include "perception/tools/feature_detect_3d.hpp"
 #include <opencv2/opencv.hpp>
 
+#include "perception/types/stamped_cloud.hpp"
+
 namespace
 {
 struct IntensityAnalysis
@@ -137,6 +139,8 @@ bool Localization_LIO::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& curre
 
 void Localization_LIO::lidarWorkerLoop()
 {
+    StampedCloud stamped_cloud;
+
     while (rclcpp::ok())
     {
         /* Wait and receive scan data */
@@ -155,7 +159,13 @@ void Localization_LIO::lidarWorkerLoop()
         const auto frame_start_time = std::chrono::high_resolution_clock::now();
 
         pcl::PointCloud<pcl::PointXYZI> lidar_points;
-        pcl::fromROSMsg(scan_msg, lidar_points);
+
+        if (!parseCloudMsg(scan_msg, stamped_cloud))
+        {
+            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "Failed to parse point cloud message!");
+            continue;
+        }
+
 
         if (!mIntensityAnalyzed)
         {

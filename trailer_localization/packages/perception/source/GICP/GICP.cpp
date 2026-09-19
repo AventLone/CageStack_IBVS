@@ -32,10 +32,7 @@ void GICP::findCorrespondences(const std::vector<const PointWithCovariance*>& so
         [&target, &source_to_target, this](const PointWithCovariance* source_point)
         {
             const Eigen::Vector3f transformed_position = source_to_target.cast<float>() * source_point->position;
-            constexpr int adjacent_voxels = 1;
-            const SparseVoxel::Neighbor nearest = target.nearestNeighbor(transformed_position,
-                                                                         mConfig.max_correspondence_distance,
-                                                                         adjacent_voxels);
+            const SparseVoxel::Neighbor nearest = target.nearestNeighbor(transformed_position, mConfig.max_correspondence_distance);
             return Correspondence{nearest.point, transformed_position.cast<double>()};
         });
 }

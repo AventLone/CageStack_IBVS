@@ -247,8 +247,7 @@ SparseVoxel::Neighbor SparseVoxel::nearestNeighbor(const Eigen::Vector3f& query,
 	return nearest;
 }
 
-std::vector<SparseVoxel::Neighbor> SparseVoxel::nearestNeighbors(const Eigen::Vector3f& query,
-                                                                 const int max_neighbors) const
+std::vector<SparseVoxel::Neighbor> SparseVoxel::nearestNeighbors(const Eigen::Vector3f& query, const int max_neighbors) const
 {
 	std::vector<Neighbor> neighbors;
 	if (max_neighbors <= 0)

@@ -1,0 +1,37 @@
+/**:
+  ros__parameters:
+    use_sim_time: false
+    lidar_topic: /hesai/pandar
+    imu_topic: /imu
+    map_frame: map
+    imu_init_duration: 0.5 # Keep stationary during this interval (at least 20 samples).
+
+    # p_imu = R_il * p_lidar + t_il. Replace identity with calibrated extrinsics.
+    lidar_to_imu:
+      translation: [0.0, 0.0, 0.0]
+      quaternion_xyzw: [0.0, 0.0, 0.0, 1.0]
+    # Pose of the reported base in IMU coordinates: T_wb = T_wi * T_ib.
+    base_to_imu:
+      translation: [0.0, 0.0, 0.0]
+      quaternion_xyzw: [0.0, 0.0, 0.0, 1.0]
+
+    eskf:
+      accel_noise_density: 0.03       # m/s^2 / sqrt(Hz)
+      gyro_noise_density: 0.00034906585 # rad/s / sqrt(Hz)
+      lidar_position_std: 0.03       # m, world translation
+      lidar_rotation_std: 0.00523598776 # rad, LiDAR-local rotation (0.3 deg)
+      innovation_gate: 22.458        # Squared Mahalanobis distance; <= 0 disables
+
+    map_resolution: 0.1
+    keyframe_translation: 0.1        # m
+    keyframe_rotation: 0.035         # rad
+    intensity_threshold: -1.0        # < 0: choose quantile from first processed scan
+    intensity_keep_ratio: 0.6
+    self_filter_half_width: 0.8      # m; reject central XY square in IMU frame
+    path_max_poses: 2000             # <= 0 disables path output
+    gicp:
+      voxel_size: 0.2
+      max_correspondence_distance: 0.5
+      max_fitness_score: 0.01        # Euclidean MSE [m^2], equivalent to 10 cm RMSE
+      min_correspondences: 30
+      max_iterations: 30

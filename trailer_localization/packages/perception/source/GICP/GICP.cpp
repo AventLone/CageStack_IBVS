@@ -40,7 +40,7 @@ void GICP::findCorrespondences(const std::vector<const PointWithCovariance*>& so
 std::optional<std::pair<std::size_t, double>> GICP::buildAndSolve(const std::vector<const PointWithCovariance*>& source,
                                                                   const std::vector<Correspondence>& correspondences,
                                                                   Sophus::SE3d& source_to_target,
-                                                                  Sophus::SE3d::Tangent& left_increment) const
+                                                                  Sophus::SE3d::Tangent& left_increment, const bool solve) const
 {
     double fitness_score{};
 
@@ -101,6 +101,10 @@ std::optional<std::pair<std::size_t, double>> GICP::buildAndSolve(const std::vec
         return std::nullopt;
     }
 
+    if (!solve)
+    {
+        return std::make_pair(num_correspondences, fitness_score);
+    }
     hessian.diagonal().array() += mConfig.damping_factor;
     const Eigen::LDLT<Eigen::Matrix<double, 6, 6>> decomposition(hessian);
     if (decomposition.info() != Eigen::Success)
@@ -173,9 +177,19 @@ GICP::Result GICP::align(const pcl::PointCloud<pcl::PointXYZ>& source, const Eig
         }
     }
 
-    if (!result.converged && result.iterations > 0 && std::isfinite(result.fitness_score))
+    // Quality metrics must describe the returned pose, not the preceding iterate.
+    findCorrespondences(source_points, *mTarget, source_to_target, correspondences);
+    Sophus::SE3d::Tangent unused;
+    if (const auto metrics = buildAndSolve(source_points, correspondences, source_to_target, unused, false))
     {
-        result.converged = true;
+        result.num_correspondences = metrics->first;
+        result.fitness_score = metrics->second;
+    }
+    else
+    {
+        result.converged = false;
+        result.num_correspondences = 0;
+        result.fitness_score = std::numeric_limits<double>::infinity();
     }
     return result;
 }

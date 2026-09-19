@@ -1,4 +1,5 @@
 #pragma once
+#include <optional>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include "perception/types/SparseVoxel.h"
@@ -23,7 +24,7 @@ public:
 
         // 调用方 TrailerLocalization 的结果验收上限，单位 m^2；不参与 GICP 求解或收敛判定。
         // fitness 是有效约束的未加权欧氏残差平方均值，不是 RMSE；0.01 对应 RMSE 0.1 m。
-        // 增大放宽验收，减小更严格；当前统计使用最近一次已评估位姿的残差，并非更新后重新评估。
+        // 增大放宽验收，减小更严格；返回前会在最终位姿重新评估残差。
         double max_fitness_score{0.01};
 
         // 调用方验收所需的最少有效约束数，不是原始最近邻命中数，也不控制求解器迭代。
@@ -115,5 +116,5 @@ private:
     std::optional<std::pair<std::size_t, double>> buildAndSolve(const std::vector<const PointWithCovariance*>& source,
                                                                 const std::vector<Correspondence>& correspondences,
                                                                 Sophus::SE3d& source_to_target,
-                                                                Sophus::SE3d::Tangent& left_increment) const;
+                                                                Sophus::SE3d::Tangent& left_increment, bool solve = true) const;
 };

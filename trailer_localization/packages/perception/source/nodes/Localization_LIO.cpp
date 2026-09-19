@@ -1,301 +1,284 @@
 #include "perception/nodes/Localization_LIO.h"
+#include "perception/tools/cloud_conversion.hpp"
+#include <algorithm>
+#include <cmath>
+#include <pcl/common/transforms.h>
+#include <pcl/filters/voxel_grid.h>
 #include <pcl_conversions/pcl_conversions.h>
-#include "perception/tools/OrthographicProjector.hpp"
-#include "perception/tools/feature_detect_3d.hpp"
-#include <opencv2/opencv.hpp>
+#include <tf2_eigen/tf2_eigen.hpp>
 
-#include "perception/types/stamped_cloud.hpp"
-
-namespace
+Localization_LIO::Localization_LIO(const std::string& node_name) : Node(node_name)
 {
-struct IntensityAnalysis
-{
-    float minimum{};
-    float p25{};
-    float p40{};
-    float median{};
-    float p75{};
-    float p90{};
-    float p95{};
-    float p99{};
-    float maximum{};
-    float suggested_threshold{};
-    std::size_t valid_count{};
-    std::size_t retained_count{};
-};
-
-std::optional<IntensityAnalysis> analyzeIntensity(const pcl::PointCloud<pcl::PointXYZI>& cloud,
-                                                  const float keep_ratio)
-{
-    std::vector<float> intensities;
-    intensities.reserve(cloud.size());
-    for (const auto& point : cloud)
+    const auto extrinsic = [this](const std::string& name)
     {
-        if (std::isfinite(point.intensity))
+        const auto t = declare_parameter<std::vector<double>>(name + ".translation", {0.0, 0.0, 0.0});
+        const auto q = declare_parameter<std::vector<double>>(name + ".quaternion_xyzw", {0.0, 0.0, 0.0, 1.0});
+        return Sophus::SE3d(Eigen::Quaterniond(q[3], q[0], q[1], q[2]).normalized(),
+                            Eigen::Vector3d(t[0], t[1], t[2]));
+    };
+    mT_il = extrinsic("lidar_to_imu");
+    mT_ib = extrinsic("base_to_imu");
+    mMapFrame = declare_parameter<std::string>("map_frame", "map");
+    mInitDuration = declare_parameter<double>("imu_init_duration", 0.5);
+    mMapResolution = declare_parameter<double>("map_resolution", 0.1);
+    mKeyframeTranslation = declare_parameter<double>("keyframe_translation", 0.1);
+    mKeyframeRotation = declare_parameter<double>("keyframe_rotation", 0.035);
+    mIntensityThreshold = declare_parameter<double>("intensity_threshold", -1.0);
+    mIntensityKeepRatio = std::clamp(declare_parameter<double>("intensity_keep_ratio", 0.6), 0.01, 1.0);
+    mSelfFilterHalfWidth = declare_parameter<double>("self_filter_half_width", 0.8);
+    mPathMaxPoses = declare_parameter<int>("path_max_poses", 2000);
+    mFilterConfig.accel_noise_density = declare_parameter<double>("eskf.accel_noise_density", 0.03);
+    mFilterConfig.gyro_noise_density = declare_parameter<double>("eskf.gyro_noise_density", 0.00034906585);
+    mFilterConfig.innovation_gate = declare_parameter<double>("eskf.innovation_gate", 22.458);
+    const double position_std = declare_parameter<double>("eskf.lidar_position_std", 0.03);
+    const double rotation_std = declare_parameter<double>("eskf.lidar_rotation_std", 0.00523598776);
+    mLidarCov.topLeftCorner<3, 3>().diagonal().setConstant(position_std * position_std);
+    mLidarCov.bottomRightCorner<3, 3>().diagonal().setConstant(rotation_std * rotation_std);
+
+    GICP::Config config;
+    config.voxel_size = declare_parameter<double>("gicp.voxel_size", 0.2);
+    config.max_correspondence_distance = declare_parameter<double>("gicp.max_correspondence_distance", 0.5);
+    config.max_fitness_score = declare_parameter<double>("gicp.max_fitness_score", 0.01); // MSE, 10 cm RMSE
+    config.min_correspondences = declare_parameter<int>("gicp.min_correspondences", 30);
+    config.max_iterations = declare_parameter<int>("gicp.max_iterations", 30);
+    config.convergence_translation = 1e-4;
+    config.convergence_rotation = 1e-4;
+    mGicp.setConfig(config);
+
+    mProcessedScanVisPub = create_publisher<sensor_msgs::msg::PointCloud2>("/scan_vis", rclcpp::SensorDataQoS());
+    mVoxelMapPub = create_publisher<sensor_msgs::msg::PointCloud2>("/voxel_map", rclcpp::SensorDataQoS());
+    mBasePosePub = create_publisher<geometry_msgs::msg::PoseStamped>("/base_pose", rclcpp::SensorDataQoS());
+    mBasePosePathPub = create_publisher<nav_msgs::msg::Path>("/base_pose_path", rclcpp::SensorDataQoS());
+    mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>(
+        declare_parameter<std::string>("lidar_topic", "/hesai/pandar"), rclcpp::SensorDataQoS(),
+        [this](sensor_msgs::msg::PointCloud2::ConstSharedPtr msg)
         {
-            intensities.push_back(point.intensity);
+            {
+                std::lock_guard lock(mMutex);
+                mPendingScan = std::move(msg); // Bound latency; IMU history is retained across dropped scans.
+            }
+            mTrigger.notify_one();
+        });
+    mImuSub = create_subscription<sensor_msgs::msg::Imu>(
+        declare_parameter<std::string>("imu_topic", "/imu"), rclcpp::SensorDataQoS().keep_last(1000),
+        [this](sensor_msgs::msg::Imu::ConstSharedPtr msg) { onImu(*msg); });
+    mLidarWorker = std::thread(&Localization_LIO::lidarWorkerLoop, this);
+    RCLCPP_INFO(get_logger(), "Keep the IMU stationary for the first %.2f s.", mInitDuration);
+}
+
+Localization_LIO::~Localization_LIO()
+{
+    {
+        std::lock_guard lock(mMutex);
+        mShutdown = true;
+    }
+    mTrigger.notify_one();
+    mLidarWorker.join();
+}
+
+void Localization_LIO::onImu(const sensor_msgs::msg::Imu& msg)
+{
+    const lio::ImuData sample{
+        rclcpp::Time(msg.header.stamp).seconds(),
+        {msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z},
+        {msg.linear_acceleration.x, msg.linear_acceleration.y, msg.linear_acceleration.z}};
+    {
+        std::lock_guard lock(mMutex);
+        mImuBuffer.push_back(sample);
+        if (!mLiveFilter)
+        {
+            if (mImuBuffer.size() >= 20 && sample.timestamp - mImuBuffer.front().timestamp >= mInitDuration)
+            {
+                mLiveFilter.emplace(mFilterConfig);
+                mLiveFilter->initialize({mImuBuffer.begin(), mImuBuffer.end()});
+                mInitialFilter = mLiveFilter;
+                RCLCPP_INFO(get_logger(), "IMU initialized. Waiting for a complete LiDAR scan.");
+            }
+        }
+        else
+        {
+            mLiveFilter->predict(sample);
+            mBasePosePub->publish(basePose(*mLiveFilter));
         }
     }
-
-    if (intensities.empty())
-    {
-        return std::nullopt;
-    }
-
-    std::ranges::sort(intensities);
-    const auto percentile = [&intensities](const double fraction)
-        {
-            const auto index = static_cast<std::size_t>(
-                std::round(fraction * static_cast<double>(intensities.size() - 1)));
-            return intensities[index];
-        };
-
-    const float minimum = intensities.front();
-    const float maximum = intensities.back();
-    const std::size_t target_retained_count = std::min(intensities.size(),
-        static_cast<std::size_t>(std::ceil(static_cast<double>(keep_ratio) * intensities.size())));
-    const std::size_t threshold_index = intensities.size() - target_retained_count;
-    const float suggested_threshold = intensities[threshold_index];
-    const auto first_retained = std::ranges::lower_bound(intensities, suggested_threshold);
-    const std::size_t retained_count = static_cast<std::size_t>(intensities.end() - first_retained);
-    return IntensityAnalysis{minimum, percentile(0.25), percentile(0.40), percentile(0.50), percentile(0.75),
-                             percentile(0.90), percentile(0.95), percentile(0.99), maximum,
-                             suggested_threshold, intensities.size(), retained_count};
-}
+    mTrigger.notify_one();
 }
 
-
-void Localization_LIO::updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan_in_truck)
+bool Localization_LIO::alignICP(const pcl::PointCloud<pcl::PointXYZ>& scan, lio::ESKF& filter)
 {
-    // Transform scan into trailer local template frame
-    pcl::PointCloud<pcl::PointXYZ> scan_in_trailer;
-    pcl::transformPointCloud(scan_in_truck, scan_in_trailer, mBasePose.cast<float>());
-
-    *mMap += scan_in_trailer;   // Merge into voxel map
-
-    const auto filtered_map = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-    pcl::VoxelGrid<pcl::PointXYZ> voxel_filter;
-    voxel_filter.setLeafSize(MAP_RESOLUTION, MAP_RESOLUTION, MAP_RESOLUTION);
-    voxel_filter.setInputCloud(mMap);
-    voxel_filter.filter(*filtered_map);
-
-    mMap = filtered_map;
-
-    mGicp.insertTargetPoints(scan_in_trailer);
-}
-
-bool Localization_LIO::alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_scan)
-{
-    RCLCPP_INFO(get_logger(), "CUDA sparsity-aware GICP SE(3) start.");
-    if (mMap == nullptr || mMap->empty() || current_scan == nullptr || current_scan->empty())
+    const Sophus::SE3d prediction = filter.pose() * mT_il;
+    const auto result = mGicp.align(scan, Eigen::Isometry3d(prediction.matrix()));
+    if (!result.converged || result.num_correspondences < mGicp.config().min_correspondences ||
+        result.fitness_score > mGicp.config().max_fitness_score)
     {
-        const std::size_t target_point_count = mMap == nullptr ? 0 : mMap->size();
-        const std::size_t source_point_count = current_scan == nullptr ? 0 : current_scan->size();
-        RCLCPP_WARN(get_logger(), "GICP skipped: target map has %zu points; source ROI has %zu points.",
-                    target_point_count, source_point_count);
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
+                            "GICP rejected: matches=%zu, MSE=%.4f, converged=%d.",
+                            result.num_correspondences, result.fitness_score, result.converged);
         return false;
     }
 
-    GICP::Result result;
-    try
+    const Sophus::SE3d T_wl(result.transform.rotation(), result.transform.translation());
+    // Convert LiDAR pose noise [dp_world, dtheta_lidar] to IMU pose noise,
+    // including the position/rotation correlation introduced by the lever arm.
+    const Sophus::SE3d T_li = mT_il.inverse();
+    lio::ESKF::MeasurementCov J = lio::ESKF::MeasurementCov::Identity();
+    J.topRightCorner<3, 3>() = -T_wl.rotationMatrix() * Sophus::SO3d::hat(T_li.translation());
+    J.bottomRightCorner<3, 3>() = mT_il.rotationMatrix();
+    const bool accepted = filter.observe(T_wl * T_li, J * mLidarCov * J.transpose());
+    if (!accepted)
     {
-        result = mGicp.align(*current_scan, mBasePose);
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "LiDAR pose rejected by ESKF innovation gate.");
     }
-    catch (const std::exception& exception)
+    return accepted;
+}
+
+void Localization_LIO::updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan, const Sophus::SE3d& T_wl)
+{
+    pcl::PointCloud<pcl::PointXYZ> world_scan;
+    pcl::transformPointCloud(scan, world_scan, T_wl.matrix().cast<float>().eval());
+    mGicp.insertTargetPoints(world_scan);
+    *mMap += world_scan;
+    pcl::VoxelGrid<pcl::PointXYZ> voxel;
+    voxel.setLeafSize(mMapResolution, mMapResolution, mMapResolution);
+    voxel.setInputCloud(mMap);
+    auto downsampled = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+    voxel.filter(*downsampled);
+    mMap = std::move(downsampled);
+    mLastKeyframe = T_wl;
+}
+
+geometry_msgs::msg::PoseStamped Localization_LIO::basePose(const lio::ESKF& filter) const
+{
+    geometry_msgs::msg::PoseStamped msg;
+    msg.header.frame_id = mMapFrame;
+    msg.header.stamp = rclcpp::Time(static_cast<int64_t>(std::llround(filter.state().timestamp * 1e9)));
+    msg.pose = tf2::toMsg(Eigen::Isometry3d((filter.pose() * mT_ib).matrix()));
+    return msg;
+}
+
+void Localization_LIO::publishScan(const pcl::PointCloud<pcl::PointXYZ>& scan, const lio::ESKF& filter)
+{
+    const auto pose = basePose(filter);
+    if (mProcessedScanVisPub->get_subscription_count() > 0)
     {
-        RCLCPP_ERROR(get_logger(), "CUDA sparse GICP failed: %s", exception.what());
-        return false;
+        pcl::PointCloud<pcl::PointXYZ> transformed;
+        pcl::transformPointCloud(scan, transformed, (filter.pose() * mT_il).matrix().cast<float>().eval());
+        sensor_msgs::msg::PointCloud2 msg;
+        pcl::toROSMsg(transformed, msg);
+        msg.header = pose.header;
+        mProcessedScanVisPub->publish(msg);
     }
-
-    if (result.converged)
+    if (mVoxelMapPub->get_subscription_count() > 0)
     {
-        const double fitness_score = result.fitness_score;
-        const auto& gicp_config = mGicp.config();
-
-        if (result.num_correspondences < gicp_config.min_correspondences)
+        sensor_msgs::msg::PointCloud2 msg;
+        pcl::toROSMsg(*mMap, msg);
+        msg.header = pose.header;
+        mVoxelMapPub->publish(msg);
+    }
+    if (mPathMaxPoses > 0)
+    {
+        mBasePosePath.header = pose.header;
+        mBasePosePath.poses.push_back(pose);
+        if (mBasePosePath.poses.size() > static_cast<std::size_t>(mPathMaxPoses))
         {
-            RCLCPP_WARN(get_logger(), "GICP converged with too few correspondences (%zu < %zu), skipping map update.",
-                        result.num_correspondences, gicp_config.min_correspondences);
-            return false;
+            mBasePosePath.poses.erase(mBasePosePath.poses.begin());
         }
-
-        mBasePose = result.transform;
-
-        if (fitness_score > gicp_config.max_fitness_score)
-        {
-            RCLCPP_WARN(get_logger(), "GICP converged but fitness score (%.4f) > threshold (%.4f), skipping map update.",
-                        fitness_score, gicp_config.max_fitness_score);
-            return false;
-        }
-
-        return true;
+        mBasePosePathPub->publish(mBasePosePath);
     }
-
-    RCLCPP_WARN(get_logger(), "CUDA sparse GICP did not converge: iter: %d, correspondences: %zu/%zu, fitness: %.6f.",
-                result.iterations, result.num_correspondences, result.num_source_points,
-                result.fitness_score);
-    return false;
 }
 
 void Localization_LIO::lidarWorkerLoop()
 {
-    StampedCloud stamped_cloud;
-
-    while (rclcpp::ok())
+    std::optional<lio::ESKF> filter;
+    lio::ImuProcessor imu_processor(mT_il);
+    while (true)
     {
-        /* Wait and receive scan data */
-        sensor_msgs::msg::PointCloud2 scan_msg;
+        sensor_msgs::msg::PointCloud2::ConstSharedPtr msg;
         {
-            std::unique_lock lock(mScanBufferMutex);
-            mLidarTrigger.wait(lock, [this]() -> bool { return !mScanBuffer.empty() || mIsShutdown; });
-            if (mIsShutdown)
-            {
-                break;
-            }
-            scan_msg = std::move(mScanBuffer.front());
-            mScanBuffer.pop();
+            std::unique_lock lock(mMutex);
+            mTrigger.wait(lock, [this] { return mShutdown || (mInitialFilter && mPendingScan); });
+            if (mShutdown) return;
+            if (!filter) filter = mInitialFilter;
+            msg = std::move(mPendingScan);
         }
-
-        const auto frame_start_time = std::chrono::high_resolution_clock::now();
-
-        pcl::PointCloud<pcl::PointXYZI> lidar_points;
-
-        if (!parseCloudMsg(scan_msg, stamped_cloud))
+        StampedCloud cloud;
+        if (!parseCloudMsg(*msg, cloud))
         {
-            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "Failed to parse point cloud message!");
+            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
+                                "Expected nonempty Hesai cloud with FLOAT64 absolute timestamp [s].");
             continue;
         }
+        // Initialization may finish inside a scan. Start with the next complete scan.
+        if (cloud.begin_time < filter->state().timestamp) continue;
 
-
-        if (!mIntensityAnalyzed)
+        std::vector<lio::ImuData> imu;
         {
+            std::unique_lock lock(mMutex);
+            mTrigger.wait(lock, [this, &cloud] { return mShutdown || mImuBuffer.back().timestamp >= cloud.end_time; });
+            if (mShutdown) return;
+            const auto end = std::lower_bound(mImuBuffer.begin(), mImuBuffer.end(), cloud.end_time,
+                [](const lio::ImuData& sample, double t) { return sample.timestamp < t; });
+            imu.assign(mImuBuffer.begin(), std::next(end));
+        }
+        imu_processor.process(imu, cloud, *filter);
+
+        if (!mIntensityAnalyzed && mIntensityThreshold < 0.0f)
+        {
+            std::vector<float> intensities;
+            intensities.reserve(cloud.points.size());
+            for (const auto& point : cloud.points) intensities.push_back(point.intensity);
+            const auto index = static_cast<std::size_t>((1.0f - mIntensityKeepRatio) * (intensities.size() - 1));
+            std::nth_element(intensities.begin(), intensities.begin() + index, intensities.end());
+            mIntensityThreshold = intensities[index];
             mIntensityAnalyzed = true;
-            if (const auto analysis = analyzeIntensity(lidar_points, mIntensityKeepRatio))
-            {
-                const double retained_percentage = 100.0 * static_cast<double>(analysis->retained_count) /
-                                                   static_cast<double>(analysis->valid_count);
-                RCLCPP_INFO(get_logger(),
-                            "First-frame intensity distribution (%zu valid points): min %.2f, P25 %.2f, "
-                            "P40 %.2f, P50 %.2f, P75 %.2f, P90 %.2f, P95 %.2f, P99 %.2f, max %.2f.",
-                            analysis->valid_count, analysis->minimum, analysis->p25, analysis->p40, analysis->median,
-                            analysis->p75, analysis->p90, analysis->p95, analysis->p99, analysis->maximum);
-                RCLCPP_INFO(get_logger(),
-                            "Suggested intensity threshold: %.2f (target keep ratio %.1f%%, actual %.1f%%).",
-                            analysis->suggested_threshold, 100.0 * mIntensityKeepRatio, retained_percentage);
-                if (mIntensityThreshold < 0.0f)
-                {
-                    mIntensityThreshold = analysis->suggested_threshold;
-                    RCLCPP_INFO(get_logger(), "Using automatically selected intensity threshold %.2f.",
-                                mIntensityThreshold);
-                }
-                else
-                {
-                    RCLCPP_INFO(get_logger(), "Using configured intensity threshold %.2f.", mIntensityThreshold);
-                }
-            }
-            else
-            {
-                RCLCPP_WARN(get_logger(), "First frame contains no finite intensity values; no threshold was selected.");
-            }
+            RCLCPP_INFO(get_logger(), "Intensity threshold: %.2f.", mIntensityThreshold);
         }
-
-        /* Filter out points below the selected intensity threshold */
-        const auto denoised_scan = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-        denoised_scan->reserve(lidar_points.size());
-        for (const auto& point : lidar_points)
+        auto selected = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+        selected->reserve(cloud.points.size());
+        const auto T_il = mT_il.cast<float>();
+        for (const auto& point : cloud.points)
         {
-            if (point.intensity < mIntensityThreshold)
+            const Eigen::Vector3f p = T_il * point.position; // Self filter in IMU frame.
+            if (point.intensity >= mIntensityThreshold &&
+                (std::abs(p.x()) > mSelfFilterHalfWidth || std::abs(p.y()) > mSelfFilterHalfWidth))
             {
-                continue;
-            }
-
-            if (point.x > 0.8f || point.x < -0.8f || point.y > 0.8f || point.y < -0.8f)
-            {
-                denoised_scan->emplace_back(point.x, point.y, point.z);
+                selected->emplace_back(point.position.x(), point.position.y(), point.position.z());
             }
         }
+        pcl::PointCloud<pcl::PointXYZ> scan;
+        pcl::VoxelGrid<pcl::PointXYZ> voxel;
+        voxel.setLeafSize(mMapResolution, mMapResolution, mMapResolution);
+        voxel.setInputCloud(selected);
+        voxel.filter(scan);
 
-        /* Preprocess the cloud */
-        const auto processed_cloud = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-        pcl::VoxelGrid<pcl::PointXYZ> voxel_filter;
-        voxel_filter.setLeafSize(MAP_RESOLUTION, MAP_RESOLUTION, MAP_RESOLUTION);
-        voxel_filter.setInputCloud(denoised_scan);
-        voxel_filter.filter(*processed_cloud);
-
-        if (mMap == nullptr)
+        bool accepted = false;
+        if (scan.size() >= mGicp.config().min_correspondences)
         {
-            if (processed_cloud->size() > 100)
-            {
-                mMap = processed_cloud;
-                mGicp.initializeTarget(*mMap);
-            }
-            else
-            {
-                RCLCPP_WARN(get_logger(), "processed_cloud is empty!");
-            }
-            continue;
+            accepted = !mGicp.hasTarget() || alignICP(scan, *filter);
         }
-
-        if (processed_cloud->empty())
+        const Sophus::SE3d T_wl = filter->pose() * mT_il;
+        if (accepted && (!mGicp.hasTarget() ||
+            (T_wl.translation() - mLastKeyframe.translation()).norm() >= mKeyframeTranslation ||
+            (mLastKeyframe.so3().inverse() * T_wl.so3()).log().norm() >= mKeyframeRotation))
         {
-            RCLCPP_WARN(get_logger(), "Skipping GICP: current scan has no points inside the trailer ROI.");
-            continue;
+            updateVoxelMap(scan, T_wl);
         }
 
-        if (alignICP(processed_cloud))
+        // Correct at scan end, then replay every later IMU on a filter copy.
+        // The next callback continues from the corrected latest-time state.
         {
-            updateVoxelMap(*processed_cloud);
-        }
-
-        pcl::PointCloud<pcl::PointXYZ> transformed_scan;
-        pcl::transformPointCloud(*processed_cloud, transformed_scan, mBasePose.cast<float>());
-
-        sensor_msgs::msg::PointCloud2 scan_vis_msg;
-        pcl::toROSMsg(transformed_scan, scan_vis_msg);
-        scan_vis_msg.header.stamp = this->now();
-        scan_vis_msg.header.frame_id = "map";
-        mProcessedScanVisPub->publish(scan_vis_msg);
-
-        sensor_msgs::msg::PointCloud2 map_msg;
-        pcl::toROSMsg(*mMap, map_msg);
-        map_msg.header.stamp = this->now();
-        map_msg.header.frame_id = "map";
-        mVoxelMapPub->publish(map_msg);
-
-        geometry_msgs::msg::PoseStamped pose_msg;
-        pose_msg.header = scan_msg.header;
-        pose_msg.header.frame_id = "map";
-        pose_msg.pose = tf2::toMsg(mBasePose.cast<double>());
-        mBasePosePub->publish(pose_msg);
-
-        mBasePosePath.header = pose_msg.header;
-        mBasePosePath.poses.push_back(pose_msg);
-        mBasePosePathPub->publish(mBasePosePath);
-
-        const auto frame_end_time = std::chrono::high_resolution_clock::now();
-        const double frame_duration_ms = std::chrono::duration<double, std::milli>(frame_end_time - frame_start_time).count();
-        RCLCPP_INFO(get_logger(), "Whole frame processing time: %.2f ms", frame_duration_ms);
-    }
-}
-
-void Localization_LIO::imuWorkerLoop()
-{
-    while (rclcpp::ok())
-    {
-        /* Wait and receive scan data */
-        sensor_msgs::msg::Imu img_msg;
-        {
-            std::unique_lock lock(mImuBufferMutex);
-            mImuTrigger.wait(lock, [this]() -> bool { return !mImuBuffer.empty() || mIsShutdown; });
-            if (mIsShutdown)
+            std::lock_guard lock(mMutex);
+            mLiveFilter = filter;
+            for (const auto& sample : mImuBuffer)
             {
-                break;
+                if (sample.timestamp > mLiveFilter->state().timestamp) mLiveFilter->predict(sample);
             }
-            img_msg = std::move(mImuBuffer.front());
-            mImuBuffer.pop();
+            // Keep one sample at/before scan end for interpolation on the next scan.
+            while (mImuBuffer.size() > 1 && mImuBuffer[1].timestamp <= cloud.end_time)
+            {
+                mImuBuffer.pop_front();
+            }
         }
-
-
-
+        publishScan(scan, *filter);
     }
 }

@@ -18,8 +18,7 @@ struct ImuData
  *   R_wi : IMU orientation in World
  *   p_wi : IMU position in World
  *   v_wi : IMU velocity in World
- * IMU biases are part of the state because they should normally
- * be estimated by IESKF rather than treated as fixed parameters.
+ * Biases are fixed calibration parameters, outside the 9D error state.
  */
 struct ImuState
 {

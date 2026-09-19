@@ -1,218 +1,110 @@
-# IMU–LiDAR 紧耦合 ESKF
+# 9 维松耦合 LIO
 
-## 1 Scan 去畸变
+`Localization_LIO` 复用现有 CPU/TBB 稀疏 GICP、PCL、Eigen 和 Sophus。
+参考 FAR-LIO 的“独立配准 + 滤波融合 + 高频预测/延迟补偿”结构；不是完整 FAR-LIO 移植，
+不引入其 CUDA 后端，也不把逐点配准残差直接送入滤波器。
 
-**估计这一帧 LiDAR 扫描期间传感器的连续运动，然后把每个点“搬回”到同一个时刻的坐标系里。**
+## 数据流
 
-假设一帧 LiDAR scan 从 $t_0$ 扫到 $t_1$。机械式或非瞬时 LiDAR 的点不是同时采集的，所以第 $i$ 个点实际是在 $t_i$ 时刻测到的：
-$$
-t_0 \le t_i \le t_1
-$$
-如果车辆在这一帧期间发生了运动，那么直接把所有点当成在同一时刻采集，就会出现拉伸、弯曲、重影。
+1. 启动时静止至少 `imu_init_duration` 秒、20 个样本：估计陀螺仪零偏、重力对齐姿态和加速度模长偏差。
+2. IMU 回调持续保存样本并进行中点预测，按 IMU 频率发布 `/base_pose`。
+3. LiDAR 线程等待 IMU 覆盖扫描结束，用同一个 ESKF 积分实现记录轨迹，将点去畸变到扫描结束时刻。
+4. GICP 以预测的 LiDAR 位姿为初值，独立求解扫描到地图的位姿。
+5. 检查收敛、对应数量、最终位姿的欧氏残差 MSE，再将 LiDAR 位姿和协方差转换到 IMU，做一次 ESKF 观测更新。
+6. 在扫描结束时刻注入修正，复制完整滤波器（状态、协方差、边界 IMU），重放之后的 IMU。
+   下一次 IMU 回调从修正后的最新时刻继续。不会重复融合同一帧 LiDAR 来人为提高观测频率。
+7. 配准和创新门限都通过后，按位移/转角阈值插入关键帧；首帧在预测的世界位姿下建图。
+   拒绝配准时继续惯性预测，不向地图插入失败帧。
 
-### 1.1 IMU 提供 scan 内部的运动
+仅保留一个待处理点云，计算跟不上时使用较新帧；IMU 历史不会随着点云丢帧而清空。
+处理后的 IMU 队列保留扫描结束前最后一个样本，用于下一次边界插值。
+GICP、去畸变与地图更新在锁外执行，重放和 IMU 回调共享一把锁。
+`/base_pose` 只由 IMU 回调发布，不插入时间倒退的历史修正消息。
 
-IMU 测量：
-$$
-\begin{align}
-\boldsymbol{\omega}_m &= \boldsymbol{\omega} + \boldsymbol{b}_g + \boldsymbol{n}_g \\
-\boldsymbol{a}_m &= \boldsymbol{R}^\top(\boldsymbol{a}-\boldsymbol{g})+\boldsymbol{b}_a+\boldsymbol{n}_a
-\end{align}
-$$
-其中：
+## 状态与数学约定
 
-- $\boldsymbol{\omega}_m$：陀螺仪角速度
-- $\boldsymbol{a}_m$：加速度计测量
-- $\boldsymbol{b}_g,\boldsymbol{b}_a$：gyro / accel bias
-- $\boldsymbol{R}$：IMU 姿态
-- $\boldsymbol{g}$：重力
+名义状态为位置 `p_wi`、SO(3) 姿态 `R_wi`、世界系速度 `v_wi`。
+局部误差：
 
-利用 IMU 在 LiDAR scan 的这几十毫秒内做积分，可以得到 $\boldsymbol{R}(t)$，$\boldsymbol{p}(t)$，$\boldsymbol{v}(t)$；也就是 scan 内任意时刻 IMU 的 pose。
-
-最基本的传播形式类似：
-$$
-\begin{align}
-\boldsymbol{R}_{k+1} 
-&= \boldsymbol{R}_k\text{Exp} \big((\boldsymbol{\omega}_k-\boldsymbol{b}_g)\Delta t\big) \\
-\boldsymbol{v}_{k+1} 
-&= \boldsymbol{v}_k+ \big(\boldsymbol{R}_k(\boldsymbol{a}_k-\boldsymbol{b}_a)+\boldsymbol{g} \big)\Delta t \\
-\boldsymbol{p}_{k+1} &= 
-\boldsymbol{p}_k+ \boldsymbol{v}_k\Delta t+ \frac12 \left(\boldsymbol{R}_k(\boldsymbol{a}_k-\boldsymbol{b}_a)+\boldsymbol{g} \right)\Delta t^2
-\end{align}
-$$
-实际 LIO 中通常就是 ESKF/IESKF propagation 的那套 IMU propagation。
-
-### 1.2 每个 LiDAR 点都有自己的时间戳
-
-例如一帧 scan 是 $t_0 = 10.000s$ 到 $t_1 = 10.1 \ \text{s}$，某个点 $\boldsymbol{p}_k$ 采集时间可能是 $t_k = 10.037 \ \text{s}$，IMU 积分可以得到这个时刻的位姿 $\boldsymbol{T}_{w\rightarrow i}(t_k)$ 以及你选定的参考时刻 $\boldsymbol{T}_{w\rightarrow i}(t_{\text{ref}})$。
-
-通常 $t_{\text{ref}}$ 选：
-
-- scan begin
-- scan end
-- scan midpoint
-
-LIO 里很常见的是 **scan end**。
-
-### 1.3 把每个点变换到统一参考时刻
-
-先暂时假设 LiDAR 和 IMU 坐标系相同。
-
-点 $\boldsymbol{p}_k$ 是在 $t_k$ 时刻的坐标 $\boldsymbol{p}_k^{I_k}$，变换到世界坐标 $\boldsymbol{p}_k^w = \boldsymbol{T}_{w\rightarrow i}(t_k) \cdot \boldsymbol{p}_k^{I_k}$，再变到 scan reference time：$\boldsymbol{p}_k^{I_{\text{ref}}} = \boldsymbol{T}_{w\rightarrow i}^{-1}(t_{\text{ref}})\cdot \boldsymbol{T}_{w\rightarrow i}(t_k)\cdot \boldsymbol{p}_k^{I_k}$
-
-因此核心 deskew 公式就是：
-$$
-\boldsymbol{p}_k^{\text{ref}} = \boldsymbol{T}^{-1}(t_{\text{ref}})\cdot \boldsymbol{T}(t_k)\cdot \boldsymbol{p}_k
-$$
-这就是 IMU deskew 的本质。
-
-实际系统中 LiDAR 和 IMU 显然不重合，因此还需要外参 $\boldsymbol{T}_{i\rightarrow l}$。
-
-如果 LiDAR 点为 $\boldsymbol{p}_k^l$，先转到 IMU：
-$$
-\boldsymbol{p}_k^i = \boldsymbol{T}_{i\rightarrow l}\cdot \boldsymbol{p}_i^l
-$$
-进行运动补偿：
-$$
-\boldsymbol{p}_{k,\text{ref}}^{i} = \boldsymbol{T}_{w\rightarrow i}^{-1}(t_{\text{ref}})\cdot \boldsymbol{T}_{w\rightarrow i}(t_k)\cdot \boldsymbol{T}_{i\rightarrow l}\cdot\boldsymbol{p}_k^l
-$$
-最后再转回 LiDAR：
-$$
-\boxed{\boldsymbol{p}_{k,\text{ref}}^{l} = \boldsymbol{T}_{l\rightarrow i}\cdot \boldsymbol{T}_{w\rightarrow i}^{-1}(t_{\text{ref}})\cdot\boldsymbol{T}_{w\rightarrow i}(t_k)\cdot \boldsymbol{T}_{i\rightarrow l}\cdot\boldsymbol{p}_k^l}
-$$
-这基本就是完整的 deskew 变换。
-
-
-
-## 2 状态与坐标系
-
-- 名义状态：`R_wi, p_wi, v_wi, gyro_bias, accel_bias`。
-- 15 维误差：`[dp_w, dtheta_i, dv_w, dbg_i, dba_i]`。
-- 右扰动：`R_true = R_wi * Exp(dtheta_i)`；位置、速度误差在世界系，bias 在 IMU 系。
-- `T_il`：LiDAR → IMU，`p_i = T_il * p_l`；`T_wl = T_wi * T_il`。
-- `T_IB`：车体 → IMU；发布 `/base_pose` 的 `T_WB = T_WI * T_IB`。若使用默认单位外参，这个输出就是 IMU 位姿。
-- 世界系由静止初始化定义，Z 轴向上。位置和 yaw 是局部坐标规范，不是绝对定位。
-
-原先的 `Vector<double, 17>` 只是占位，没有对应的 S² 重力状态。本实现使用完整的 15 状态 ESKF，初始化后固定世界系重力，不估计重力方向的两个自由度，也不在线估计外参或时间偏移。状态、协方差、正规方程使用 `double`；PCL 点和体素存储沿用 `float`。
-
-
-
-## 3 IMU 传播
-
-传入未经去重力的加速度计 specific force（m/s²），以及角速度（rad/s）。先减 bias，再以区间中点姿态积分：
-
-```text
-omega = (gyro0 + gyro1)/2 - bg
-force = (accel0 + accel1)/2 - ba
-R_mid = R * Exp(omega * dt/2)
-a_W = R_mid * force + g_W
-p += v*dt + a_W*dt²/2
-v += a_W*dt
-R *= Exp(omega*dt)
+```
+dx = [dp_world, dtheta_imu, dv_world]  (9 x 1)
+R_true = R_wi * Exp(dtheta_imu)
 ```
 
-误差动力学的非零块：
+重力固定为 `[0, 0, -9.81] m/s²`。陀螺仪和加速度零偏是固定标定参数，不扩展到状态中。
+单一静止姿态无法同时辨识完整加速度零偏和倾角；初始化仅按重力方向对齐并去除模长误差。
+世界原点在初始 IMU 位置，初始 yaw 没有绝对航向观测。
 
-| 块 | 连续时间 F |
-|---|---|
-| p ← v | I |
-| theta ← theta | -hat(omega) |
-| theta ← bg | -I |
-| v ← theta | -R_mid hat(force) |
-| v ← ba | -R_mid |
+中点传播：先平均相邻原始 IMU，再用半步 SO(3) 旋转计算世界系加速度。
+误差转移和噪声 Jacobian 对应同一个中点模型。
+IMU 参数为连续噪声密度，离散协方差使用 `G * Qc/dt * G^T`，并补齐白加速度噪声的
+`Q_pp = qa * dt³/3` 项，因此改变 IMU 频率不会把过程噪声人为缩小。
 
-噪声参数都是**连续时间标准差密度**，代码平方得到谱密度。状态转移采用二阶近似，过程噪声用 Simpson 积分；默认把积分步长细分到 0.01 s。协方差保留 p–v、theta–bg、v–ba 等交叉项。
+观测残差为 `[p_meas - p_pred, Log(R_pred^-1 * R_meas)]`，`H = [I6, 0]`。
+使用 Eigen LDLT 求增益、Joseph 形式更新协方差，并用
+`Sophus::SO3d::leftJacobian(-dtheta)` 做右扰动注入后的协方差重置。
+通过交叉协方差更新速度，无需将相邻点云位移差分成第二个相关观测。
 
+LiDAR 位姿测量协方差使用配置的平移/旋转标准差，假设局部小姿态误差；
+它不是由 GICP Hessian 推导的完整退化估计。长直、缺少几何约束的车厢仍需实测调参。
 
+## 外参与时间
 
-## 4 点到平面迭代更新
+- `T_il = lidar_to_imu`：`p_i = T_il * p_l`。
+- `T_ib = base_to_imu`：`p_i = T_ib * p_b`；发布 `T_wb = T_wi * T_ib`。
+- 配准初值 `T_wl = T_wi * T_il`；观测 `T_wi_meas = T_wl_meas * T_il^-1`。
+- 位姿观测协方差由 `[dp_world, dtheta_lidar]` 转为 `[dp_world, dtheta_imu]`，
+  包含非零杆臂造成的平移/旋转交叉项。
+- 点云按照现有 Hesai 格式读取：`x/y/z/intensity` 为 FLOAT32，`timestamp` 为 FLOAT64 绝对秒。
+  取点时间最小/最大值为扫描起止；点不需要按时间排序。空点云与不匹配的字段格式会跳过。
+- IMU 为 rad/s、m/s²，包含重力的 specific force，时间戳必须与点云同源、递增。
+  不额外检测 IMU 数值、采样间隙或静止性。
+- 初始化结束时若落在扫描内部，丢弃这帧，从下一帧完整扫描开始。
+  单 LiDAR 扫描窗口应不重叠。点云/路径使用扫描结束时间，高频位姿使用 IMU 时间。
+- 历史样本由点云处理进度回收；该实现面向持续流入的 LiDAR/IMU，不提供长时间 LiDAR
+  中断后的历史限长、自动重定位或时钟重置恢复。
 
-对扫描末端 LiDAR 系中的点 `p_L`，在固定世界地图中查找邻居，从原始坐标拟合平面中心 `q_W` 和单位法向量 `n_W`：
+## 构建与运行
 
-```text
-p_I = T_IL * p_L
-r = n_Wᵀ (R_WI * p_I + p_WI - q_W)
-H = [n_Wᵀ, -n_Wᵀ R_WI hat(p_I), 0, 0, 0]
-```
-
-不使用 SparseVoxel 中经过归一化的 GICP 协方差作为物理观测方差。平面拟合会拒绝邻居不足、距离过远、共线和明显非平面的邻域；残差采用距离门限和 Huber 权重。默认测量标准差为 0.03 m，需要根据真实点云噪声和下采样密度调整。
-
-令 IMU 传播先验为 `x_bar, P_bar`，第 k 次迭代为 `x_k`，`e = x_k boxminus x_bar`。姿态部分的先验切空间雅可比为 SO(3) 右雅可比的逆 `Jr⁻¹(e_theta)`，其余块为单位阵，合成 A：
-
-```text
-Lambda = Aᵀ P_bar⁻¹ A + sum(Hᵀ R⁻¹ H)
-b      = Aᵀ P_bar⁻¹ e + sum(Hᵀ R⁻¹ r)
-delta  = -Lambda⁻¹ b
-x_next = x_k boxplus delta
-```
-
-虽然 LiDAR 的 H 只有位姿列非零，15×15 的先验信息会使速度和 bias 同时获得修正。每轮重新查找对应和拟合平面；**整个迭代只使用同一份 P_bar**。收敛后在最终状态切空间重新线性化并求逆，得到已重置到新名义状态的后验协方差，不再额外乘一次 reset Jacobian。
-
-验收条件包括有效平面数、收敛、最终残差 RMSE、最大位姿修正和矩阵正定性。验收失败保留本帧 IMU 预测及其协方差，并跳过地图写入。地图只在首帧建立或成功更新后写入。退化方向仍主要受 IMU 先验约束；长走廊中缺少端面时，沿走廊方向可能不可观，不能用更多相同方向平面消除这一几何退化。
-
-
-
-## 5 时间同步与初始化
-
-一个工作线程拥有滤波器和地图，ROS 回调只缓存数据。保留完整 IMU 历史及边界插值所需的两端样本，不再每次只留最后一帧 IMU。超过扫描队列容量时可以丢弃旧扫描，随后仍从上次修正状态连续积分 IMU。
-
-| 逐点时间字段 | `auto` 解释 |
-|---|---|
-| `timestamp` | 绝对秒；扫描边界使用全点云最小/最大逐点时间 |
-| `time` | 相对秒 |
-| `t`、`offset_time` | 相对纳秒 |
-| 自定义名称 | 必须配置 `lio.time_field`、`lio.time_scale`，并正确设置 `lio.time_mode` |
-
-Hesai ROS 2 驱动的 `timestamp` 是 FLOAT64 字段，默认配置针对该格式。不同驱动/固件要核对实际消息。相对时间默认认为 header stamp 是扫描起点；若是扫描终点，设置 `lio.stamp_is_end:=true`。
-
-- 先根据整个点云解析扫描时间，再做强度和空间过滤，最后去畸变、体素下采样。
-- 只有 IMU 覆盖当前状态时间到扫描末端时才处理，扫描边界用插值，不外推。
-- IMU 时间使用 `header.stamp + lio.imu_time_offset`；必须与点云处于同一时钟域。
-- 默认拒绝没有逐点时间的点云；显式设置 `allow_untimed_cloud:=true` 时视作末端瞬时点云，无法补偿扫描内部运动。
-- 默认使用扫描前 1 s 的静止数据初始化。估计 gyro bias，并使平均 specific force 对齐世界 +Z。单次静止姿态不能分离完整加速度 bias 与倾角，仅初始化沿重力的分量，其余依赖后续运动与激光观测。
-- 静止检测只是均值/方差启发式，恒速运动无法仅靠 IMU 判定；请实际静止启动。
-- 遇到超过 `max_imu_gap` 的缺测或历史缓存丢失时，清空局部地图和轨迹并等待重新静止初始化，日志明确报告坐标原点重置。
-- 重复/乱序 IMU 被丢弃；若 rosbag 循环回放使时钟倒退，应重启节点。
-
-
-
-## 使用
-
-先填写真实的 `lio.lidar_to_imu` 和 `lio.base_to_imu` 外参，再核对时间字段、IMU 单位和 topic。参数示例在 `config/lio.yaml`，其中单位外参只是占位。
+在 `trailer_localization` 下执行（需要 ROS2、PCL、Sophus、TBB、Eigen，
+以及现有 `SparseVoxel` 所需的 Boost `unordered_flat_map`，Boost >= 1.81）：
 
 ```bash
-colcon build --base-paths trailer_localization/packages/perception --packages-select perception --cmake-args -DBUILD_TESTING=ON
+colcon build --packages-select perception --cmake-args -DBUILD_TESTING=ON
 source install/setup.bash
-ros2 run perception perception --ros-args --params-file trailer_localization/packages/perception/config/lio.yaml
+colcon test --packages-select perception --ctest-args -R 'lio_.*test' --output-on-failure
+colcon test-result --verbose
+ros2 run perception perception --ros-args \
+  --params-file "$(ros2 pkg prefix --share perception)/config/lio.yaml"
 ```
 
-已有 system_manager launch 也会启动新的 LIO 入口，可把这些参数加入自己的参数文件。`/scan_vis`、`/voxel_map` 使用世界坐标，`/base_pose`、`/base_pose_path` 使用车体位姿。所有输出时间戳都对应扫描结束时刻。地图达到体素预算后停止创建新体素；当前版本不做滑动窗口剔除。
+先将 `config/lio.yaml` 的两组单位外参替换为标定值，再运行；不要根据变量名猜外参方向。
+仿真或 rosbag `--clock` 时设置 `use_sim_time:=true`。直接使用原 `system_manager` launch 时，
+它仍加载自己的 `system.yaml`，需要将 LIO 参数放入该文件或显式传入新的参数文件。
 
-独立 C++ 调用顺序：
+主要参数及单位见 `config/lio.yaml`。`gicp.max_fitness_score` 是 MSE，`0.01` 对应 10 cm RMSE。
+`eskf.innovation_gate` 是 6 维残差平方 Mahalanobis 门限，默认 22.458；不是米或弧度阈值。
+当前 IMU 与 LiDAR 噪声参数是初始值，需要用实际传感器和 rosbag 调整。
 
-```cpp
-lio::ESKF filter(config, T_IL);
-filter.initialize(stationary_imu);  // 检查返回值；也可 reset(known_state, covariance)
-filter.processScan(imu_covering_interval, timed_points, scan_begin, scan_end);
-// 将 timed_points 转为扫描末端 LiDAR 系的 pcl cloud 并下采样。
-auto result = filter.update([&](const lio::ImuState& state) {
-    return lidar_measurement.build(state, scan, world_map);
-});
-// result.accepted 才把 scan 通过 filter.lidarPose() 变换后写入地图。
-```
+输出：
 
-`processScan()` 已同时传播状态和协方差，不要对同一区间再调用 `predict()`。`predict()` 用于单独的 IMU 流式传播，reset 后首个样本必须锚定 state.timestamp。`ESKF.h` 不依赖 ROS 或 PCL；ROS 时间读取、体素地图和几何模型分别放在独立文件中。
+| Topic | 内容 | 时间 |
+|---|---|---|
+| `/base_pose` | 配置的 base 位姿，世界系 | IMU 时刻 |
+| `/base_pose_path` | 扫描时刻融合轨迹，最多 `path_max_poses` | 扫描结束 |
+| `/scan_vis` | 去畸变、滤波后的世界系点云 | 扫描结束 |
+| `/voxel_map` | 关键帧体素地图 | 扫描结束 |
 
+不会额外发布动态 TF；原项目的下游可继续订阅上述 topics。
 
+## 验证范围
 
-## 验证与边界
+`lio_core_test` 不依赖 ROS，验证静止标定、加速传播、数值差分 Jacobian、噪声随采样率的一致性、
+观测拒绝不修改状态、速度修正、协方差对称/半正定、带旋转外参和杆臂的去畸变、
+非采样点扫描边界及延迟重放一致性。测试通过不会证明真实数据上的定位精度。
 
-`eskf_test` 检查有限差分几何/先验雅可比、带 bias 的静止传播、常加速度积分、协方差交叉项、解析卡尔曼后验、拒绝更新回滚、非单位外参下的旋转/平移去畸变、扫描间隙、初始化和非法输入。
+本次环境验证仅覆盖独立 C++ 核心测试；没有 ROS2/PCL 运行环境及实测 rosbag，
+整包编译、回调压力测试和实际定位精度仍需在目标机器上验证。
 
-`lio_measurement_test` 检查组织化点云/行 padding/字节序、绝对秒/相对纳秒、缺失与错误时间字段、三平面地图的位姿/gyro bias 修正及共线邻域拒绝。
-
-```bash
-ctest --test-dir build/perception --output-on-failure -R '^(eskf_test|lio_measurement_test)$'
-```
-
-这些是实现和合成数据回归测试，不代表真实传感器的定位精度已得到验证。上线前需回放自己的同步 LiDAR+IMU 数据，核对外参、时间偏移、运动激励、退化场景和噪声参数。扫描内去畸变轨迹在本帧更新期间固定，这是常见的一阶近似；极强运动或大 bias 修正时需要更精细的重新去畸变策略。
+参考：[FAR-LIO](https://github.com/TUMFTM/FAR-LIO)、
+[论文](https://arxiv.org/abs/2606.26010)。

@@ -57,10 +57,15 @@ public:
         //     throw std::runtime_error("IMU state timestamp must equal scan_begin.");
         // }
 
-        // if (imu_data.front().timestamp > stamped_cloud.begin_time || imu_data.back().timestamp < stamped_cloud.end_time)
-        // {
-        //     throw std::runtime_error("IMU measurements do not cover LiDAR scan.");
-        // }
+        if (imu_data.front().timestamp > stamped_cloud.begin_time)
+        {
+            throw std::runtime_error("imu_data.front().timestamp > stamped_cloud.begin_time.");
+        }
+
+        if (imu_data.back().timestamp < stamped_cloud.end_time)
+        {
+            throw std::runtime_error("imu_data.back().timestamp < stamped_cloud.end_time.");
+        }
 
         const auto samples = buildImuSequence(imu_data, stamped_cloud.begin_time, stamped_cloud.end_time);
         propagate(samples, state);

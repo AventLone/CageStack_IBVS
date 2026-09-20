@@ -138,11 +138,11 @@ void ESKF::observe(const Sophus::SE3d& pose, const MeasurementCov& measurement_c
         return;
     }
 
-    if (constexpr double timestamp_tolerance = 1e-3;
-        std::abs(timestamp - mState.timestamp) > timestamp_tolerance)
-    {
-        return;
-    }
+    // if (constexpr double timestamp_tolerance = 1e-3;
+    //     std::abs(timestamp - mState.timestamp) > timestamp_tolerance)
+    // {
+    //     return;
+    // }
 
     MeasurementT residual;
 

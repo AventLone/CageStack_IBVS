@@ -108,6 +108,8 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr Localization_LIO::denoiseAndDownsample(const
     voxel_filter.setInputCloud(denoised_scan);
     voxel_filter.filter(*processed_cloud);
 
+    pcl::transformPointCloud(*processed_cloud, *processed_cloud, mT_il);
+
     return processed_cloud;
 }
 
@@ -137,6 +139,7 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr Localization_LIO::denoiseAndDownsample(const
     voxel_filter.setInputCloud(denoised_scan);
     voxel_filter.filter(*processed_cloud);
 
+    pcl::transformPointCloud(*processed_cloud, *processed_cloud, mT_il);
     return processed_cloud;
 }
 
@@ -192,11 +195,7 @@ void Localization_LIO::lidarWorkerLoop()
             mScanBuffer.pop_front();
         }
 
-        std::vector<lio::ImuData> imu_datas;
-        {
-            std::lock_guard<std::mutex> lock(mImuBufferMutex);
-            imu_datas = std::vector(mImuBuffer.begin(), mImuBuffer.end());
-        }
+
 
         const auto frame_start_time = std::chrono::high_resolution_clock::now();
 
@@ -212,10 +211,6 @@ void Localization_LIO::lidarWorkerLoop()
         {
             mInitialized = true;
             last_timestamp = stamped_cloud.end_time;
-            auto eskf_init_future = std::async(std::launch::async, [this, &imu_datas]() -> bool
-                {
-                    return mESKF.initialize(imu_datas);
-                });
 
             const auto cloud = getCloudXYZI(stamped_cloud.points);
 
@@ -255,32 +250,71 @@ void Localization_LIO::lidarWorkerLoop()
                 continue;
             }
 
-            if (!eskf_init_future.get())
-            {
-                RCLCPP_WARN(get_logger(), "ESKF failed to initialize!");
-                mInitialized = false;
-                continue;
-            }
+            // if (!eskf_init_future.get())
+            // {
+            //
+            // }
+            // auto eskf_init_future = std::async(std::launch::async, [this]() -> bool
+            //     {
+                    std::vector<lio::ImuData> imu_datas;
+                    {
+                        std::lock_guard<std::mutex> lock(mImuBufferMutex);
+                        imu_datas = std::vector(mImuBuffer.begin(), mImuBuffer.end());
+                    }
+                    if (!mESKF.initialize(imu_datas))
+                    {
+                        RCLCPP_WARN(get_logger(), "ESKF failed to initialize!");
+                        mInitialized = false;
+                        continue;
+                    }
+                // });
             mESKF.setTimestamp(stamped_cloud.end_time);
 
-            mMap = denoised_scan;
-            mGicp.initializeTarget(*denoised_scan);
+            mMap = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+            pcl::transformPointCloud(*denoised_scan, *mMap, mESKF.pose().cast<float>());
+            // mMap = denoised_scan;
+            mGicp.initializeTarget(*mMap);
             continue;
         }
 
         /* ESKF prediction */
         const auto last_state = mESKF.state();
         auto eskf_predict_future = std::async(std::launch::async,
-            [this, &imu_datas, last_timestamp, current_timestamp = stamped_cloud.end_time]()
+            [this, last_timestamp, current_timestamp = stamped_cloud.end_time]()
             {
+                std::vector<lio::ImuData> imu_datas;
+                {
+                    std::lock_guard<std::mutex> lock(mImuBufferMutex);
+                    imu_datas = std::vector(mImuBuffer.begin(), mImuBuffer.end());
+                }
                 const auto sequence = lio::ImuProcessor::buildImuSequence(imu_datas, last_timestamp, current_timestamp);
                 mESKF.predict(sequence);
             });
         last_timestamp = stamped_cloud.end_time;
 
         /* Deskew the point cloud and transform it into IMU frame */
-        mImuProcessor->process(imu_datas, stamped_cloud, last_state);
-        const auto scan_in_imu = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+        // std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        while (rclcpp::ok() && !mIsShutdown)
+        {
+            std::vector<lio::ImuData> imu_datas;
+            {
+                std::lock_guard<std::mutex> lock(mImuBufferMutex);
+                imu_datas = std::vector(mImuBuffer.begin(), mImuBuffer.end());
+            }
+            try
+            {
+                mImuProcessor->process(imu_datas, stamped_cloud, last_state);
+            }
+            catch (const std::exception& e)
+            {
+                // RCLCPP_ERROR(get_logger(), "GICP failed: %s", e.what());
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                continue;
+            }
+            break;
+        }
+
+        // const auto scan_in_imu = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
         const auto denoised_cloud = denoiseAndDownsample(stamped_cloud);
 
         /* GICP and observe */

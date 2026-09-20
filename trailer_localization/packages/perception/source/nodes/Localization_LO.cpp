@@ -208,7 +208,7 @@ void Localization_LO::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src_sca
     const auto side_wall_2 = projector.extractCloud(side_masks[1]);
 
     /* Get 2 refined side wall point cloud */
-    RawCloud refined_side_wall_1, refined_side_wall_2;
+    pcl::PointCloud<pcl::PointXYZ> refined_side_wall_1, refined_side_wall_2;
     feature3d::findInliers(side_wall_1, refined_side_wall_1, 0.04f);
     feature3d::findInliers(side_wall_2, refined_side_wall_2, 0.04f);
 
@@ -225,7 +225,7 @@ void Localization_LO::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src_sca
     }
     const float angle = std::atan2(-mid_plane[0], mid_plane[1]);
 
-    RawCloud side_walls = refined_side_wall_1 + refined_side_wall_2;
+    pcl::PointCloud<pcl::PointXYZ> side_walls = refined_side_wall_1 + refined_side_wall_2;
 
     // 1. Rotation transformation from truck frame to rotated frame
     Eigen::Isometry3f T_rot = Eigen::Isometry3f::Identity();

@@ -64,7 +64,6 @@ std::optional<std::pair<std::size_t, double>> GICP::buildAndSolve(const std::vec
         Eigen::Matrix3d covariance = Eigen::Matrix3d::Identity();
         if (source_point.covariance_valid)
         {
-            // covariance = target_point->covariance_valid ? target_point->covariance : Eigen::Matrix3f::Identity();
             if (target_point->covariance_valid)
             {
                 covariance = target_point->covariance.cast<double>();

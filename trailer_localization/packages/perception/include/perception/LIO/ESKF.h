@@ -55,14 +55,14 @@ public:
         mP.block<3, 3>(6, 6).diagonal().setConstant(initial_velocity_std * initial_velocity_std);
 
         /* IMU noise covariance. n = [na, ng] */
-        constexpr double gyro_noise_std = 0.02 * DEG2RAD;  // rad/s
         constexpr double accel_noise_std = 0.03;           // m/s^2
+        constexpr double gyro_noise_std = 0.02 * DEG2RAD;  // rad/s
         mQ.block<3, 3>(0, 0).diagonal().setConstant(accel_noise_std * accel_noise_std);
         mQ.block<3, 3>(3, 3).diagonal().setConstant(gyro_noise_std * gyro_noise_std);
 
         /* Default LiDAR odometry measurement noise. z = [p, R] */
-        constexpr double lidar_position_std = 0.001;            // m
-        constexpr double lidar_rotation_std = 0.03 * DEG2RAD;   // rad
+        constexpr double lidar_position_std = 0.0003;            // m
+        constexpr double lidar_rotation_std = 0.003 * DEG2RAD;   // rad
         mV.block<3, 3>(0, 0).diagonal().setConstant(lidar_position_std * lidar_position_std);
         mV.block<3, 3>(3, 3).diagonal().setConstant(lidar_rotation_std * lidar_rotation_std);
     }
@@ -82,12 +82,12 @@ public:
         }
     }
 
-    void observe(const Sophus::SE3d& pose, const double timestamp)
+    void observe(const Sophus::SE3d& pose)
     {
-        observe(pose, mV, timestamp);
+        observe(pose, mV);
     }
 
-    void observe(const Sophus::SE3d& pose, const MeasurementCov& measurement_cov, double timestamp);   // 观测更新
+    void observe(const Sophus::SE3d& pose, const MeasurementCov& measurement_cov);   // 观测更新
 
     [[nodiscard]] const ImuState& state() const
     {
@@ -103,7 +103,7 @@ public:
 private:
     bool mInitialized{false};
 
-    ImuState mState;                           // Nominal state，需要靠初始化确定
+    ImuState mState;                       // Nominal state，需要靠初始化确定
     StateCov mP{StateCov::Zero()};         // State Covariance
 
     MotionNoiseCov mQ{MotionNoiseCov::Zero()};           // Motion Noise

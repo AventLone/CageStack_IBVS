@@ -21,8 +21,8 @@ class Localization_LIO : public rclcpp::Node
 public:
     explicit Localization_LIO(const std::string& node_name) : Node(node_name), mTfBuffer(this->get_clock()), mTfListener(mTfBuffer)
     {
-        /* Lookup transform */
         Sophus::SE3d T_il;
+        /* Lookup transform */
         while (rclcpp::ok())
         {
             try
@@ -47,7 +47,7 @@ public:
         mGicp.setConfig(config);
 
         mIntensityThreshold = static_cast<float>(declare_parameter<double>("intensity_threshold", -1.0));
-        mIntensityKeepRatio = std::clamp(static_cast<float>(declare_parameter<double>("intensity_keep_ratio", 0.6)), 0.01f, 1.0f);
+        mIntensityKeepRatio = std::clamp(static_cast<float>(declare_parameter<double>("intensity_keep_ratio", 0.9)), 0.01f, 1.0f);
 
         initSubscribers();
         initPublisher();
@@ -134,7 +134,7 @@ private:
                             Eigen::Vector3d(msg->linear_acceleration.x, msg->linear_acceleration.y, msg->linear_acceleration.z)};
 
                     std::lock_guard lock(mImuBufferMutex);
-                    while (mImuBuffer.size() > 2000)
+                    while (mImuBuffer.size() > 1000)
                     {
                         mImuBuffer.pop_front();
                     }
@@ -162,7 +162,7 @@ private:
     pcl::PointCloud<pcl::PointXYZ>::Ptr denoiseAndDownsample(const pcl::PointCloud<pcl::PointXYZI>& src) const;
     pcl::PointCloud<pcl::PointXYZ>::Ptr denoiseAndDownsample(const StampedCloud& src) const;
 
-    bool alignScanToMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_scan, double timestamp);
+    bool alignScanToMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_scan);
 
     void updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan);
 

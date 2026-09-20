@@ -6,7 +6,7 @@ namespace lio
 {
 bool ESKF::initialize(const std::vector<ImuData>& samples)
 {
-    if (samples.size() < 20 || samples.back().timestamp - samples.front().timestamp < 0.5)
+    if (samples.size() < 20 || samples.back().timestamp - samples.front().timestamp < 1.0)
     {
         std::cerr << "Too few IMU samples or too short time." << std::endl;
         return false;
@@ -131,18 +131,12 @@ void ESKF::predict(const ImuData& imu_data)
     mState.timestamp = imu_data.timestamp;
 }
 
-void ESKF::observe(const Sophus::SE3d& pose, const MeasurementCov& measurement_cov, const double timestamp)
+void ESKF::observe(const Sophus::SE3d& pose, const MeasurementCov& measurement_cov)
 {
     if (!mInitialized)
     {
         return;
     }
-
-    // if (constexpr double timestamp_tolerance = 1e-3;
-    //     std::abs(timestamp - mState.timestamp) > timestamp_tolerance)
-    // {
-    //     return;
-    // }
 
     MeasurementT residual;
 
@@ -178,9 +172,7 @@ void ESKF::observe(const Sophus::SE3d& pose, const MeasurementCov& measurement_c
     const StateJacobian IKH = I - K * H;
 
     mP = IKH * mP * IKH.transpose() + K * measurement_cov * K.transpose();
-
-    /* Inject local correction into nominal state */
-    update(dx);
+    update(dx);   // Inject local correction into nominal state
 
     /*
      * Covariance reset after SO(3) error injection.

@@ -7,11 +7,6 @@
 
 void SparseVoxel::initialize(const pcl::PointCloud<pcl::PointXYZ>& cloud)
 {
-	if (mConfig.max_voxels_num == 0)
-	{
-		throw std::invalid_argument("Initial target exceeds max_target_voxels or the voxel budget is zero");
-	}
-
 	const std::vector<SparsePoint> sparse_points = makeSparseCloud(cloud);
 
 	boost::unordered_flat_set<VoxelKey> voxel_keys;
@@ -19,11 +14,6 @@ void SparseVoxel::initialize(const pcl::PointCloud<pcl::PointXYZ>& cloud)
 	for (const SparsePoint& point : sparse_points)
 	{
 		voxel_keys.insert(point.key);
-	}
-
-	if (voxel_keys.size() > mConfig.max_voxels_num)
-	{
-		throw std::invalid_argument("Initial target exceeds max_target_voxels or the voxel budget is zero");
 	}
 
 	clear();
@@ -70,11 +60,6 @@ bool SparseVoxel::insert(const pcl::PointCloud<pcl::PointXYZ>& cloud)
 		auto found = mOccupiedVoxels.find(point.key);
 		if (found == mOccupiedVoxels.end())
 		{
-			if (mOccupiedVoxels.size() >= mConfig.max_voxels_num)
-			{
-				continue;
-			}
-
 			found = mOccupiedVoxels.try_emplace(point.key).first;
 			found->second.reserve(static_cast<std::size_t>(max_points_per_voxel));
 		}

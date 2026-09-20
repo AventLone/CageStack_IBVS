@@ -24,8 +24,7 @@ struct IntensityAnalysis
     std::size_t retained_count{};
 };
 
-std::optional<IntensityAnalysis> analyzeIntensity(const pcl::PointCloud<pcl::PointXYZI>& cloud,
-                                                  const float keep_ratio)
+std::optional<IntensityAnalysis> analyzeIntensity(const pcl::PointCloud<pcl::PointXYZI>& cloud, const float keep_ratio)
 {
     std::vector<float> intensities;
     intensities.reserve(cloud.size());
@@ -79,7 +78,6 @@ void Localization_LIO::updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan
     voxel_filter.filter(*filtered_map);
 
     mMap = filtered_map;
-
     mGicp.insertTargetPoints(scan_in_trailer);
 }
 
@@ -143,7 +141,7 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr Localization_LIO::denoiseAndDownsample(const
     return processed_cloud;
 }
 
-bool Localization_LIO::alignScanToMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_scan, const double timestamp)
+bool Localization_LIO::alignScanToMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_scan)
 {
     GICP::Result result;
     try
@@ -156,7 +154,7 @@ bool Localization_LIO::alignScanToMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr&
         return false;
     }
 
-    mESKF.observe(Sophus::SE3d(result.transform.rotation(), result.transform.translation()), timestamp);
+    mESKF.observe(Sophus::SE3d(result.transform.rotation(), result.transform.translation()));
 
     const auto& gicp_config = mGicp.config();
 
@@ -194,8 +192,6 @@ void Localization_LIO::lidarWorkerLoop()
             scan_msg = std::move(mScanBuffer.front());
             mScanBuffer.pop_front();
         }
-
-
 
         const auto frame_start_time = std::chrono::high_resolution_clock::now();
 
@@ -250,29 +246,21 @@ void Localization_LIO::lidarWorkerLoop()
                 continue;
             }
 
-            // if (!eskf_init_future.get())
-            // {
-            //
-            // }
-            // auto eskf_init_future = std::async(std::launch::async, [this]() -> bool
-            //     {
-                    std::vector<lio::ImuData> imu_datas;
-                    {
-                        std::lock_guard<std::mutex> lock(mImuBufferMutex);
-                        imu_datas = std::vector(mImuBuffer.begin(), mImuBuffer.end());
-                    }
-                    if (!mESKF.initialize(imu_datas))
-                    {
-                        RCLCPP_WARN(get_logger(), "ESKF failed to initialize!");
-                        mInitialized = false;
-                        continue;
-                    }
-                // });
+            std::vector<lio::ImuData> imu_datas;
+            {
+                std::lock_guard<std::mutex> lock(mImuBufferMutex);
+                imu_datas = std::vector(mImuBuffer.begin(), mImuBuffer.end());
+            }
+            if (!mESKF.initialize(imu_datas))
+            {
+                RCLCPP_WARN(get_logger(), "ESKF failed to initialize!");
+                mInitialized = false;
+                continue;
+            }
             mESKF.setTimestamp(stamped_cloud.end_time);
 
             mMap = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
             pcl::transformPointCloud(*denoised_scan, *mMap, mESKF.pose().cast<float>());
-            // mMap = denoised_scan;
             mGicp.initializeTarget(*mMap);
             continue;
         }
@@ -293,7 +281,6 @@ void Localization_LIO::lidarWorkerLoop()
         last_timestamp = stamped_cloud.end_time;
 
         /* Deskew the point cloud and transform it into IMU frame */
-        // std::this_thread::sleep_for(std::chrono::milliseconds(1));
         while (rclcpp::ok() && !mIsShutdown)
         {
             std::vector<lio::ImuData> imu_datas;
@@ -307,7 +294,7 @@ void Localization_LIO::lidarWorkerLoop()
             }
             catch (const std::exception& e)
             {
-                // RCLCPP_ERROR(get_logger(), "GICP failed: %s", e.what());
+                // RCLCPP_WARN(get_logger(), e.what());
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 continue;
             }
@@ -319,7 +306,7 @@ void Localization_LIO::lidarWorkerLoop()
 
         /* GICP and observe */
         eskf_predict_future.get();
-        if (alignScanToMap(denoised_cloud, stamped_cloud.end_time))
+        if (alignScanToMap(denoised_cloud))
         {
             updateVoxelMap(*denoised_cloud);
         }

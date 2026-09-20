@@ -11,9 +11,10 @@
 #include <tf2_ros/transform_listener.h>
 #include <pcl/common/transforms.h>
 #include <pcl/filters/voxel_grid.h>
-#include <vector>
 #include "perception/GICP/GICP.h"
 #include "perception/types/common.hpp"
+#include "perception/LIO/ESKF.h"
+#include "perception/LIO/ImuProcessor.h"
 
 class Localization_LIO : public rclcpp::Node
 {
@@ -22,18 +23,24 @@ public:
     explicit Localization_LIO(const std::string& node_name) : Node(node_name), mTfBuffer(this->get_clock()), mTfListener(mTfBuffer)
     {
         /* Lookup transform */
-        // while (rclcpp::ok())
-        // {
-        //     try
-        //     {
-        //         T_truck2lidar = tf2::transformToEigen(mTfBuffer.lookupTransform("LOLA", "JT128", tf2::TimePointZero)).cast<float>();
-        //         break;
-        //     }
-        //     catch (const tf2::TransformException& ex)
-        //     {
-        //         RCLCPP_ERROR(this->get_logger(), "Could not transform fork to body: %s", ex.what());
-        //     }
-        // }
+        Sophus::SE3d T_il;
+        while (rclcpp::ok())
+        {
+            try
+            {
+                // const auto transform = tf2::transformToEigen(mTfBuffer.lookupTransform("LOLA", "JT128", tf2::TimePointZero));
+                const auto transform = tf2::transformToEigen(mTfBuffer.lookupTransform("imu", "PandarXT-32", tf2::TimePointZero));
+                T_il = Sophus::SE3d(transform.rotation(), transform.translation());
+                mT_il = transform.cast<float>();
+                break;
+            }
+            catch (const tf2::TransformException& ex)
+            {
+                RCLCPP_ERROR(this->get_logger(), "Could not transform fork to body: %s", ex.what());
+            }
+        }
+
+        mImuProcessor = std::make_unique<lio::ImuProcessor>(T_il);
 
         GICP::Config config{};
         config.voxel_size = MAP_RESOLUTION * 5;
@@ -74,8 +81,8 @@ private:
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr mBasePosePathPub;
 
     /* Data Buffers */
-    std::queue<sensor_msgs::msg::PointCloud2> mScanBuffer;
-    std::queue<sensor_msgs::msg::Imu> mImuBuffer;
+    std::deque<sensor_msgs::msg::PointCloud2::ConstSharedPtr> mScanBuffer;
+    std::deque<lio::ImuData> mImuBuffer;
 
     /* Multi-thread utilities */
     bool mIsShutdown{false};
@@ -90,44 +97,49 @@ private:
 
     /* Trailer voxel map and estimated pose */
     pcl::PointCloud<pcl::PointXYZ>::Ptr mMap;
-    Eigen::Isometry3d mBasePose{Eigen::Isometry3d::Identity()};   // Pose of the truck
+    // Eigen::Isometry3d mBasePose{Eigen::Isometry3d::Identity()};   // Pose of the truck
     nav_msgs::msg::Path mBasePosePath;
 
+    /* LIO */
+    Eigen::Isometry3f mT_il;   // Extrinsic from LiDAR to IMU
     GICP mGicp;
+    lio::ImuProcessor::Ptr mImuProcessor;
+    lio::ESKF mESKF;
     float mIntensityThreshold{-1.0f};
     float mIntensityKeepRatio{0.6f};
-    bool mIntensityAnalyzed{false};
+    bool mInitialized{false};
 
     void initSubscribers()
     {
         // mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/iv_points", rclcpp::SensorDataQoS(),
         mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/hesai/pandar", 10,
         // mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/iv_points", 10,
-            [this](const sensor_msgs::msg::PointCloud2::ConstSharedPtr& scan_msg)
+            [this](sensor_msgs::msg::PointCloud2::ConstSharedPtr scan_msg)
                 {
                     {
-                       std::lock_guard lock(mScanBufferMutex);
-                       while (!mScanBuffer.empty())
-                       {
-                           mScanBuffer.pop();
-                       }
-                       mScanBuffer.push(*scan_msg);
+                        std::lock_guard lock(mScanBufferMutex);
+                        if (mScanBuffer.size() > 4)
+                        {
+                            mScanBuffer.pop_front();
+                        }
+                        mScanBuffer.push_back(std::move(scan_msg));
                     }
                     mLidarTrigger.notify_one();
                 });
 
-        mImuSub = create_subscription<sensor_msgs::msg::Imu>("/imu", 10,
-            [this](const sensor_msgs::msg::Imu::ConstSharedPtr& imu_msg)
+        mImuSub = create_subscription<sensor_msgs::msg::Imu>("/alphasense/imu", rclcpp::SensorDataQoS().keep_last(2000),
+            [this](const sensor_msgs::msg::Imu::ConstSharedPtr& msg)
                 {
+                    const lio::ImuData imu{rclcpp::Time(msg->header.stamp).seconds(),
+                            Eigen::Vector3d(msg->angular_velocity.x, msg->angular_velocity.y, msg->angular_velocity.z),
+                            Eigen::Vector3d(msg->linear_acceleration.x, msg->linear_acceleration.y, msg->linear_acceleration.z)};
+
+                    std::lock_guard lock(mImuBufferMutex);
+                    while (mImuBuffer.size() > 2000)
                     {
-                       std::lock_guard lock(mImuBufferMutex);
-                       while (!mImuBuffer.empty())
-                       {
-                           mImuBuffer.pop();
-                       }
-                       mImuBuffer.push(*imu_msg);
+                        mImuBuffer.pop_front();
                     }
-                    mImuTrigger.notify_one();
+                    mImuBuffer.push_back(imu);
                 });
     }
 
@@ -148,11 +160,12 @@ private:
     //     pcl::transformPointCloud(src_scan, dst_scan, T_truck2lidar);
     // }
 
-    bool alignICP(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_scan);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr denoiseAndDownsample(const pcl::PointCloud<pcl::PointXYZI>& src) const;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr denoiseAndDownsample(const StampedCloud& src) const;
 
-    void updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan_in_truck);
+    bool alignScanToMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_scan, double timestamp);
+
+    void updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan);
 
     void lidarWorkerLoop();
-
-    void imuWorkerLoop();
 };

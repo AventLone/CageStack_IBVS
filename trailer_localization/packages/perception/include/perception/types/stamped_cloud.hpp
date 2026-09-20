@@ -3,6 +3,8 @@
 #include <sensor_msgs/point_cloud2_iterator.hpp>
 #include <Eigen/Core>
 #include <execution>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
 
 struct PointXYZIT
 {

@@ -1,4 +1,6 @@
 #include "perception/LIO/ESKF.h"
+#include <iostream>
+#include <format>
 
 namespace lio
 {
@@ -6,8 +8,10 @@ bool ESKF::initialize(const std::vector<ImuData>& samples)
 {
     if (samples.size() < 20 || samples.back().timestamp - samples.front().timestamp < 0.5)
     {
+        std::cerr << "Too few IMU samples or too short time." << std::endl;
         return false;
     }
+
     Eigen::Vector3d gyro = Eigen::Vector3d::Zero();
     Eigen::Vector3d accel = Eigen::Vector3d::Zero();
     for (const auto& imu : samples)
@@ -22,8 +26,9 @@ bool ESKF::initialize(const std::vector<ImuData>& samples)
     double accel_variance = 0.0;
     for (std::size_t i = 0; i < samples.size(); ++i)
     {
-        if (i > 0 && samples[i].timestamp - samples[i - 1].timestamp > 0.01)
+        if (constexpr double max_gap = 0.05; i > 0 && samples[i].timestamp - samples[i - 1].timestamp > max_gap)
         {
+            std::cerr << "Time gap is too big!" << std::endl;
             return false;
         }
         gyro_variance += (samples[i].gyro - gyro).squaredNorm();
@@ -33,6 +38,7 @@ bool ESKF::initialize(const std::vector<ImuData>& samples)
     if (gyro.norm() > 0.1 || gyro_variance / static_cast<double>(samples.size()) > 0.0025 ||
         accel_variance / static_cast<double>(samples.size()) > 0.25 || std::abs(accel.norm() - 9.81) > 0.5)
     {
+        std::cerr << "Covariance is too big!" << std::endl;
         return false;
     }
 
@@ -55,9 +61,19 @@ void ESKF::predict(const ImuData& imu_data)
 
     const double dt = imu_data.timestamp - mState.timestamp;
 
-    if (constexpr double max_imu_gap = 0.05; dt <= 0.0 || dt > max_imu_gap)
+    if (constexpr double min_imu_dt = 1e-9; dt <= min_imu_dt)
     {
-        throw std::invalid_argument("Out-of-order IMU or excessive IMU gap.");
+        if (dt >= -min_imu_dt)
+        {
+            return;
+        }
+
+        throw std::invalid_argument(std::format("Out-of-order IMU. dt = {}", dt));
+    }
+
+    if (constexpr double max_imu_gap = 0.05; dt > max_imu_gap)
+    {
+        throw std::invalid_argument(std::format("Excessive IMU gap. dt = {}", dt));
     }
 
     auto& p = mState.p_wi;

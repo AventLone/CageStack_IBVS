@@ -62,13 +62,25 @@ public:
 
         /* Default LiDAR odometry measurement noise. z = [p, R] */
         constexpr double lidar_position_std = 0.03;            // m
-        constexpr double lidar_rotation_std = 0.3 * DEG2RAD;  // rad
+        constexpr double lidar_rotation_std = 0.3 * DEG2RAD;   // rad
         mV.block<3, 3>(0, 0).diagonal().setConstant(lidar_position_std * lidar_position_std);
         mV.block<3, 3>(3, 3).diagonal().setConstant(lidar_rotation_std * lidar_rotation_std);
     }
 
+    void setTimestamp(const double stamp)
+    {
+        mState.timestamp = stamp;
+    }
+
     bool initialize(const std::vector<ImuData>& samples);   // IMU 状态，Voxel Map 初始化
-    void predict(const ImuData& imu_data);                     // 预测
+
+    void predict(const std::vector<ImuData>& imu_datas)                     // 预测
+    {
+        for (const auto& imu_data : imu_datas)
+        {
+            predict(imu_data);
+        }
+    }
 
     void observe(const Sophus::SE3d& pose, const double timestamp)
     {
@@ -96,6 +108,8 @@ private:
 
     MotionNoiseCov mQ{MotionNoiseCov::Zero()};           // Motion Noise
     MeasurementCov mV{MeasurementCov::Zero()};           // Measure Noise
+
+    void predict(const ImuData& imu_data);                     // 预测
 
     static Eigen::Matrix3d rightJacobianSO3(const Eigen::Vector3d& phi)
     {

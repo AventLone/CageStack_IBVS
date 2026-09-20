@@ -1,7 +1,4 @@
 #pragma once
-// #include <algorithm>
-// #include <stdexcept>
-// #include <vector>
 #include <sophus/se3.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <rclcpp/time.hpp>
@@ -24,6 +21,8 @@ static ImuData fromMsg(const sensor_msgs::msg::Imu& imu_msg)
 class ImuProcessor
 {
 public:
+    using Ptr = std::unique_ptr<ImuProcessor>;
+
     /**
      * T_il: LiDAR's pose in IMU frame
      * p_i = T_il * p_l
@@ -45,23 +44,23 @@ public:
      * IMU data must cover:
      *   [scan_begin, scan_end]
      */
-    void process(const std::vector<ImuData>& imu_data, StampedCloud& stamped_cloud, ImuState& state)
+    void process(const std::vector<ImuData>& imu_data, StampedCloud& stamped_cloud, const ImuState& state)
     {
         if (imu_data.size() < 2)
         {
             throw std::runtime_error("Insufficient IMU measurements.");
         }
 
-        if (constexpr double time_epsilon = 1e-6;
-            std::abs(state.timestamp - stamped_cloud.begin_time) > time_epsilon)
-        {
-            throw std::runtime_error("IMU state timestamp must equal scan_begin.");
-        }
+        // if (constexpr double time_epsilon = 1e-6;
+        //     std::abs(state.timestamp - stamped_cloud.begin_time) > time_epsilon)
+        // {
+        //     throw std::runtime_error("IMU state timestamp must equal scan_begin.");
+        // }
 
-        if (imu_data.front().timestamp > stamped_cloud.begin_time || imu_data.back().timestamp < stamped_cloud.end_time)
-        {
-            throw std::runtime_error("IMU measurements do not cover LiDAR scan.");
-        }
+        // if (imu_data.front().timestamp > stamped_cloud.begin_time || imu_data.back().timestamp < stamped_cloud.end_time)
+        // {
+        //     throw std::runtime_error("IMU measurements do not cover LiDAR scan.");
+        // }
 
         const auto samples = buildImuSequence(imu_data, stamped_cloud.begin_time, stamped_cloud.end_time);
         propagate(samples, state);
@@ -76,7 +75,7 @@ public:
      * Bias is assumed constant during one scan.
      * Bias covariance/random walk should be handled by the IESKF.
      */
-    void propagate(const std::vector<ImuData>& imu_data, ImuState& state);
+    void propagate(const std::vector<ImuData>& imu_data, ImuState state);
 
 
 private:

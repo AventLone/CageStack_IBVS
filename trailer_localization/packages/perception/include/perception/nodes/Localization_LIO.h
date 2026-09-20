@@ -12,7 +12,6 @@
 #include <pcl/common/transforms.h>
 #include <pcl/filters/voxel_grid.h>
 #include "perception/GICP/GICP.h"
-#include "perception/types/common.hpp"
 #include "perception/LIO/ESKF.h"
 #include "perception/LIO/ImuProcessor.h"
 

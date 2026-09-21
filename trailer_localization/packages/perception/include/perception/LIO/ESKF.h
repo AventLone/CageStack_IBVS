@@ -32,7 +32,7 @@ constexpr double DEG2RAD = 1.0 / 180.0 * M_PI;
 class ESKF
 {
     using StateT       = Eigen::Matrix<double, 9, 1>;   // [dp, dtheta, dv]
-    using MeasurementT = Sophus::SE3d::Tangent;   // [p, R]
+    using MeasurementT = Sophus::SE3d::Tangent;         // [p, R]
     using MotionNoiseT = Eigen::Matrix<double, 6, 1>;   // [n_a, n_g]
 
     using StateCov       = CovarianceT<StateT>;
@@ -55,14 +55,14 @@ public:
         mP.block<3, 3>(6, 6).diagonal().setConstant(initial_velocity_std * initial_velocity_std);
 
         /* IMU noise covariance. n = [na, ng] */
-        constexpr double accel_noise_std = 0.03;           // m/s^2
-        constexpr double gyro_noise_std = 0.02 * DEG2RAD;  // rad/s
+        constexpr double accel_noise_std = 0.02;           // m/s^2
+        constexpr double gyro_noise_std = 0.01 * DEG2RAD;  // rad/s
         mQ.block<3, 3>(0, 0).diagonal().setConstant(accel_noise_std * accel_noise_std);
         mQ.block<3, 3>(3, 3).diagonal().setConstant(gyro_noise_std * gyro_noise_std);
 
         /* Default LiDAR odometry measurement noise. z = [p, R] */
-        constexpr double lidar_position_std = 0.0003;            // m
-        constexpr double lidar_rotation_std = 0.003 * DEG2RAD;   // rad
+        constexpr double lidar_position_std = 0.0001;            // m
+        constexpr double lidar_rotation_std = 0.0001 * DEG2RAD;   // rad
         mV.block<3, 3>(0, 0).diagonal().setConstant(lidar_position_std * lidar_position_std);
         mV.block<3, 3>(3, 3).diagonal().setConstant(lidar_rotation_std * lidar_rotation_std);
     }

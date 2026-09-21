@@ -1,24 +1,5 @@
 #include "perception/LIO/ImuProcessor.h"
 
-std::vector<lio::ImuData> lio::ImuProcessor::buildImuSequence(const std::vector<ImuData>& imu_data,
-                                                              const double begin, const double end)
-{
-    std::vector<ImuData> result;
-    result.reserve(imu_data.size() + 2);
-    result.push_back(imuAt(imu_data, begin));
-
-    for (const auto& imu : imu_data)
-    {
-        if (imu.timestamp > begin && imu.timestamp < end)
-        {
-            result.push_back(imu);
-        }
-    }
-
-    result.push_back(imuAt(imu_data, end));
-    return result;
-}
-
 // std::vector<lio::ImuData> lio::ImuProcessor::buildImuSequence(const std::vector<ImuData>& imu_data,
 //                                                               const double begin, const double end)
 // {
@@ -26,20 +7,39 @@ std::vector<lio::ImuData> lio::ImuProcessor::buildImuSequence(const std::vector<
 //     result.reserve(imu_data.size() + 2);
 //     result.push_back(imuAt(imu_data, begin));
 //
-//     const auto first = std::upper_bound(imu_data.begin(), imu_data.end(), begin, [](const double t, const ImuData& imu)
+//     for (const auto& imu : imu_data)
+//     {
+//         if (imu.timestamp > begin && imu.timestamp < end)
 //         {
-//             return t < imu.timestamp;
-//         });
+//             result.push_back(imu);
+//         }
+//     }
 //
-//     const auto last = std::lower_bound(first, imu_data.end(), end, [](const ImuData& imu, const double t)
-//         {
-//             return imu.timestamp < t;
-//         });
-//
-//     result.insert(result.end(), first, last);
 //     result.push_back(imuAt(imu_data, end));
 //     return result;
 // }
+
+std::vector<lio::ImuData> lio::ImuProcessor::buildImuSequence(const std::vector<ImuData>& imu_data,
+                                                              const double begin, const double end)
+{
+    std::vector<ImuData> result;
+    result.reserve(imu_data.size() + 2);
+    result.push_back(imuAt(imu_data, begin));
+
+    const auto first = std::upper_bound(imu_data.begin(), imu_data.end(), begin, [](const double t, const ImuData& imu)
+        {
+            return t < imu.timestamp;
+        });
+
+    const auto last = std::lower_bound(first, imu_data.end(), end, [](const ImuData& imu, const double t)
+        {
+            return imu.timestamp < t;
+        });
+
+    result.insert(result.end(), first, last);
+    result.push_back(imuAt(imu_data, end));
+    return result;
+}
 
 void lio::ImuProcessor::propagate(const std::vector<ImuData>& imu_data, ImuState state)
 {

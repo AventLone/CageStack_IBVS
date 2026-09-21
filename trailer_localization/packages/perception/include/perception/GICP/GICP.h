@@ -98,8 +98,8 @@ private:
     void findCorrespondences(const std::vector<const PointWithCovariance*>& source, const SparseVoxel& target,
                              const Sophus::SE3d& source_to_target, std::vector<Correspondence>& correspondences) const;
 
-    std::optional<std::pair<std::size_t, double>> buildAndSolve(const std::vector<const PointWithCovariance*>& source,
-                                                                const std::vector<Correspondence>& correspondences,
-                                                                Sophus::SE3d& source_to_target,
-                                                                Sophus::SE3d::Tangent& left_increment) const;
+
+    std::optional<std::pair<std::size_t, double>> findCorrespondencesAndSolve(const std::vector<const PointWithCovariance*>& source,
+                                                                              Sophus::SE3d& source_to_target,
+                                                                              Sophus::SE3d::Tangent& left_increment) const;
 };

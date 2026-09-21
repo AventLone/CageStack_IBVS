@@ -37,84 +37,147 @@ void GICP::findCorrespondences(const std::vector<const PointWithCovariance*>& so
         });
 }
 
-std::optional<std::pair<std::size_t, double>> GICP::buildAndSolve(const std::vector<const PointWithCovariance*>& source,
-                                                                  const std::vector<Correspondence>& correspondences,
-                                                                  Sophus::SE3d& source_to_target,
-                                                                  Sophus::SE3d::Tangent& left_increment) const
+std::optional<std::pair<std::size_t, double>> GICP::findCorrespondencesAndSolve(const std::vector<const PointWithCovariance*>& source,
+                                                                                Sophus::SE3d& source_to_target,
+                                                                                Sophus::SE3d::Tangent& left_increment) const
 {
-    double fitness_score{};
+    struct Accumulator
+    {
+        Eigen::Matrix<double, 6, 6> hessian = Eigen::Matrix<double, 6, 6>::Zero();
+        Eigen::Matrix<double, 6, 1> gradient = Eigen::Matrix<double, 6, 1>::Zero();
 
-    Eigen::Matrix<double, 6, 6> hessian = Eigen::Matrix<double, 6, 6>::Zero();
-    Eigen::Matrix<double, 6, 1> gradient = Eigen::Matrix<double, 6, 1>::Zero();
+        double squared_error_sum = 0.0;
+        std::size_t valid_count = 0;
 
-    double squared_error_sum = 0.0f;
-    int valid_count = 0;
+        Accumulator& operator+=(const Accumulator& other)
+        {
+            hessian += other.hessian;
+            gradient += other.gradient;
+            squared_error_sum += other.squared_error_sum;
+            valid_count += other.valid_count;
+            return *this;
+        }
+    };
+
+    // For covariance transformation and optimization.
     const Eigen::Matrix3d rotation = source_to_target.rotationMatrix();
 
-    for (std::size_t index = 0; index < correspondences.size(); ++index)
-    {
-        const auto& [target_point, transformed_position] = correspondences[index];
-        if (target_point == nullptr)
-        {
-            continue;
-        }
+    const double kernel_scale = mConfig.cauchy_kernel_scale;
+    const double kernel_scale2 = kernel_scale * kernel_scale;
+    const bool use_robust_kernel = kernel_scale > 0.0;
 
-        const PointWithCovariance& source_point = *source[index];
-
-        Eigen::Matrix3d covariance = Eigen::Matrix3d::Identity();
-        if (source_point.covariance_valid)
-        {
-            if (target_point->covariance_valid)
+    const Accumulator accumulator = std::transform_reduce(std::execution::par, source.begin(), source.end(), Accumulator{},
+            [](Accumulator lhs, const Accumulator& rhs)   // Reduction
             {
-                covariance = target_point->covariance.cast<double>();
-            }
-            covariance += rotation * source_point.covariance.cast<double>() * rotation.transpose();
-        }
+                lhs += rhs;
+                return lhs;
+            },
+            [&](const PointWithCovariance* source_point)   // Transform: source point -> correspondence -> normal equation contribution
+            {
+                Accumulator local;
 
-        const Eigen::Matrix3d precision = covariance.inverse();
-        if (!precision.allFinite())
-        {
-            continue;
-        }
+                // ---------------------------------------------------------
+                // 1. Transform source point
+                // ---------------------------------------------------------
+                const Eigen::Vector3d transformed_position = source_to_target * source_point->position.cast<double>();
 
-        const Eigen::Vector3d residual = transformed_position - target_point->position.cast<double>();
-        const Eigen::Vector3d precision_residual = precision * residual;
+                // ---------------------------------------------------------
+                // 2. Find correspondence
+                // ---------------------------------------------------------
+                const SparseVoxel::Neighbor nearest = mTarget->nearestNeighbor(transformed_position.cast<float>(), mConfig.max_correspondence_distance);
+                const PointWithCovariance* target_point = nearest.point;
+                if (target_point == nullptr)
+                {
+                    return local;
+                }
 
-        const double mahalanobis_error = residual.dot(precision_residual);
-        const double kernel_scale2 = mConfig.cauchy_kernel_scale * mConfig.cauchy_kernel_scale;
-        const double weight = mConfig.cauchy_kernel_scale > 0.0f ? 1.0f / (1.0f + mahalanobis_error / kernel_scale2) : 1.0f;
+                // ---------------------------------------------------------
+                // 3. GICP covariance
+                // ---------------------------------------------------------
+                Eigen::Matrix3d covariance = Eigen::Matrix3d::Identity();
+                // This preserves the behavior of your original code.
+                if (source_point->covariance_valid)
+                {
+                    if (target_point->covariance_valid)
+                    {
+                        covariance = target_point->covariance.cast<double>();
+                    }
+                    covariance.noalias() += rotation * source_point->covariance.cast<double>() * rotation.transpose();
+                }
 
-        Eigen::Matrix<double, 3, 6> jacobian;
-        jacobian.leftCols<3>().setIdentity();
-        jacobian.rightCols<3>() = -Sophus::SO3d::hat(transformed_position.cast<double>());
-        hessian.noalias() += jacobian.transpose() * weight * precision * jacobian;
-        gradient.noalias() += jacobian.transpose() * weight * precision_residual;
-        squared_error_sum += residual.squaredNorm();
-        ++valid_count;
-    }
+                const Eigen::LDLT<Eigen::Matrix3d> covariance_ldlt(covariance);
 
-    auto num_correspondences = static_cast<std::size_t>(valid_count);
-    fitness_score = valid_count > 0 ? squared_error_sum / static_cast<double>(valid_count) : std::numeric_limits<double>::infinity();
-    if (valid_count == 0 || !std::isfinite(squared_error_sum))
+                if (covariance_ldlt.info() != Eigen::Success)
+                {
+                    return local;
+                }
+
+                // ---------------------------------------------------------
+                // 4. Residual
+                // ---------------------------------------------------------
+                const Eigen::Vector3d residual = transformed_position - target_point->position.cast<double>();
+                const Eigen::Vector3d precision_residual = covariance_ldlt.solve(residual);
+                if (!precision_residual.allFinite())
+                {
+                    return local;
+                }
+
+                // ---------------------------------------------------------
+                // 5. Robust kernel
+                // ---------------------------------------------------------
+                const double mahalanobis_error = residual.dot(precision_residual);
+                const double weight = use_robust_kernel ? 1.0 / (1.0 + mahalanobis_error / kernel_scale2) : 1.0;
+
+                // ---------------------------------------------------------
+                // 6. Jacobian
+                // Left perturbation:
+                // T' = exp(delta_xi) * T
+                // J = [ I  -hat(p) ]
+                // ---------------------------------------------------------
+                Eigen::Matrix<double, 3, 6> jacobian;
+                jacobian.leftCols<3>().setIdentity();
+                jacobian.rightCols<3>() = -Sophus::SO3d::hat(transformed_position);
+                const  Eigen::Matrix<double, 3, 6> precision_jacobian = covariance_ldlt.solve(jacobian);   // covariance^-1 * J
+
+                // ---------------------------------------------------------
+                // 7. Normal equation contribution
+                // ---------------------------------------------------------
+                local.hessian.noalias() = weight * jacobian.transpose() * precision_jacobian;
+                local.gradient.noalias() = weight * jacobian.transpose() * precision_residual;
+                local.squared_error_sum = residual.squaredNorm();
+                local.valid_count = 1;
+
+                return local;
+            });
+
+    // ---------------------------------------------------------------------
+    // Solve
+    // ---------------------------------------------------------------------
+    if (accumulator.valid_count == 0 || !std::isfinite(accumulator.squared_error_sum))
     {
         return std::nullopt;
     }
 
+    Eigen::Matrix<double, 6, 6> hessian = accumulator.hessian;
     hessian.diagonal().array() += mConfig.damping_factor;
-    const Eigen::LDLT<Eigen::Matrix<double, 6, 6>> decomposition(hessian);
+
+    const Eigen::LDLT< Eigen::Matrix<double, 6, 6>> decomposition(hessian);
     if (decomposition.info() != Eigen::Success)
     {
         return std::nullopt;
     }
 
-    left_increment = decomposition.solve(-gradient);
+    left_increment = decomposition.solve(-accumulator.gradient);
     if (decomposition.info() != Eigen::Success || !left_increment.allFinite())
     {
         return std::nullopt;
     }
 
+    // Left update
     source_to_target = Sophus::SE3d::exp(left_increment) * source_to_target;
-    return std::make_pair(num_correspondences, fitness_score);
+    const double fitness_score = accumulator.squared_error_sum / static_cast<double>(accumulator.valid_count);
+
+    return std::make_pair(accumulator.valid_count, fitness_score);
 }
 
 GICP::Result GICP::align(const pcl::PointCloud<pcl::PointXYZ>& source, const Eigen::Isometry3d& initial_guess) const
@@ -141,16 +204,13 @@ GICP::Result GICP::align(const pcl::PointCloud<pcl::PointXYZ>& source, const Eig
     }
 
     const std::vector<const PointWithCovariance*> source_points = source_index.points();
-    std::vector<Correspondence> correspondences(source_points.size());
 
     Sophus::SE3d source_to_target(initial_guess.rotation(), initial_guess.translation());
 
     for (int iteration = 0; iteration < mConfig.max_iterations; ++iteration)
     {
-        findCorrespondences(source_points, *mTarget, source_to_target, correspondences);
-
         Sophus::SE3d::Tangent left_increment;
-        if (const auto calculation = buildAndSolve(source_points, correspondences, source_to_target, left_increment);
+        if (const auto calculation = findCorrespondencesAndSolve(source_points, source_to_target, left_increment);
             calculation.has_value())
         {
             result.num_correspondences = calculation.value().first;

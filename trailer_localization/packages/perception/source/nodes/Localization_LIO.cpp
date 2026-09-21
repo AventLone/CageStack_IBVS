@@ -174,7 +174,7 @@ bool Localization_LIO::alignScanToMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr&
     return true;
 }
 
-void Localization_LIO::lidarWorkerLoop()
+void Localization_LIO::workerLoop()
 {
     StampedCloud stamped_cloud;
     double last_timestamp = 0.0;
@@ -184,7 +184,7 @@ void Localization_LIO::lidarWorkerLoop()
         sensor_msgs::msg::PointCloud2::ConstSharedPtr scan_msg;
         {
             std::unique_lock lock(mScanBufferMutex);
-            mLidarTrigger.wait(lock, [this]() -> bool { return !mScanBuffer.empty() || mIsShutdown; });
+            mTrigger.wait(lock, [this]() -> bool { return !mScanBuffer.empty() || mIsShutdown; });
             if (mIsShutdown)
             {
                 break;

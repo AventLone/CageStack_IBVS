@@ -51,7 +51,7 @@ public:
 
         initSubscribers();
         initPublisher();
-        mLidarWorker = std::thread(&Localization_LIO::lidarWorkerLoop, this);
+        mLidarWorker = std::thread(&Localization_LIO::workerLoop, this);
         RCLCPP_INFO(get_logger(), "The node has been activated.");
     }
 
@@ -61,7 +61,7 @@ public:
             std::lock_guard lock(mScanBufferMutex);
             mIsShutdown = true;
         }
-        mLidarTrigger.notify_one();
+        mTrigger.notify_one();
         if (mLidarWorker.joinable())
         {
             mLidarWorker.join();
@@ -87,7 +87,7 @@ private:
     bool mIsShutdown{false};
     std::thread mLidarWorker, mImuWorker;
     std::mutex mScanBufferMutex, mImuBufferMutex;
-    std::condition_variable mLidarTrigger, mImuTrigger;
+    std::condition_variable mTrigger;
 
     /* TF tree utilities */
     tf2_ros::Buffer mTfBuffer;
@@ -96,7 +96,6 @@ private:
 
     /* Trailer voxel map and estimated pose */
     pcl::PointCloud<pcl::PointXYZ>::Ptr mMap;
-    // Eigen::Isometry3d mBasePose{Eigen::Isometry3d::Identity()};   // Pose of the truck
     nav_msgs::msg::Path mBasePosePath;
 
     /* LIO */
@@ -123,7 +122,7 @@ private:
                         }
                         mScanBuffer.push_back(std::move(scan_msg));
                     }
-                    mLidarTrigger.notify_one();
+                    mTrigger.notify_one();
                 });
 
         mImuSub = create_subscription<sensor_msgs::msg::Imu>("/alphasense/imu", rclcpp::SensorDataQoS().keep_last(2000),
@@ -166,5 +165,5 @@ private:
 
     void updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan);
 
-    void lidarWorkerLoop();
+    void workerLoop();
 };

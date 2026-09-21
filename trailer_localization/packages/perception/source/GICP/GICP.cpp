@@ -39,7 +39,8 @@ void GICP::findCorrespondences(const std::vector<const PointWithCovariance*>& so
 
 std::optional<std::pair<std::size_t, double>> GICP::findCorrespondencesAndSolve(const std::vector<const PointWithCovariance*>& source,
                                                                                 Sophus::SE3d& source_to_target,
-                                                                                Sophus::SE3d::Tangent& left_increment) const
+                                                                                Sophus::SE3d::Tangent& left_increment,
+                                                                                Eigen::Matrix<double, 6, 6>& hessian_) const
 {
     struct Accumulator
     {
@@ -62,9 +63,9 @@ std::optional<std::pair<std::size_t, double>> GICP::findCorrespondencesAndSolve(
     // For covariance transformation and optimization.
     const Eigen::Matrix3d rotation = source_to_target.rotationMatrix();
 
-    const double kernel_scale = mConfig.cauchy_kernel_scale;
-    const double kernel_scale2 = kernel_scale * kernel_scale;
-    const bool use_robust_kernel = kernel_scale > 0.0;
+    // const double kernel_scale = mConfig.cauchy_kernel_scale;
+    // const double kernel_scale2 = kernel_scale * kernel_scale;
+    // const bool use_robust_kernel = kernel_scale > 0.0;
 
     const Accumulator accumulator = std::transform_reduce(std::execution::par, source.begin(), source.end(), Accumulator{},
             [](Accumulator lhs, const Accumulator& rhs)   // Reduction
@@ -125,8 +126,9 @@ std::optional<std::pair<std::size_t, double>> GICP::findCorrespondencesAndSolve(
                 // ---------------------------------------------------------
                 // 5. Robust kernel
                 // ---------------------------------------------------------
-                const double mahalanobis_error = residual.dot(precision_residual);
-                const double weight = use_robust_kernel ? 1.0 / (1.0 + mahalanobis_error / kernel_scale2) : 1.0;
+                // const double mahalanobis_error = residual.dot(precision_residual);
+                // const double weight = use_robust_kernel ? 1.0 / (1.0 + mahalanobis_error / kernel_scale2) : 1.0;
+                // const double weight = 1.0;
 
                 // ---------------------------------------------------------
                 // 6. Jacobian
@@ -142,8 +144,11 @@ std::optional<std::pair<std::size_t, double>> GICP::findCorrespondencesAndSolve(
                 // ---------------------------------------------------------
                 // 7. Normal equation contribution
                 // ---------------------------------------------------------
-                local.hessian.noalias() = weight * jacobian.transpose() * precision_jacobian;
-                local.gradient.noalias() = weight * jacobian.transpose() * precision_residual;
+                // local.hessian.noalias() = weight * jacobian.transpose() * precision_jacobian;
+                // local.gradient.noalias() = weight * jacobian.transpose() * precision_residual;
+
+                local.hessian.noalias() = jacobian.transpose() * precision_jacobian;
+                local.gradient.noalias() = jacobian.transpose() * precision_residual;
                 local.squared_error_sum = residual.squaredNorm();
                 local.valid_count = 1;
 
@@ -158,10 +163,9 @@ std::optional<std::pair<std::size_t, double>> GICP::findCorrespondencesAndSolve(
         return std::nullopt;
     }
 
-    Eigen::Matrix<double, 6, 6> hessian = accumulator.hessian;
-    hessian.diagonal().array() += mConfig.damping_factor;
+    hessian_ = accumulator.hessian;
 
-    const Eigen::LDLT< Eigen::Matrix<double, 6, 6>> decomposition(hessian);
+    const Eigen::LDLT< Eigen::Matrix<double, 6, 6>> decomposition(hessian_);
     if (decomposition.info() != Eigen::Success)
     {
         return std::nullopt;
@@ -206,11 +210,11 @@ GICP::Result GICP::align(const pcl::PointCloud<pcl::PointXYZ>& source, const Eig
     const std::vector<const PointWithCovariance*> source_points = source_index.points();
 
     Sophus::SE3d source_to_target(initial_guess.rotation(), initial_guess.translation());
-
+    Eigen::Matrix<double, 6, 6> hessian;
     for (int iteration = 0; iteration < mConfig.max_iterations; ++iteration)
     {
         Sophus::SE3d::Tangent left_increment;
-        if (const auto calculation = findCorrespondencesAndSolve(source_points, source_to_target, left_increment);
+        if (const auto calculation = findCorrespondencesAndSolve(source_points, source_to_target, left_increment, hessian);
             calculation.has_value())
         {
             result.num_correspondences = calculation.value().first;
@@ -222,7 +226,6 @@ GICP::Result GICP::align(const pcl::PointCloud<pcl::PointXYZ>& source, const Eig
         }
 
         ++result.iterations;
-        result.transform = Eigen::Isometry3d(source_to_target.matrix());
 
         if (left_increment.head<3>().norm() < mConfig.convergence_translation &&
             left_increment.tail<3>().norm() < mConfig.convergence_rotation)
@@ -231,6 +234,14 @@ GICP::Result GICP::align(const pcl::PointCloud<pcl::PointXYZ>& source, const Eig
             break;
         }
     }
+    result.transform = Eigen::Isometry3d(source_to_target.matrix());
+
+    const Eigen::Matrix<double, 6, 6> gicp_cov_left = hessian.ldlt().solve(Eigen::Matrix<double, 6, 6>::Identity());
+    Eigen::Matrix<double, 6, 6> A = Eigen::Matrix<double, 6, 6>::Zero();
+    A.topLeftCorner<3, 3>().setIdentity();
+    A.topRightCorner<3, 3>() = -Sophus::SO3d::hat(source_to_target.translation());
+    A.bottomRightCorner<3, 3>() = source_to_target.rotationMatrix().transpose();
+    result.measure_covariance.noalias() = A * gicp_cov_left * A.transpose();
 
     if (!result.converged && result.iterations > 0 && std::isfinite(result.fitness_score))
     {

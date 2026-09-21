@@ -139,10 +139,9 @@ void SparseVoxel::estimateCovariances(const std::vector<PointWithCovariance*>& p
 {
 	const int required_neighbors = std::max(3, mConfig.min_covariance_neighbors);
 	const int neighbor_limit = std::max(required_neighbors, mConfig.max_covariance_neighbors);
-	const float diagonal_regularization = std::max(1.0e-6f, mConfig.covariance_regularization);
 
 	std::for_each(std::execution::par, points.begin(), points.end(),
-		[this, required_neighbors, neighbor_limit, diagonal_regularization](PointWithCovariance* point)
+		[this, required_neighbors, neighbor_limit](PointWithCovariance* point)
 		{
 			point->covariance = Eigen::Matrix3f::Identity();
 			point->covariance_valid = false;
@@ -167,7 +166,6 @@ void SparseVoxel::estimateCovariances(const std::vector<PointWithCovariance*>& p
 				covariance.noalias() += offset * offset.transpose();
 			}
 			covariance /= static_cast<float>(neighbors.size() - 1);
-			covariance.diagonal().array() += diagonal_regularization;
 
 			if (const float determinant = covariance.determinant();
 				!std::isfinite(determinant) || std::abs(determinant) <= 1.0e-12f)
@@ -175,12 +173,7 @@ void SparseVoxel::estimateCovariances(const std::vector<PointWithCovariance*>& p
 				return;
 			}
 
-			const float inverse_norm = covariance.inverse().norm();
-			if (!std::isfinite(inverse_norm) || inverse_norm <= 0.0f)
-			{
-				return;
-			}
-			point->covariance = covariance * inverse_norm;
+			point->covariance = covariance;
 			point->covariance_valid = true;
 		});
 }

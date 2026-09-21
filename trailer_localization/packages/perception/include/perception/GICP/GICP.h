@@ -22,13 +22,9 @@ public:
 
         // Cauchy 鲁棒核尺度 s，作用于马氏误差 e：权重= 1 / (1 + e/s^2)，不是直接的欧氏距离阈值。
         // 正值越小越抑制大残差，但也可能削弱有效约束；越大越接近普通 GICP；<= 0 禁用鲁棒降权。
-        double cauchy_kernel_scale{0.3};
+        // double cauchy_kernel_scale{0.3};
 
-        // 求解 (H + lambda*I) * delta = -g 的固定阻尼，建议 > 0；不是自适应 LM 阻尼。
-        // 增大通常使更新更保守、改善病态系统，但可能减慢收敛；减小更激进，也更易受退化和噪声影响。
-        double damping_factor{1.0e-3};
-
-        int max_iterations{50};
+        int max_iterations{60};
         double convergence_translation{1.0e-5};   // SE(3) 增量中平移分量的范数阈值，单位 m
         double convergence_rotation{1.0e-5};   // SE(3) 增量中旋转向量的范数阈值，单位 rad
     };
@@ -42,6 +38,7 @@ public:
         std::size_t num_correspondences{0};
         double fitness_score{std::numeric_limits<double>::infinity()};
         Eigen::Isometry3d transform{Eigen::Isometry3d::Identity()};
+        Eigen::Matrix<double, 6, 6> measure_covariance{Eigen::Matrix<double, 6, 6>::Identity()};
     };
 
     GICP() : GICP(Config{})
@@ -101,5 +98,6 @@ private:
 
     std::optional<std::pair<std::size_t, double>> findCorrespondencesAndSolve(const std::vector<const PointWithCovariance*>& source,
                                                                               Sophus::SE3d& source_to_target,
-                                                                              Sophus::SE3d::Tangent& left_increment) const;
+                                                                              Sophus::SE3d::Tangent& left_increment,
+                                                                              Eigen::Matrix<double, 6, 6>& hessian_) const;
 };

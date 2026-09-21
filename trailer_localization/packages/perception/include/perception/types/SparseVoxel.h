@@ -31,7 +31,6 @@ public:
 
         int min_covariance_neighbors{8};
         int max_covariance_neighbors{36};
-        float covariance_regularization{1.0e-3f};
     };
 
 	struct Neighbor

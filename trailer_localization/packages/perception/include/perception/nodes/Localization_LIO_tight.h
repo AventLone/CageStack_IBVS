@@ -11,16 +11,14 @@
 #include <tf2_ros/transform_listener.h>
 #include <pcl/common/transforms.h>
 #include <pcl/filters/voxel_grid.h>
-#include "perception/GICP/GICP.h"
-#include "perception/LIO/ESKF.h"
+#include "perception/LIO/IESKF.h"
 #include "perception/LIO/ImuProcessor.h"
 
-class Localization_LIO : public rclcpp::Node
+class Localization_LIO_T : public rclcpp::Node
 {
     static constexpr float MAP_RESOLUTION = 0.1f;
-
 public:
-    explicit Localization_LIO(const std::string& node_name) : Node(node_name), mTfBuffer(this->get_clock()), mTfListener(mTfBuffer)
+    explicit Localization_LIO_T(const std::string& node_name) : Node(node_name), mTfBuffer(this->get_clock()), mTfListener(mTfBuffer)
     {
         // Sophus::SE3d T_il;
         // /* Lookup transform */
@@ -57,21 +55,16 @@ public:
 
         mImuProcessor = std::make_unique<lio::ImuProcessor>(T_il);
 
-        GICP::Config config{};
-        config.voxel_size = MAP_RESOLUTION * 5;
-        config.max_fitness_score = 0.1f;  // 平均意义下的点位误差尺度 10 cm
-        mGicp.setConfig(config);
-
         mIntensityThreshold = static_cast<float>(declare_parameter<double>("intensity_threshold", -1.0));
         mIntensityKeepRatio = std::clamp(static_cast<float>(declare_parameter<double>("intensity_keep_ratio", 0.99)), 0.01f, 1.0f);
 
         initSubscribers();
         initPublisher();
-        mLidarWorker = std::thread(&Localization_LIO::workerLoop, this);
+        mLidarWorker = std::thread(&Localization_LIO_T::workerLoop, this);
         RCLCPP_INFO(get_logger(), "The node has been activated.");
     }
 
-    ~Localization_LIO() override
+    ~Localization_LIO_T() override
     {
         {
             std::lock_guard lock(mScanBufferMutex);
@@ -116,9 +109,8 @@ private:
 
     /* LIO */
     Eigen::Isometry3f mT_il;   // Extrinsic from LiDAR to IMU
-    GICP mGicp;
     lio::ImuProcessor::Ptr mImuProcessor;
-    lio::ESKF mESKF;
+    lio::IESKF mIESKF;
     float mIntensityThreshold{-1.0f};
     float mIntensityKeepRatio{0.6f};
     bool mInitialized{false};
@@ -178,9 +170,7 @@ private:
     pcl::PointCloud<pcl::PointXYZ>::Ptr denoiseAndDownsample(const pcl::PointCloud<pcl::PointXYZI>& src) const;
     pcl::PointCloud<pcl::PointXYZ>::Ptr denoiseAndDownsample(const StampedCloud& src) const;
 
-    bool alignScanToMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_scan);
-
-    void updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan);
+    void updateCloudMap(const pcl::PointCloud<pcl::PointXYZ>& scan);
 
     void workerLoop();
 };

@@ -6,7 +6,7 @@ namespace lio
 {
 bool ESKF::initialize(const std::vector<ImuData>& samples)
 {
-    if (samples.size() < 20 || samples.back().timestamp - samples.front().timestamp < 1.0)
+    if (samples.size() < 20 || samples.back().timestamp - samples.front().timestamp < 2.0)
     {
         std::cerr << "Too few IMU samples or too short time." << std::endl;
         return false;
@@ -59,22 +59,30 @@ void ESKF::predict(const ImuData& imu_data)
         throw std::invalid_argument("Initialize ESKF before prediction.");
     }
 
+    // const double dt = imu_data.timestamp - mState.timestamp;
     const double dt = imu_data.timestamp - mState.timestamp;
-
-    if (constexpr double min_imu_dt = 1e-9; dt <= min_imu_dt)
+    if (dt > 0.05 || dt < 0)
     {
-        if (dt >= -min_imu_dt)
-        {
-            return;
-        }
-
-        throw std::invalid_argument(std::format("Out-of-order IMU. dt = {}", dt));
+        // 时间间隔不对，可能是第一个IMU数据，没有历史信息
+        // LOG(INFO) << "skip this imu because dt_ = " << dt;
+        mState.timestamp = imu_data.timestamp;
+        return;
     }
 
-    if (constexpr double max_imu_gap = 0.05; dt > max_imu_gap)
-    {
-        throw std::invalid_argument(std::format("Excessive IMU gap. dt = {}", dt));
-    }
+    // if (constexpr double min_imu_dt = 1e-9; dt <= min_imu_dt)
+    // {
+    //     if (dt >= -min_imu_dt)
+    //     {
+    //         return;
+    //     }
+    //
+    //     throw std::invalid_argument(std::format("Out-of-order IMU. dt = {}", dt));
+    // }
+    //
+    // if (constexpr double max_imu_gap = 0.05; dt > max_imu_gap)
+    // {
+    //     throw std::invalid_argument(std::format("Excessive IMU gap. dt = {}", dt));
+    // }
 
     auto& p = mState.p_wi;
     auto& R = mState.R_wi;
@@ -118,15 +126,8 @@ void ESKF::predict(const ImuData& imu_data)
     G.block<3, 3>(3, 3) = -rightJacobianSO3(phi) * dt;       // dtheta / n_g
     G.block<3, 3>(6, 0) = -R_old.matrix() * dt;              // dv / n_a
 
-    /*
-     * Covariance propagation
-     */
-    mP = F * mP * F.transpose() + G * mQ * G.transpose();
-
-    /*
-     * Suppress accumulated numerical asymmetry.
-     */
-    mP = 0.5 * (mP + mP.transpose());
+    mP = F * mP * F.transpose() + G * mQ * G.transpose();   // Covariance propagation
+    mP = 0.5 * (mP + mP.transpose());                       // Suppress accumulated numerical asymmetry
 
     mState.timestamp = imu_data.timestamp;
 }
@@ -139,11 +140,7 @@ void ESKF::observe(const Sophus::SE3d& pose, const MeasurementCov& measurement_c
     }
 
     MeasurementT residual;
-
-    /*
-     * Translation residual.
-     */
-    residual.head<3>() = pose.translation() - mState.p_wi;
+    residual.head<3>() = pose.translation() - mState.p_wi;   // Translation residual
 
     /*
      * Right-invariant local rotation residual: R_meas = R_pred * Exp(dtheta)
@@ -151,25 +148,16 @@ void ESKF::observe(const Sophus::SE3d& pose, const MeasurementCov& measurement_c
      */
     residual.tail<3>() = (mState.R_wi.inverse() * pose.so3()).log();
 
-    MeasurementJacobian H = MeasurementJacobian::Zero();
-    H.block<3, 3>(0, 0) = Eigen::Matrix3d::Identity();
-    H.block<3, 3>(3, 3) = Eigen::Matrix3d::Identity();
+    const MeasurementCov S = mH * mP * mH.transpose() + measurement_cov;
+    const auto PHt = mP * mH.transpose();
 
-    const MeasurementCov S = H * mP * H.transpose() + measurement_cov;
-    const auto PHt = mP * H.transpose();
-
-    /*
-     * K = P H^T S^-1
-     * Avoid explicit inverse().
-     */
+    /* K = P H^T S^-1, Avoid explicit inverse() */
     const Eigen::Matrix<double, 9, 6> K = S.ldlt().solve(PHt.transpose()).transpose();
     const StateT dx = K * residual;
 
-    /*
-     * Joseph-form covariance update.
-     */
+    /* Joseph-form covariance update */
     const StateJacobian I = StateJacobian::Identity();
-    const StateJacobian IKH = I - K * H;
+    const StateJacobian IKH = I - K * mH;
 
     mP = IKH * mP * IKH.transpose() + K * measurement_cov * K.transpose();
     update(dx);   // Inject local correction into nominal state

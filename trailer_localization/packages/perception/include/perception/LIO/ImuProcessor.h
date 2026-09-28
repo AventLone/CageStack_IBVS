@@ -1,8 +1,6 @@
 #pragma once
 #include <sophus/se3.hpp>
-#include <sensor_msgs/msg/imu.hpp>
-#include <rclcpp/time.hpp>
-#include "perception/types/imu.hpp"
+#include "perception/types/nav_state.hpp"
 #include "perception/types/stamped_cloud.hpp"
 
 namespace lio
@@ -31,7 +29,7 @@ public:
      * Requirement: state.timestamp == scan_begin
      * IMU data must cover: [scan_begin, scan_end]
      */
-    void process(const std::vector<ImuData>& imu_data, StampedCloud& stamped_cloud, const ImuState& state)
+    void process(const std::vector<ImuData>& imu_data, StampedCloud& stamped_cloud, const NavState& state)
     {
         if (imu_data.size() < 2)
         {
@@ -79,7 +77,7 @@ private:
     * Bias is assumed constant during one scan.
     * Bias covariance/random walk should be handled by the IESKF.
     */
-    void propagate(const std::vector<ImuData>& imu_data, ImuState state);
+    void propagate(const std::vector<ImuData>& imu_data, NavState state);
 
     /**
      * Linear interpolation of raw IMU measurements.

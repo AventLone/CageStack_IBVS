@@ -48,11 +48,6 @@ bool SparseVoxel::insert(const pcl::PointCloud<pcl::PointXYZ>& cloud)
 
 	for (const auto& pcl_point : cloud)
 	{
-		if (!std::isfinite(pcl_point.x) || !std::isfinite(pcl_point.y) || !std::isfinite(pcl_point.z))
-		{
-			continue;
-		}
-
 		SparsePoint point;
 		point.position = Eigen::Vector3f(pcl_point.x, pcl_point.y, pcl_point.z);
 		point.key = pointToVoxel(point.position);
@@ -224,45 +219,109 @@ SparseVoxel::Neighbor SparseVoxel::nearestNeighbor(const Eigen::Vector3f& query,
 	}
 	return nearest;
 }
+//
+// std::vector<SparseVoxel::Neighbor> SparseVoxel::nearestNeighbors(const Eigen::Vector3f& query, const int max_neighbors) const
+// {
+// 	std::vector<Neighbor> neighbors;
+// 	if (max_neighbors <= 0)
+// 	{
+// 		return neighbors;
+// 	}
+//
+// 	neighbors.reserve(std::min(static_cast<std::size_t>(max_neighbors), mPointCount));
+// 	const auto [i, j, k] = pointToVoxel(query);
+//
+//     constexpr int voxel_radius = 1;
+// 	for (int dx = -voxel_radius; dx <= voxel_radius; ++dx)
+// 	{
+// 		for (int dy = -voxel_radius; dy <= voxel_radius; ++dy)
+// 		{
+// 			for (int dz = -voxel_radius; dz <= voxel_radius; ++dz)
+// 			{
+// 				const auto found = mOccupiedVoxels.find(VoxelKey{i + dx, j + dy, k + dz});
+// 				if (found == mOccupiedVoxels.end())
+// 				{
+// 					continue;
+// 				}
+//
+// 				for (const PointWithCovariance& point : found->second)
+// 				{
+// 					neighbors.push_back(Neighbor{&point, (query - point.position).squaredNorm()});
+// 				}
+// 			}
+// 		}
+// 	}
+//
+// 	if (static_cast<int>(neighbors.size()) > max_neighbors)
+// 	{
+// 		std::ranges::nth_element(neighbors, neighbors.begin() + max_neighbors, {}, &Neighbor::squared_distance);
+// 		neighbors.resize(max_neighbors);
+// 	}
+// 	return neighbors;
+// }
 
 std::vector<SparseVoxel::Neighbor> SparseVoxel::nearestNeighbors(const Eigen::Vector3f& query, const int max_neighbors) const
 {
-	std::vector<Neighbor> neighbors;
-	if (max_neighbors <= 0)
-	{
-		return neighbors;
-	}
+    if (max_neighbors <= 0)
+    {
+        return {};
+    }
 
-	neighbors.reserve(std::min(static_cast<std::size_t>(max_neighbors), mPointCount));
-	const auto [i, j, k] = pointToVoxel(query);
+    std::vector<Neighbor> neighbors;
+    neighbors.reserve(static_cast<std::size_t>(max_neighbors));
+
+    const auto [i, j, k] = pointToVoxel(query);
 
     constexpr int voxel_radius = 1;
-	for (int dx = -voxel_radius; dx <= voxel_radius; ++dx)
-	{
-		for (int dy = -voxel_radius; dy <= voxel_radius; ++dy)
-		{
-			for (int dz = -voxel_radius; dz <= voxel_radius; ++dz)
-			{
-				const auto found = mOccupiedVoxels.find(VoxelKey{i + dx, j + dy, k + dz});
-				if (found == mOccupiedVoxels.end())
-				{
-					continue;
-				}
 
-				for (const PointWithCovariance& point : found->second)
-				{
-					neighbors.push_back(Neighbor{&point, (query - point.position).squaredNorm()});
-				}
-			}
-		}
-	}
+    // Max-heap:
+    // neighbors.front() is always the farthest neighbor
+    // among the current top-K nearest neighbors.
+    const auto compare = [](const Neighbor& lhs, const Neighbor& rhs)
+    {
+        return lhs.squared_distance < rhs.squared_distance;
+    };
 
-	if (static_cast<int>(neighbors.size()) > max_neighbors)
-	{
-		std::ranges::nth_element(neighbors, neighbors.begin() + max_neighbors, {}, &Neighbor::squared_distance);
-		neighbors.resize(max_neighbors);
-	}
-	return neighbors;
+    for (int dx = -voxel_radius; dx <= voxel_radius; ++dx)
+    {
+        for (int dy = -voxel_radius; dy <= voxel_radius; ++dy)
+        {
+            for (int dz = -voxel_radius; dz <= voxel_radius; ++dz)
+            {
+                const auto found = mOccupiedVoxels.find(VoxelKey{i + dx, j + dy, k + dz});
+
+                if (found == mOccupiedVoxels.end())
+                {
+                    continue;
+                }
+
+                for (const PointWithCovariance& point : found->second)
+                {
+                    const float squared_distance = (query - point.position).squaredNorm();
+
+                    if (neighbors.size() < static_cast<std::size_t>(max_neighbors))
+                    {
+                        neighbors.push_back(Neighbor{.point = &point, .squared_distance = squared_distance});
+                        std::ranges::push_heap(neighbors, compare);
+                        continue;
+                    }
+
+                    // Heap is full.
+                    // front() is the farthest point currently retained.
+                    if (squared_distance >= neighbors.front().squared_distance)
+                    {
+                        continue;
+                    }
+
+                    std::ranges::pop_heap(neighbors, compare);                                            // Remove current farthest.
+                    neighbors.back() = Neighbor{.point = &point, .squared_distance = squared_distance};   // Replace it with the new closer point.
+                    std::ranges::push_heap(neighbors, compare);                                           // Restore heap.
+                }
+            }
+        }
+    }
+
+    return neighbors;
 }
 
 std::vector<SparseVoxel::SparsePoint> SparseVoxel::makeSparseCloud(const pcl::PointCloud<pcl::PointXYZ>& cloud) const

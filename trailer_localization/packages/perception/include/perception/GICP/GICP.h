@@ -20,13 +20,9 @@ public:
         std::size_t min_correspondences{1000};
         double max_fitness_score{0.01};
 
-        // Cauchy 鲁棒核尺度 s，作用于马氏误差 e：权重= 1 / (1 + e/s^2)，不是直接的欧氏距离阈值。
-        // 正值越小越抑制大残差，但也可能削弱有效约束；越大越接近普通 GICP；<= 0 禁用鲁棒降权。
-        // double cauchy_kernel_scale{0.3};
-
         int max_iterations{60};
-        double convergence_translation{1.0e-5};   // SE(3) 增量中平移分量的范数阈值，单位 m
-        double convergence_rotation{1.0e-5};   // SE(3) 增量中旋转向量的范数阈值，单位 rad
+        double convergence_translation{1.0e-4};   // SE(3) 增量中平移分量的范数阈值，单位 m
+        double convergence_rotation{1.0e-4};   // SE(3) 增量中旋转向量的范数阈值，单位 rad
     };
 
     struct Result

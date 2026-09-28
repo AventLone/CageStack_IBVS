@@ -1,24 +1,5 @@
 #include "perception/LIO/ImuProcessor.h"
 
-// std::vector<lio::ImuData> lio::ImuProcessor::buildImuSequence(const std::vector<ImuData>& imu_data,
-//                                                               const double begin, const double end)
-// {
-//     std::vector<ImuData> result;
-//     result.reserve(imu_data.size() + 2);
-//     result.push_back(imuAt(imu_data, begin));
-//
-//     for (const auto& imu : imu_data)
-//     {
-//         if (imu.timestamp > begin && imu.timestamp < end)
-//         {
-//             result.push_back(imu);
-//         }
-//     }
-//
-//     result.push_back(imuAt(imu_data, end));
-//     return result;
-// }
-
 std::vector<lio::ImuData> lio::ImuProcessor::buildImuSequence(const std::vector<ImuData>& imu_data,
                                                               const double begin, const double end)
 {
@@ -41,7 +22,7 @@ std::vector<lio::ImuData> lio::ImuProcessor::buildImuSequence(const std::vector<
     return result;
 }
 
-void lio::ImuProcessor::propagate(const std::vector<ImuData>& imu_data, ImuState state)
+void lio::ImuProcessor::propagate(const std::vector<ImuData>& imu_data, NavState state)
 {
     if (imu_data.size() < 2)
     {
@@ -50,14 +31,7 @@ void lio::ImuProcessor::propagate(const std::vector<ImuData>& imu_data, ImuState
 
     mTrajectory.clear();
     mTrajectory.reserve(imu_data.size());
-
-    mTrajectory.push_back(
-        PoseState{
-            .timestamp = state.timestamp,
-            .R_wi = state.R_wi,
-            .p_wi = state.p_wi,
-            .v_wi = state.v_wi,
-        });
+    mTrajectory.emplace_back(state.timestamp, state.R_wi, state.p_wi, state.v_wi);
 
     for (std::size_t i = 0; i + 1 < imu_data.size(); ++i)
     {
@@ -65,16 +39,12 @@ void lio::ImuProcessor::propagate(const std::vector<ImuData>& imu_data, ImuState
         const ImuData& imu1 = imu_data[i + 1];
 
         const double dt = imu1.timestamp - imu0.timestamp;
-
         if (dt <= 0.0)
         {
             continue;
         }
 
-        /*
-         * Bias corrected angular velocity.
-         * Midpoint integration: ω = (ω0 + ω1) / 2 - bg
-         */
+        /* Bias corrected angular velocity. Midpoint integration: ω = (ω0 + ω1) / 2 - bg */
         const Eigen::Vector3d omega = 0.5 * (imu0.gyro + imu1.gyro) - state.gyro_bias;
 
         /*
@@ -82,36 +52,21 @@ void lio::ImuProcessor::propagate(const std::vector<ImuData>& imu_data, ImuState
          * Accelerometer measures: f = R_IW (a_W - g_W)
          * therefore: a_W = R_WI * f + g_W
          */
-        const Eigen::Vector3d specific_force = 0.5 * (imu0.accel + imu1.accel)- state.accel_bias;
+        const Eigen::Vector3d specific_force = 0.5 * (imu0.accel + imu1.accel) - state.accel_bias;
 
-        /*
-         * Orientation at middle of the interval.
-         *
-         * This gives better acceleration integration
-         * than simply using R_k.
-         */
+        /* Orientation at middle of the interval. This gives better acceleration integration than simply using R_k. */
         const Sophus::SO3d R_mid = state.R_wi * Sophus::SO3d::exp(omega * (0.5 * dt));
         const Eigen::Vector3d accel_world = R_mid * specific_force + state.gravity;
 
-        /*
-         * Position / velocity integration.
-         */
+        /* Position / velocity integration */
         state.p_wi += state.v_wi * dt + 0.5 * accel_world * dt * dt;
         state.v_wi += accel_world * dt;
 
-        /*
-         * Rotation integration.
-         */
+        /* Rotation integration */
         state.R_wi = state.R_wi * Sophus::SO3d::exp(omega * dt);
         state.timestamp = imu1.timestamp;
 
-        mTrajectory.push_back(
-            PoseState{
-                .timestamp = state.timestamp,
-                .R_wi = state.R_wi,
-                .p_wi = state.p_wi,
-                .v_wi = state.v_wi,
-            });
+        mTrajectory.emplace_back(state.timestamp, state.R_wi, state.p_wi, state.v_wi);
     }
 }
 
@@ -167,7 +122,6 @@ Sophus::SE3d lio::ImuProcessor::poseAt(const double timestamp) const
     const PoseState& s0 = *(iter - 1);
 
     const double dt = s1.timestamp - s0.timestamp;
-
     const double alpha = (timestamp - s0.timestamp) / dt;
 
     /* Translation interpolation */

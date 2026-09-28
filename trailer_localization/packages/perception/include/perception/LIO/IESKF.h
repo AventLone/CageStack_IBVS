@@ -1,6 +1,8 @@
 #pragma once
+#include <pcl/point_cloud.h>
 #include <sophus/se3.hpp>
 #include "perception/types/nav_state.hpp"
+#include "perception/types/iVox.h"
 
 namespace lio
 {
@@ -21,17 +23,17 @@ using Jacobian = Eigen::Matrix<typename VecA::Scalar, VecA::RowsAtCompileTime, V
 constexpr double DEG2RAD = 1.0 / 180.0 * M_PI;
 
 /**
- * 9-state manifold ESKF
- * Local error state: dx = [dp, dtheta, dv]
+ * 15-state manifold ESKF
+ * Local error state: dx = [dp, dtheta, dv, db_a, db_g]
  * Right rotation perturbation:
  *   R_true = R * Exp(dtheta)
  * Nominal state:
- *   p, R, v
+ *   p, R, v, b_a, b_g
  * bg, ba and gravity are calibrated during initialization and then fixed.
  */
-class ESKF
+class IESKF
 {
-    using StateT       = Eigen::Matrix<double, 9, 1>;   // [dp, dtheta, dv]
+    using StateT       = Eigen::Matrix<double, 15, 1>;   // [dp, dtheta, dv]
     using MeasurementT = Sophus::SE3d::Tangent;         // [p, R]
     using MotionNoiseT = Eigen::Matrix<double, 6, 1>;   // [n_a, n_g]
 
@@ -44,7 +46,7 @@ class ESKF
     using MeasurementJacobian = Jacobian<MeasurementT, StateT>;
 
 public:
-    ESKF()
+    IESKF()
     {
         /* State covariance, dx = [dp, dtheta, dv] */
         constexpr double initial_position_std = 0.01;             // m
@@ -68,6 +70,8 @@ public:
 
         mH.block<3, 3>(0, 0) = Eigen::Matrix3d::Identity();
         mH.block<3, 3>(3, 3) = Eigen::Matrix3d::Identity();
+
+        mVoxelMap = std::make_unique<IVox>(IVox::Config());
     }
 
     void setTimestamp(const double stamp)
@@ -75,9 +79,13 @@ public:
         mState.timestamp = stamp;
     }
 
-    bool initialize(const std::vector<ImuData>& samples);   // IMU 状态，Voxel Map 初始化
+    bool initialize(const std::vector<ImuData>& samples);   // IMU 状态初始化
+    void initialize(const pcl::PointCloud<pcl::PointXYZ>& scan) const  // Voxel Map 初始化
+    {
+        mVoxelMap->initialize(scan);
+    }
 
-    void predict(const std::vector<ImuData>& imu_datas)                     // 预测
+    void predict(const std::vector<ImuData>& imu_datas)     // 预测
     {
         for (const auto& imu_data : imu_datas)
         {
@@ -85,12 +93,7 @@ public:
         }
     }
 
-    void observe(const Sophus::SE3d& pose)
-    {
-        observe(pose, mV);
-    }
-
-    void observe(const Sophus::SE3d& pose, const MeasurementCov& measurement_cov);   // 观测更新
+    void observe(const pcl::PointCloud<pcl::PointXYZ>& scan);   // 观测更新
 
     [[nodiscard]] const NavState& state() const
     {
@@ -114,6 +117,8 @@ private:
 
     MeasurementJacobian mH{MeasurementJacobian::Zero()};  // Observe Matrix
 
+    IVox::Ptr mVoxelMap;
+
     void predict(const ImuData& imu_data);                     // 预测
 
     static Eigen::Matrix3d rightJacobianSO3(const Eigen::Vector3d& phi)
@@ -132,12 +137,41 @@ private:
             (theta - std::sin(theta)) / (theta2 * theta) * Phi * Phi;
     }
 
+    static Eigen::Matrix3d rightJacobianInverseSO3(const Eigen::Vector3d& phi)
+    {
+        const double theta2 = phi.squaredNorm();
+        const Eigen::Matrix3d Phi = Sophus::SO3d::hat(phi);
+
+        if (theta2 < 1e-10)
+        {
+            return Eigen::Matrix3d::Identity() + 0.5 * Phi + (1.0 / 12.0) * Phi * Phi;
+        }
+
+        const double theta = std::sqrt(theta2);
+        return Eigen::Matrix3d::Identity() + 0.5 * Phi + (1.0 / theta2 - (1.0 + std::cos(theta)) / (2.0 * theta * std::sin(theta))) * Phi * Phi;
+    }
+
+    static StateT stateDifference(const NavState& state, const NavState& prior)
+    {
+        StateT dx = StateT::Zero();
+
+        dx.segment<3>(0) = state.p_wi - prior.p_wi;
+        dx.segment<3>(3) = (prior.R_wi.inverse() * state.R_wi).log();
+        dx.segment<3>(6) = state.v_wi - prior.v_wi;
+        dx.segment<3>(9) = state.accel_bias - prior.accel_bias;
+        dx.segment<3>(12) = state.gyro_bias - prior.gyro_bias;
+
+        return dx;
+    }
+
     /* 经过预测更新，修正了误差状态的估计，然后需要把误差状态归入名义状态 */
     void update(const StateT& dx)
     {
-        mState.p_wi += dx.block<3, 1>(0, 0);
-        mState.R_wi *= Sophus::SO3d::exp(dx.block<3, 1>(3, 0));
-        mState.v_wi += dx.block<3, 1>(6, 0);
+        mState.p_wi += dx.segment<3>(0);
+        mState.R_wi *= Sophus::SO3d::exp(dx.segment<3>(3));
+        mState.v_wi += dx.segment<3>(6);
+        mState.accel_bias += dx.segment<3>(9);
+        mState.gyro_bias += dx.segment<3>(12);
     }
 };
 }

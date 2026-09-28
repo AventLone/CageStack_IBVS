@@ -1,4 +1,4 @@
-#include "perception/nodes/Localization_LIO.h"
+#include "perception/nodes/Localization_LIO_tight.h"
 #include <pcl_conversions/pcl_conversions.h>
 #include "perception/tools/OrthographicProjector.hpp"
 #include "perception/tools/feature_detect_3d.hpp"
@@ -63,11 +63,11 @@ std::optional<IntensityAnalysis> analyzeIntensity(const pcl::PointCloud<pcl::Poi
 }
 }
 
-void Localization_LIO::updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan)
+void Localization_LIO_T::updateCloudMap(const pcl::PointCloud<pcl::PointXYZ>& scan)
 {
     // Transform scan into trailer local template frame
     pcl::PointCloud<pcl::PointXYZ> scan_in_trailer;
-    pcl::transformPointCloud(scan, scan_in_trailer, mESKF.pose().cast<float>());
+    pcl::transformPointCloud(scan, scan_in_trailer, mIESKF.pose().cast<float>());
 
     *mMap += scan_in_trailer;   // Merge into voxel map
 
@@ -78,10 +78,9 @@ void Localization_LIO::updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan
     voxel_filter.filter(*filtered_map);
 
     mMap = filtered_map;
-    mGicp.insertTargetPoints(scan_in_trailer);
 }
 
-pcl::PointCloud<pcl::PointXYZ>::Ptr Localization_LIO::denoiseAndDownsample(const pcl::PointCloud<pcl::PointXYZI>& src) const
+pcl::PointCloud<pcl::PointXYZ>::Ptr Localization_LIO_T::denoiseAndDownsample(const pcl::PointCloud<pcl::PointXYZI>& src) const
 {
     /* Filter out points below the selected intensity threshold */
     const auto denoised_scan = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
@@ -111,7 +110,7 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr Localization_LIO::denoiseAndDownsample(const
     return processed_cloud;
 }
 
-pcl::PointCloud<pcl::PointXYZ>::Ptr Localization_LIO::denoiseAndDownsample(const StampedCloud& src) const
+pcl::PointCloud<pcl::PointXYZ>::Ptr Localization_LIO_T::denoiseAndDownsample(const StampedCloud& src) const
 {
     /* Filter out points below the selected intensity threshold */
     const auto denoised_scan = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
@@ -141,41 +140,7 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr Localization_LIO::denoiseAndDownsample(const
     return processed_cloud;
 }
 
-bool Localization_LIO::alignScanToMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr& current_scan)
-{
-    GICP::Result result;
-    try
-    {
-        result = mGicp.align(*current_scan, mESKF.pose());
-    }
-    catch (const std::exception& exception)
-    {
-        RCLCPP_ERROR(get_logger(), "GICP failed: %s", exception.what());
-        return false;
-    }
-
-    // mESKF.observe(Sophus::SE3d(result.transform.rotation(), result.transform.translation()));
-    // RCLCPP_INFO_STREAM_THROTTLE(get_logger(), *get_clock(), 1000, "Measure Cov" << result.measure_covariance);
-    // mESKF.observe(Sophus::SE3d(result.transform.rotation(), result.transform.translation()), result.measure_covariance);
-    mESKF.observe(Sophus::SE3d(result.transform.rotation(), result.transform.translation()));
-
-    const auto& gicp_config = mGicp.config();
-    if (result.num_correspondences < gicp_config.min_correspondences)
-    {
-        RCLCPP_WARN(get_logger(), "GICP converged with too few correspondences (%zu < %zu), skipping map update.",
-                    result.num_correspondences, gicp_config.min_correspondences);
-        return false;
-    }
-    if (result.fitness_score > gicp_config.max_fitness_score)
-    {
-        RCLCPP_WARN(get_logger(), "GICP converged but fitness score (%.4f) > threshold (%.4f), skipping map update.",
-                    result.fitness_score, gicp_config.max_fitness_score);
-        return false;
-    }
-    return true;
-}
-
-void Localization_LIO::workerLoop()
+void Localization_LIO_T::workerLoop()
 {
     StampedCloud stamped_cloud;
     double last_timestamp = 0.0;
@@ -252,22 +217,23 @@ void Localization_LIO::workerLoop()
                 std::lock_guard<std::mutex> lock(mImuBufferMutex);
                 imu_datas = std::vector(mImuBuffer.begin(), mImuBuffer.end());
             }
-            if (!mESKF.initialize(imu_datas))
+            if (!mIESKF.initialize(imu_datas))
             {
-                RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "ESKF failed to initialize!");
+                RCLCPP_WARN(get_logger(), "ESKF failed to initialize!");
                 mInitialized = false;
                 continue;
             }
-            // mESKF.setTimestamp(stamped_cloud.end_time);
+            mIESKF.setTimestamp(stamped_cloud.end_time);
 
             mMap = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-            pcl::transformPointCloud(*denoised_scan, *mMap, mESKF.pose().cast<float>());
-            mGicp.initializeTarget(*mMap);
+            pcl::transformPointCloud(*denoised_scan, *mMap, mIESKF.pose().cast<float>());
+            // mGicp.initializeTarget(*mMap);
+            mIESKF.initialize(*mMap);
             continue;
         }
 
         /* ESKF prediction */
-        const auto last_state = mESKF.state();
+        const auto last_state = mIESKF.state();
         auto eskf_predict_future = std::async(std::launch::async,
             [this, last_timestamp, current_timestamp = stamped_cloud.end_time]()
             {
@@ -277,7 +243,7 @@ void Localization_LIO::workerLoop()
                     imu_datas = std::vector(mImuBuffer.begin(), mImuBuffer.end());
                 }
                 const auto sequence = lio::ImuProcessor::buildImuSequence(imu_datas, last_timestamp, current_timestamp);
-                mESKF.predict(sequence);
+                mIESKF.predict(sequence);
             });
         last_timestamp = stamped_cloud.end_time;
 
@@ -305,15 +271,13 @@ void Localization_LIO::workerLoop()
         // const auto scan_in_imu = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
         const auto denoised_cloud = denoiseAndDownsample(stamped_cloud);
 
-        /* GICP and observe */
+        /* Observe and update the cloud map */
         eskf_predict_future.get();
-        if (alignScanToMap(denoised_cloud))
-        {
-            updateVoxelMap(*denoised_cloud);
-        }
+        mIESKF.observe(*denoised_cloud);
+        updateCloudMap(*denoised_cloud);
 
         pcl::PointCloud<pcl::PointXYZ> transformed_scan;
-        pcl::transformPointCloud(*denoised_cloud, transformed_scan, mESKF.pose().cast<float>());
+        pcl::transformPointCloud(*denoised_cloud, transformed_scan, mIESKF.pose().cast<float>());
 
         sensor_msgs::msg::PointCloud2 scan_vis_msg;
         pcl::toROSMsg(transformed_scan, scan_vis_msg);
@@ -330,7 +294,7 @@ void Localization_LIO::workerLoop()
         geometry_msgs::msg::PoseStamped pose_msg;
         pose_msg.header.stamp = rclcpp::Time(static_cast<int64_t>(stamped_cloud.end_time * 1e9));
         pose_msg.header.frame_id = "map";
-        pose_msg.pose = tf2::toMsg(mESKF.pose());
+        pose_msg.pose = tf2::toMsg(mIESKF.pose());
         mBasePosePub->publish(pose_msg);
 
         mBasePosePath.header = pose_msg.header;

@@ -63,9 +63,6 @@ std::optional<std::pair<std::size_t, double>> GICP::findCorrespondencesAndSolve(
     // For covariance transformation and optimization.
     const Eigen::Matrix3d rotation = source_to_target.rotationMatrix();
 
-    // const double kernel_scale = mConfig.cauchy_kernel_scale;
-    // const double kernel_scale2 = kernel_scale * kernel_scale;
-    // const bool use_robust_kernel = kernel_scale > 0.0;
 
     const Accumulator accumulator = std::transform_reduce(std::execution::par, source.begin(), source.end(), Accumulator{},
             [](Accumulator lhs, const Accumulator& rhs)   // Reduction
@@ -124,14 +121,7 @@ std::optional<std::pair<std::size_t, double>> GICP::findCorrespondencesAndSolve(
                 }
 
                 // ---------------------------------------------------------
-                // 5. Robust kernel
-                // ---------------------------------------------------------
-                // const double mahalanobis_error = residual.dot(precision_residual);
-                // const double weight = use_robust_kernel ? 1.0 / (1.0 + mahalanobis_error / kernel_scale2) : 1.0;
-                // const double weight = 1.0;
-
-                // ---------------------------------------------------------
-                // 6. Jacobian
+                // 5. Jacobian
                 // Left perturbation:
                 // T' = exp(delta_xi) * T
                 // J = [ I  -hat(p) ]
@@ -140,12 +130,6 @@ std::optional<std::pair<std::size_t, double>> GICP::findCorrespondencesAndSolve(
                 jacobian.leftCols<3>().setIdentity();
                 jacobian.rightCols<3>() = -Sophus::SO3d::hat(transformed_position);
                 const  Eigen::Matrix<double, 3, 6> precision_jacobian = covariance_ldlt.solve(jacobian);   // covariance^-1 * J
-
-                // ---------------------------------------------------------
-                // 7. Normal equation contribution
-                // ---------------------------------------------------------
-                // local.hessian.noalias() = weight * jacobian.transpose() * precision_jacobian;
-                // local.gradient.noalias() = weight * jacobian.transpose() * precision_residual;
 
                 local.hessian.noalias() = jacobian.transpose() * precision_jacobian;
                 local.gradient.noalias() = jacobian.transpose() * precision_residual;

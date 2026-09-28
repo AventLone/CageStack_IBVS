@@ -21,7 +21,7 @@ struct ImuData
  * IMU biases are part of the state because they should normally
  * be estimated by IESKF rather than treated as fixed parameters.
  */
-struct ImuState
+struct NavState
 {
     double timestamp = 0.0;
 

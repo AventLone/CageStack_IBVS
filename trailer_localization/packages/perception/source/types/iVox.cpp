@@ -2,8 +2,7 @@
 #include <ranges>
 #include <Eigen/Eigenvalues>
 
-
-IVox::VoxelKey IVox::pointToVoxel(const Eigen::Vector3f& point) const
+IVox::VoxelKey IVox::pointToVoxel(const Eigen::Vector3f& point)
 {
     /*
      * Faster-LIO uses round(), rather than floor().
@@ -11,7 +10,7 @@ IVox::VoxelKey IVox::pointToVoxel(const Eigen::Vector3f& point) const
      * The voxel represented by key (0,0,0) is therefore
      * centered around the origin.
      */
-    const Eigen::Vector3f scaled = point * mInverseVoxelSize;
+    const Eigen::Vector3f scaled = point * INVERSE_VOXEL_SIZE;
 
     return {static_cast<int>(std::round(scaled.x())),
             static_cast<int>(std::round(scaled.y())),
@@ -43,10 +42,10 @@ bool IVox::insert(const pcl::PointCloud<pcl::PointXYZ>& scan)
              *     ↓
              * insert into hash map
              */
-            mVoxelCache.emplace_front(key, Voxel{});
+            mVoxelCache.emplace_front(key, VoxelCell{});
 
             auto voxel_it = mVoxelCache.begin();
-            voxel_it->second.points.push_back(eigen_point);
+            voxel_it->second.add(eigen_point);
 
             mVoxelMap.emplace(key, voxel_it);
 
@@ -54,10 +53,10 @@ bool IVox::insert(const pcl::PointCloud<pcl::PointXYZ>& scan)
             inserted_any = true;
 
             /* Faster-LIO limits the number of occupied voxels */
-            if (mVoxelMap.size() > mConfig.capacity)
+            if (mVoxelMap.size() > VOXEL_CAPACITY)
             {
                 const auto last = std::prev(mVoxelCache.end());
-                mPointCount -= last->second.points.size();
+                mPointCount -= last->second.getPoints().size();
                 mVoxelMap.erase(last->first);
                 mVoxelCache.pop_back();
             }
@@ -65,7 +64,7 @@ bool IVox::insert(const pcl::PointCloud<pcl::PointXYZ>& scan)
         else
         {
             auto voxel_it = found->second;
-            voxel_it->second.points.push_back(eigen_point);
+            voxel_it->second.add(eigen_point);
 
             ++mPointCount;
             inserted_any = true;
@@ -105,7 +104,7 @@ std::vector<IVox::Neighbor> IVox::nearestNeighbors(const Eigen::Vector3f& query,
                     continue;
                 }
 
-                for (const Voxel& voxel = found->second->second; const Eigen::Vector3f& point : voxel.points)
+                for (const VoxelCell& voxel = found->second->second; const Eigen::Vector3f& point : voxel.getPoints())
                 {
                     if (const float squared_distance = (point - query).squaredNorm();
                         squared_distance < max_distance_squared)

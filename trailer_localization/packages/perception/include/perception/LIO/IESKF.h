@@ -63,15 +63,15 @@ public:
         mQ.block<3, 3>(3, 3).diagonal().setConstant(gyro_noise_std * gyro_noise_std);
 
         /* Default LiDAR odometry measurement noise. z = [p, R] */
-        constexpr double lidar_position_std = 0.001;            // m
-        constexpr double lidar_rotation_std = 0.01 * DEG2RAD;   // rad
-        mV.block<3, 3>(0, 0).diagonal().setConstant(lidar_position_std * lidar_position_std);
-        mV.block<3, 3>(3, 3).diagonal().setConstant(lidar_rotation_std * lidar_rotation_std);
+        // constexpr double lidar_position_std = 0.001;            // m
+        // constexpr double lidar_rotation_std = 0.01 * DEG2RAD;   // rad
+        // mV.block<3, 3>(0, 0).diagonal().setConstant(lidar_position_std * lidar_position_std);
+        // mV.block<3, 3>(3, 3).diagonal().setConstant(lidar_rotation_std * lidar_rotation_std);
 
         mH.block<3, 3>(0, 0) = Eigen::Matrix3d::Identity();
         mH.block<3, 3>(3, 3) = Eigen::Matrix3d::Identity();
 
-        mVoxelMap = std::make_unique<IVox>(IVox::Config());
+        mVoxelMap = std::make_unique<IVox>();
     }
 
     void setTimestamp(const double stamp)
@@ -113,7 +113,7 @@ private:
     StateCov mP{StateCov::Zero()};         // State Covariance
 
     MotionNoiseCov mQ{MotionNoiseCov::Zero()};           // Motion Noise
-    MeasurementCov mV{MeasurementCov::Zero()};           // Measure Noise
+    // MeasurementCov mV{MeasurementCov::Zero()};           // Measure Noise
 
     MeasurementJacobian mH{MeasurementJacobian::Zero()};  // Observe Matrix
 

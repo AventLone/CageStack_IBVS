@@ -73,7 +73,7 @@ void Localization_LIO_T::updateCloudMap(const pcl::PointCloud<pcl::PointXYZ>& sc
 
     const auto filtered_map = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
     pcl::VoxelGrid<pcl::PointXYZ> voxel_filter;
-    voxel_filter.setLeafSize(MAP_RESOLUTION * 2, MAP_RESOLUTION * 2, MAP_RESOLUTION * 2);
+    voxel_filter.setLeafSize(MAP_RESOLUTION, MAP_RESOLUTION, MAP_RESOLUTION);
     voxel_filter.setInputCloud(mMap);
     voxel_filter.filter(*filtered_map);
 

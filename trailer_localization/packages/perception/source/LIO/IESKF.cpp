@@ -8,7 +8,7 @@ namespace lio
 {
 bool IESKF::initialize(const std::vector<ImuData>& samples)
 {
-    if (samples.size() < 20 || samples.back().timestamp - samples.front().timestamp < 1.0)
+    if (samples.size() < 30 || samples.back().timestamp - samples.front().timestamp < 2.0)
     {
         std::cerr << "Too few IMU samples or too short time." << std::endl;
         return false;
@@ -26,15 +26,10 @@ bool IESKF::initialize(const std::vector<ImuData>& samples)
 
     double gyro_variance = 0.0;
     double accel_variance = 0.0;
-    for (std::size_t i = 0; i < samples.size(); ++i)
+    for (const auto& sample : samples)
     {
-        if (constexpr double max_gap = 0.05; i > 0 && samples[i].timestamp - samples[i - 1].timestamp > max_gap)
-        {
-            std::cerr << "Time gap is too big!" << std::endl;
-            return false;
-        }
-        gyro_variance += (samples[i].gyro - gyro).squaredNorm();
-        accel_variance += (samples[i].accel - accel).squaredNorm();
+        gyro_variance += (sample.gyro - gyro).squaredNorm();
+        accel_variance += (sample.accel - accel).squaredNorm();
     }
 
     if (gyro.norm() > 0.1 || gyro_variance / static_cast<double>(samples.size()) > 0.0025 ||
@@ -56,27 +51,13 @@ bool IESKF::initialize(const std::vector<ImuData>& samples)
 
 void IESKF::predict(const ImuData& imu_data)
 {
-    if (!mInitialized)
-    {
-        throw std::invalid_argument("Initialize ESKF before prediction.");
-    }
-
     const double dt = imu_data.timestamp - mState.timestamp;
-
-    if (constexpr double min_imu_dt = 1e-9; dt <= min_imu_dt)
+    if (dt > 0.05 || dt < 0)
     {
-        if (dt >= -min_imu_dt)
-        {
-            return;
-        }
-        throw std::invalid_argument(std::format("Out-of-order IMU. dt = {}", dt));
+        // 时间间隔不对，可能是第一个IMU数据，没有历史信息
+        mState.timestamp = imu_data.timestamp;
+        return;
     }
-
-    if (constexpr double max_imu_gap = 0.05; dt > max_imu_gap)
-    {
-        throw std::invalid_argument(std::format("Excessive IMU gap. dt = {}", dt));
-    }
-
 
     auto& p = mState.p_wi;
     auto& R = mState.R_wi;
@@ -160,7 +141,7 @@ void IESKF::observe(const pcl::PointCloud<pcl::PointXYZ>& scan)
     constexpr double lidar_point_std = 0.001;
     constexpr double lidar_point_variance = lidar_point_std * lidar_point_std;
 
-    constexpr double position_convergence = 1e-3;
+    constexpr double position_convergence = 1e-4;
     constexpr double rotation_convergence = 1e-4;
 
     /*

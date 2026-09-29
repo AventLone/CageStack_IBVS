@@ -8,22 +8,26 @@
 #include <vector>
 #include <Eigen/Core>
 #include <boost/unordered/unordered_flat_map.hpp>
+#include <boost/container/static_vector.hpp>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 
 class IVox
 {
+    static constexpr std::size_t VOXEL_CAPACITY = 1000000;
+    static constexpr float VOXEL_SIZE = 0.5f;
+    static constexpr float INVERSE_VOXEL_SIZE = 1.0f / VOXEL_SIZE;
+
 public:
     using Ptr = std::unique_ptr<IVox>;
-    using Points = std::vector<Eigen::Vector3f, Eigen::aligned_allocator<Eigen::Vector3f>>;
 
-    struct Config
-    {
-        float voxel_size{1.0f};
-
-        // Faster-LIO limits the number of occupied grids, rather than the number of points in each voxel.
-        std::size_t capacity{1000000};
-    };
+    // struct Config
+    // {
+    //     float voxel_size{0.5f};
+    //
+    //     // Faster-LIO limits the number of occupied grids, rather than the number of points in each voxel.
+    //     std::size_t capacity{1000000};
+    // };
 
     struct Neighbor
     {
@@ -31,9 +35,10 @@ public:
         float squared_distance{std::numeric_limits<float>::infinity()};
     };
 
-    explicit IVox(const Config& config) : mConfig(config), mInverseVoxelSize(1.0f / config.voxel_size)
-    {
-    }
+    // explicit IVox(const Config& config) : mConfig(config), mInverseVoxelSize(1.0f / config.voxel_size)
+    // {
+    // }
+    IVox() = default;
 
     void initialize(const pcl::PointCloud<pcl::PointXYZ>& scan)
     {
@@ -89,25 +94,50 @@ private:
         }
     };
 
-    struct Voxel
+    struct VoxelCell
     {
+        static constexpr int CAPACITY = 36;
+        static constexpr float MIN_DIST = 0.03f;
+        static constexpr float MIN_DIST_SQUARE = MIN_DIST * MIN_DIST;
+
+        using Points = boost::container::static_vector<Eigen::Vector3f, CAPACITY>;
+
+        void add(const Eigen::Vector3f& point)
+        {
+            if (const bool too_close = std::ranges::any_of(points, [&](const Eigen::Vector3f& p)
+            {
+                return (p - point).squaredNorm() < MIN_DIST_SQUARE;
+            }); too_close)
+            {
+                return;
+            }
+
+            if (points.size() == CAPACITY)
+            {
+                return;
+            }
+
+            points.push_back(point);
+        }
+
+        [[nodiscard]] const Points& getPoints() const
+        {
+            return points;
+        }
+
+    private:
         Points points;
     };
 
-    using VoxelCache = std::list<std::pair<VoxelKey, Voxel>>;
+    using VoxelCache = std::list<std::pair<VoxelKey, VoxelCell>>;
     using VoxelIterator = VoxelCache::iterator;
     using VoxelMap = boost::unordered_flat_map<VoxelKey, VoxelIterator>;
 
-    Config mConfig;
-
-    float mInverseVoxelSize{1.0f};
-
     VoxelMap mVoxelMap;
     VoxelCache mVoxelCache;
-
     std::size_t mPointCount{0};
 
-    VoxelKey pointToVoxel(const Eigen::Vector3f& point) const;
+    static VoxelKey pointToVoxel(const Eigen::Vector3f& point);
 };
 
 

@@ -21,14 +21,6 @@ class IVox
 public:
     using Ptr = std::unique_ptr<IVox>;
 
-    // struct Config
-    // {
-    //     float voxel_size{0.5f};
-    //
-    //     // Faster-LIO limits the number of occupied grids, rather than the number of points in each voxel.
-    //     std::size_t capacity{1000000};
-    // };
-
     struct Neighbor
     {
         const Eigen::Vector3f* point{nullptr};
@@ -104,15 +96,15 @@ private:
 
         void add(const Eigen::Vector3f& point)
         {
-            if (const bool too_close = std::ranges::any_of(points, [&](const Eigen::Vector3f& p)
-            {
-                return (p - point).squaredNorm() < MIN_DIST_SQUARE;
-            }); too_close)
+            if (points.size() == CAPACITY)
             {
                 return;
             }
 
-            if (points.size() == CAPACITY)
+            if (const bool too_close = std::ranges::any_of(points, [&](const Eigen::Vector3f& p)
+            {
+                return (p - point).squaredNorm() < MIN_DIST_SQUARE;
+            }); too_close)
             {
                 return;
             }

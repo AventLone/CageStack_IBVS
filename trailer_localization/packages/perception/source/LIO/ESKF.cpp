@@ -69,21 +69,6 @@ void ESKF::predict(const ImuData& imu_data)
         return;
     }
 
-    // if (constexpr double min_imu_dt = 1e-9; dt <= min_imu_dt)
-    // {
-    //     if (dt >= -min_imu_dt)
-    //     {
-    //         return;
-    //     }
-    //
-    //     throw std::invalid_argument(std::format("Out-of-order IMU. dt = {}", dt));
-    // }
-    //
-    // if (constexpr double max_imu_gap = 0.05; dt > max_imu_gap)
-    // {
-    //     throw std::invalid_argument(std::format("Excessive IMU gap. dt = {}", dt));
-    // }
-
     auto& p = mState.p_wi;
     auto& R = mState.R_wi;
     auto& v = mState.v_wi;

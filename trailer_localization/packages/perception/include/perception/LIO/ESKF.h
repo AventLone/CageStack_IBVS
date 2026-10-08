@@ -61,8 +61,8 @@ public:
         mQ.block<3, 3>(3, 3).diagonal().setConstant(gyro_noise_std * gyro_noise_std);
 
         /* Default LiDAR odometry measurement noise. z = [p, R] */
-        constexpr double lidar_position_std = 0.001;            // m
-        constexpr double lidar_rotation_std = 0.01 * DEG2RAD;   // rad
+        constexpr double lidar_position_std = 0.0001;            // m
+        constexpr double lidar_rotation_std = 0.001 * DEG2RAD;   // rad
         mV.block<3, 3>(0, 0).diagonal().setConstant(lidar_position_std * lidar_position_std);
         mV.block<3, 3>(3, 3).diagonal().setConstant(lidar_rotation_std * lidar_rotation_std);
 

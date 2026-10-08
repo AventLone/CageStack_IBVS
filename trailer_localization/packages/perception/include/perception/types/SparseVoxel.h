@@ -1,6 +1,8 @@
 #pragma once
 #include <cstddef>
+#include <deque>
 #include <limits>
+#include <boost/container/static_vector.hpp>
 #include <boost/unordered/unordered_flat_map.hpp>
 #include <vector>
 #include <pcl/point_cloud.h>
@@ -8,8 +10,8 @@
 
 struct PointWithCovariance
 {
-    Eigen::Vector3f position{Eigen::Vector3f::Zero()};
-    Eigen::Matrix3f covariance{Eigen::Matrix3f::Identity()};
+    Eigen::Vector3f position;
+    Eigen::Matrix3f covariance;
     bool covariance_valid{false};
 };
 
@@ -22,16 +24,9 @@ struct Correspondence
 class SparseVoxel
 {
 public:
-    using Ptr = std::unique_ptr<SparseVoxel>;
-
-    struct Config
-    {
-        float voxel_size{0.1f};
-        int max_points_per_voxel{26};
-
-        int min_covariance_neighbors{8};
-        int max_covariance_neighbors{36};
-    };
+    static constexpr float VOXEL_SIZE = 0.5;
+    static constexpr int MIN_COVARIANCE_NEIGHBORS = 8;
+    static constexpr int MAX_COVARIANCE_NEIGHBORS = 36;
 
 	struct Neighbor
 	{
@@ -39,21 +34,14 @@ public:
 		float squared_distance{std::numeric_limits<float>::infinity()};
 	};
 
-	explicit SparseVoxel(const Config& config) : mConfig(config)
-    {
-        if (!std::isfinite(config.voxel_size) || config.voxel_size <= 0.0f)
-        {
-            throw std::invalid_argument("voxel_size must be finite and positive");
-        }
-    }
-
-    void initialize(const pcl::PointCloud<pcl::PointXYZ>& cloud);
+    SparseVoxel() = default;
 
     bool insert(const pcl::PointCloud<pcl::PointXYZ>& cloud);
 
     void clear() noexcept
     {
         mOccupiedVoxels.clear();
+        mCells.clear();
         mPointCount = 0;
     }
 
@@ -100,28 +88,50 @@ private:
         }
     };
 
-    using OccupiedVoxels = boost::unordered_flat_map<VoxelKey, std::vector<PointWithCovariance>>;
-    using SparsePointIndices = boost::unordered_flat_map<VoxelKey, std::vector<std::size_t>>;
-
-    VoxelKey pointToVoxel(const Eigen::Vector3f& point) const
+    struct VoxelCell
     {
-        return VoxelKey{static_cast<int>(std::floor(point.x() / mConfig.voxel_size)),
-                        static_cast<int>(std::floor(point.y() / mConfig.voxel_size)),
-                        static_cast<int>(std::floor(point.z() / mConfig.voxel_size))};
-    }
+        static constexpr int CAPACITY = 36;
+        static constexpr float MIN_DIST = 0.03f;
+        static constexpr float MIN_DIST_SQUARE = MIN_DIST * MIN_DIST;
 
-    struct SparsePoint
-    {
-        Eigen::Vector3f position{Eigen::Vector3f::Zero()};
-        VoxelKey key{};
+        using Points = boost::container::static_vector<PointWithCovariance, CAPACITY>;
+
+        PointWithCovariance* add(const Eigen::Vector3f& position)
+        {
+            if (points.size() == CAPACITY)
+            {
+                return nullptr;
+            }
+
+            if (const bool too_close = std::ranges::any_of(points, [&](const PointWithCovariance& p)
+            {
+                return (p.position - position).squaredNorm() < MIN_DIST_SQUARE;
+            }); too_close)
+            {
+                return nullptr;
+            }
+
+            points.emplace_back();
+            points.back().position = position;
+
+            return &points.back();
+        }
+
+        Points points;
     };
 
-    const Config mConfig;
+    using OccupiedVoxels = boost::unordered_flat_map<VoxelKey, std::size_t>;
+
+    static VoxelKey pointToVoxel(const Eigen::Vector3f& point)
+    {
+        return VoxelKey{static_cast<int>(std::floor(point.x() / VOXEL_SIZE)),
+                        static_cast<int>(std::floor(point.y() / VOXEL_SIZE)),
+                        static_cast<int>(std::floor(point.z() / VOXEL_SIZE))};
+    }
+
     OccupiedVoxels mOccupiedVoxels;
+    std::deque<VoxelCell> mCells;
 	std::size_t mPointCount{0};
 
-    void estimateCovariances();
     void estimateCovariances(const std::vector<PointWithCovariance*>& points) const;
-
-    std::vector<SparsePoint> makeSparseCloud(const pcl::PointCloud<pcl::PointXYZ>& cloud) const;
 };

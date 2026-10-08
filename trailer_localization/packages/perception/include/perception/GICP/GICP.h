@@ -43,7 +43,6 @@ public:
 
     explicit GICP(const Config& config) : mConfig(config)
     {
-        mSparseVoxelConfig.voxel_size = config.voxel_size;
     }
 
     GICP(GICP&&) noexcept = default;
@@ -63,30 +62,15 @@ public:
     void setConfig(const Config& config) noexcept
     {
         mConfig = config;
-        mSparseVoxelConfig.voxel_size = config.voxel_size;
-        clearTarget();
     }
 
-    void initializeTarget(const pcl::PointCloud<pcl::PointXYZ>& target);
     void insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>& points);
-
-
-    void clearTarget() noexcept
-    {
-        mTarget.reset();
-    }
-
-    bool hasTarget() const noexcept
-    {
-        return mTarget != nullptr;
-    }
 
     Result align(const pcl::PointCloud<pcl::PointXYZ>& source, const Eigen::Isometry3d& initial_guess) const;
 
 private:
     Config mConfig;
-    SparseVoxel::Config mSparseVoxelConfig{};
-    SparseVoxel::Ptr mTarget;
+    SparseVoxel mTarget;
 
     void findCorrespondences(const std::vector<const PointWithCovariance*>& source, const SparseVoxel& target,
                              const Sophus::SE3d& source_to_target, std::vector<Correspondence>& correspondences) const;

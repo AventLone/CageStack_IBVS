@@ -2,25 +2,13 @@
 #include <algorithm>
 #include <execution>
 
-void GICP::initializeTarget(const pcl::PointCloud<pcl::PointXYZ>& target)
-{
-    auto target_index = std::make_unique<SparseVoxel>(mSparseVoxelConfig);
-    target_index->initialize(target);
-    mTarget = std::move(target_index);
-}
-
 void GICP::insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>& points)
 {
     if (points.empty())
     {
         return;
     }
-    if (!hasTarget())
-    {
-        initializeTarget(points);
-        return;
-    }
-    mTarget->insert(points);
+    mTarget.insert(points);
 }
 
 void GICP::findCorrespondences(const std::vector<const PointWithCovariance*>& source,
@@ -82,7 +70,7 @@ std::optional<std::pair<std::size_t, double>> GICP::findCorrespondencesAndSolve(
                 // ---------------------------------------------------------
                 // 2. Find correspondence
                 // ---------------------------------------------------------
-                const SparseVoxel::Neighbor nearest = mTarget->nearestNeighbor(transformed_position.cast<float>(), mConfig.max_correspondence_distance);
+                const SparseVoxel::Neighbor nearest = mTarget.nearestNeighbor(transformed_position.cast<float>(), mConfig.max_correspondence_distance);
                 const PointWithCovariance* target_point = nearest.point;
                 if (target_point == nullptr)
                 {
@@ -174,19 +162,15 @@ GICP::Result GICP::align(const pcl::PointCloud<pcl::PointXYZ>& source, const Eig
     {
         throw std::invalid_argument("source cloud is empty!");
     }
-    if (!hasTarget())
-    {
-        throw std::runtime_error("Target was not initialized before you call this method!");
-    }
 
     Result result;
     result.transform = initial_guess;
 
-    SparseVoxel source_index(mSparseVoxelConfig);
-    source_index.initialize(source);
+    SparseVoxel source_index;
+    source_index.insert(source);
     result.num_source_points = source_index.pointCount();
-    result.num_target_points = mTarget->pointCount();
-    if (source_index.empty() || mTarget->empty())
+    result.num_target_points = mTarget.pointCount();
+    if (source_index.empty() || mTarget.empty())
     {
         return result;
     }

@@ -271,7 +271,7 @@ void Localization_LO::makeTemplate(const pcl::PointCloud<pcl::PointXYZ>& src_sca
     voxel_filter.setInputCloud(initial_cloud);
     voxel_filter.filter(*mTrailerVoxelMap);
 
-    mGicp.initializeTarget(*mTrailerVoxelMap);
+    mGicp.insertTargetPoints(*mTrailerVoxelMap);
 }
 
 void Localization_LO::updateVoxelMap(const pcl::PointCloud<pcl::PointXYZ>& scan_in_truck)
@@ -390,7 +390,7 @@ void Localization_LO::workerLoop()
     while (rclcpp::ok())
     {
         /* Wait and receive scan data */
-        sensor_msgs::msg::PointCloud2 scan_msg;
+        sensor_msgs::msg::PointCloud2::ConstSharedPtr scan_msg;
         {
             std::unique_lock lock(mScanBufferMutex);
             mTrigger.wait(lock, [this]() -> bool { return !mScanBuffer.empty() || mIsShutdown; });
@@ -405,7 +405,9 @@ void Localization_LO::workerLoop()
         const auto frame_start_time = std::chrono::high_resolution_clock::now();
 
         pcl::PointCloud<pcl::PointXYZI> lidar_points;
-        pcl::fromROSMsg(scan_msg, lidar_points);
+        pcl::fromROSMsg(*scan_msg, lidar_points);
+
+        // pcl::transformPointCloud(lidar_points, lidar_points, T_truck2lidar);
 
         if (!mIntensityAnalyzed)
         {
@@ -449,7 +451,7 @@ void Localization_LO::workerLoop()
                 continue;
             }
 
-            if (point.x > 0.8f || point.x < -0.8f || point.y > 0.8f || point.y < -0.8f)
+            if (point.x > 0.2f || point.x < -0.2f || point.y > 0.2f || point.y < -0.2f)
             {
                 denoised_scan->emplace_back(point.x, point.y, point.z);
             }
@@ -467,7 +469,7 @@ void Localization_LO::workerLoop()
             if (processed_cloud->size() > 100)
             {
                 mTrailerVoxelMap = processed_cloud;
-                mGicp.initializeTarget(*mTrailerVoxelMap);
+                mGicp.insertTargetPoints(*mTrailerVoxelMap);
             }
             else
             {
@@ -503,10 +505,24 @@ void Localization_LO::workerLoop()
         mVoxelMapPub->publish(map_msg);
 
         geometry_msgs::msg::PoseStamped pose_msg;
-        pose_msg.header = scan_msg.header;
+        pose_msg.header = scan_msg->header;
         pose_msg.header.frame_id = "map";
         pose_msg.pose = tf2::toMsg(mBasePose.cast<double>());
         mBasePosePub->publish(pose_msg);
+
+        geometry_msgs::msg::TransformStamped tf;
+        // tf.header.stamp = scan_msg->header.stamp;
+        tf.header.stamp = this->get_clock()->now();
+        tf.header.frame_id = "map";
+        tf.child_frame_id = "LOLA";
+        tf.transform.translation.x = pose_msg.pose.position.x;
+        tf.transform.translation.y = pose_msg.pose.position.y;
+        tf.transform.translation.z = pose_msg.pose.position.z;
+        tf.transform.rotation.x = pose_msg.pose.orientation.x;
+        tf.transform.rotation.y = pose_msg.pose.orientation.y;
+        tf.transform.rotation.z = pose_msg.pose.orientation.z;
+        tf.transform.rotation.w = pose_msg.pose.orientation.w;
+        mTfBroadcaster->sendTransform(tf);
 
         mBasePosePath.header = pose_msg.header;
         mBasePosePath.poses.push_back(pose_msg);

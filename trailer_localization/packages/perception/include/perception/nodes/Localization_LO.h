@@ -11,15 +11,17 @@
 #include <tf2_ros/transform_listener.h>
 #include <pcl/common/transforms.h>
 #include <pcl/filters/voxel_grid.h>
-#include <vector>
+#include <tf2_ros/transform_broadcaster.hpp>
 #include "perception/GICP/GICP.h"
 #include "perception/types/common.hpp"
 
 class Localization_LO : public rclcpp::Node
 {
-    static constexpr float MAP_RESOLUTION = 0.1f;
+    static constexpr float MAP_RESOLUTION = SparseVoxel::MIN_DIST;
+
 public:
-    explicit Localization_LO(const std::string& node_name) : Node(node_name), mTfBuffer(this->get_clock()), mTfListener(mTfBuffer)
+    explicit Localization_LO(const std::string& node_name) : Node(node_name), mTfBuffer(this->get_clock()), mTfListener(mTfBuffer),
+        mTfBroadcaster(std::make_unique<tf2_ros::TransformBroadcaster>(*this))
     {
         /* Lookup transform */
         // while (rclcpp::ok())
@@ -36,7 +38,6 @@ public:
         // }
 
         GICP::Config config{};
-        config.voxel_size = MAP_RESOLUTION * 5;
         config.max_fitness_score = 0.1f;  // 平均意义下的点位误差尺度 10 cm
         mGicp.setConfig(config);
 
@@ -74,7 +75,7 @@ private:
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr mBasePosePathPub;
 
     /* Data Buffers */
-    std::queue<sensor_msgs::msg::PointCloud2> mScanBuffer;
+    std::queue<sensor_msgs::msg::PointCloud2::ConstSharedPtr> mScanBuffer;
 
     /* Multi-thread utilities */
     bool mIsShutdown{false};
@@ -86,6 +87,7 @@ private:
     tf2_ros::Buffer mTfBuffer;
     tf2_ros::TransformListener mTfListener;
     Eigen::Isometry3f T_truck2lidar;
+    std::unique_ptr<tf2_ros::TransformBroadcaster> mTfBroadcaster;
 
     /* Trailer voxel map and estimated pose */
     pcl::PointCloud<pcl::PointXYZ>::Ptr mTrailerVoxelMap;
@@ -102,10 +104,11 @@ private:
 
     void initSubscribers()
     {
-        // mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/iv_points", rclcpp::SensorDataQoS(),
-        mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/hesai/pandar", 10,
+        // mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/sim_scan", rclcpp::SensorDataQoS(),
+        mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/rslidar_points", 5,
+        // mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/hesai/pandar", 10,
         // mLidarScanSub = create_subscription<sensor_msgs::msg::PointCloud2>("/iv_points", 10,
-            [this](const sensor_msgs::msg::PointCloud2::ConstSharedPtr& scan_msg)
+            [this](sensor_msgs::msg::PointCloud2::ConstSharedPtr scan_msg)
                 {
                     {
                        std::lock_guard lock(mScanBufferMutex);
@@ -113,7 +116,7 @@ private:
                        {
                            mScanBuffer.pop();
                        }
-                       mScanBuffer.push(*scan_msg);
+                       mScanBuffer.push(std::move(scan_msg));
                     }
                     mTrigger.notify_one();
                 });

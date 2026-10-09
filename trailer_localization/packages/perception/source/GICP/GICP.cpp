@@ -11,24 +11,23 @@ void GICP::insertTargetPoints(const pcl::PointCloud<pcl::PointXYZ>& points)
     mTarget.insert(points);
 }
 
-void GICP::findCorrespondences(const std::vector<const PointWithCovariance*>& source,
-                               const SparseVoxel& target,
-                               const Sophus::SE3d& source_to_target,
-                               std::vector<Correspondence>& correspondences) const
-{
-    std::transform(std::execution::par, source.begin(), source.end(), correspondences.begin(),
-        [&target, &source_to_target, this](const PointWithCovariance* source_point)
-        {
-            const Eigen::Vector3f transformed_position = source_to_target.cast<float>() * source_point->position;
-            const SparseVoxel::Neighbor nearest = target.nearestNeighbor(transformed_position, mConfig.max_correspondence_distance);
-            return Correspondence{nearest.point, transformed_position.cast<double>()};
-        });
-}
+// void GICP::findCorrespondences(const std::vector<const PointWithCovariance*>& source,
+//                                const SparseVoxel& target,
+//                                const Sophus::SE3d& source_to_target,
+//                                std::vector<Correspondence>& correspondences) const
+// {
+//     std::transform(std::execution::par, source.begin(), source.end(), correspondences.begin(),
+//         [&target, &source_to_target, this](const PointWithCovariance* source_point)
+//         {
+//             const Eigen::Vector3f transformed_position = source_to_target.cast<float>() * source_point->position;
+//             const SparseVoxel::Neighbor nearest = target.nearestNeighbor(transformed_position, mConfig.max_correspondence_distance);
+//             return Correspondence{nearest.point, transformed_position.cast<double>()};
+//         });
+// }
 
 std::optional<std::pair<std::size_t, double>> GICP::findCorrespondencesAndSolve(const std::vector<const PointWithCovariance*>& source,
                                                                                 Sophus::SE3d& source_to_target,
-                                                                                Sophus::SE3d::Tangent& left_increment,
-                                                                                Eigen::Matrix<double, 6, 6>& hessian_) const
+                                                                                Sophus::SE3d::Tangent& left_increment) const
 {
     struct Accumulator
     {
@@ -50,7 +49,6 @@ std::optional<std::pair<std::size_t, double>> GICP::findCorrespondencesAndSolve(
 
     // For covariance transformation and optimization.
     const Eigen::Matrix3d rotation = source_to_target.rotationMatrix();
-
 
     const Accumulator accumulator = std::transform_reduce(std::execution::par, source.begin(), source.end(), Accumulator{},
             [](Accumulator lhs, const Accumulator& rhs)   // Reduction
@@ -135,9 +133,10 @@ std::optional<std::pair<std::size_t, double>> GICP::findCorrespondencesAndSolve(
         return std::nullopt;
     }
 
-    hessian_ = accumulator.hessian;
+    // const auto hessian_ = accumulator.hessian;
 
-    const Eigen::LDLT< Eigen::Matrix<double, 6, 6>> decomposition(hessian_);
+    // const Eigen::LDLT< Eigen::Matrix<double, 6, 6>> decomposition(hessian_);
+    const Eigen::LDLT< Eigen::Matrix<double, 6, 6>> decomposition(accumulator.hessian);
     if (decomposition.info() != Eigen::Success)
     {
         return std::nullopt;
@@ -178,11 +177,11 @@ GICP::Result GICP::align(const pcl::PointCloud<pcl::PointXYZ>& source, const Eig
     const std::vector<const PointWithCovariance*> source_points = source_index.points();
 
     Sophus::SE3d source_to_target(initial_guess.rotation(), initial_guess.translation());
-    Eigen::Matrix<double, 6, 6> hessian;
+    // Eigen::Matrix<double, 6, 6> hessian;
     for (int iteration = 0; iteration < mConfig.max_iterations; ++iteration)
     {
         Sophus::SE3d::Tangent left_increment;
-        if (const auto calculation = findCorrespondencesAndSolve(source_points, source_to_target, left_increment, hessian);
+        if (const auto calculation = findCorrespondencesAndSolve(source_points, source_to_target, left_increment);
             calculation.has_value())
         {
             result.num_correspondences = calculation.value().first;
@@ -204,12 +203,12 @@ GICP::Result GICP::align(const pcl::PointCloud<pcl::PointXYZ>& source, const Eig
     }
     result.transform = Eigen::Isometry3d(source_to_target.matrix());
 
-    const Eigen::Matrix<double, 6, 6> gicp_cov_left = hessian.ldlt().solve(Eigen::Matrix<double, 6, 6>::Identity());
-    Eigen::Matrix<double, 6, 6> A = Eigen::Matrix<double, 6, 6>::Zero();
-    A.topLeftCorner<3, 3>().setIdentity();
-    A.topRightCorner<3, 3>() = -Sophus::SO3d::hat(source_to_target.translation());
-    A.bottomRightCorner<3, 3>() = source_to_target.rotationMatrix().transpose();
-    result.measure_covariance.noalias() = A * gicp_cov_left * A.transpose();
+    // const Eigen::Matrix<double, 6, 6> gicp_cov_left = hessian.ldlt().solve(Eigen::Matrix<double, 6, 6>::Identity());
+    // Eigen::Matrix<double, 6, 6> A = Eigen::Matrix<double, 6, 6>::Zero();
+    // A.topLeftCorner<3, 3>().setIdentity();
+    // A.topRightCorner<3, 3>() = -Sophus::SO3d::hat(source_to_target.translation());
+    // A.bottomRightCorner<3, 3>() = source_to_target.rotationMatrix().transpose();
+    // result.measure_covariance.noalias() = A * gicp_cov_left * A.transpose();
 
     if (!result.converged && result.iterations > 0 && std::isfinite(result.fitness_score))
     {

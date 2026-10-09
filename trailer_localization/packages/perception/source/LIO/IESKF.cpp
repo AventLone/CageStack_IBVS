@@ -1,8 +1,8 @@
 #include "perception/LIO/IESKF.h"
+#include <array>
 #include <numeric>
 #include <execution>
 #include <iostream>
-#include <format>
 
 namespace lio
 {
@@ -51,299 +51,301 @@ bool IESKF::initialize(const std::vector<ImuData>& samples)
 
 void IESKF::predict(const ImuData& imu_data)
 {
-    const double dt = imu_data.timestamp - mState.timestamp;
-    if (dt > 0.05 || dt < 0)
+    if (!mInitialized || !std::isfinite(imu_data.timestamp) ||
+        !imu_data.accel.allFinite() || !imu_data.gyro.allFinite())
     {
-        // 时间间隔不对，可能是第一个IMU数据，没有历史信息
+        return;
+    }
+
+    const double dt = imu_data.timestamp - mState.timestamp;
+    if (dt <= 0.0)
+    {
+        return;
+    }
+    if (dt > 0.05)
+    {
         mState.timestamp = imu_data.timestamp;
         return;
     }
 
-    auto& p = mState.p_wi;
-    auto& R = mState.R_wi;
-    auto& v = mState.v_wi;
-
     const Eigen::Vector3d accel = imu_data.accel - mState.accel_bias;
     const Eigen::Vector3d gyro = imu_data.gyro - mState.gyro_bias;
-    const Eigen::Vector3d& g = mState.gravity;
-
-
-    /* Linearize at R_k */
-    const Sophus::SO3d R_old = R;
     const Eigen::Vector3d phi = gyro * dt;
-    const Sophus::SO3d dR = Sophus::SO3d::exp(phi);
+    const Sophus::SO3d half_rotation = Sophus::SO3d::exp(0.5 * phi);
+    const Sophus::SO3d rotation_increment = half_rotation * half_rotation;
+    const Eigen::Matrix3d rotation_mid = (mState.R_wi * half_rotation).matrix();
+    const Eigen::Vector3d accel_world = rotation_mid * accel + mState.gravity;
+    const double half_dt = 0.5 * dt;
 
-    const Eigen::Matrix3d accel_hat = Sophus::SO3d::hat(accel);
-    const Eigen::Matrix3d Rm = R_old.matrix();
-    const Eigen::Vector3d accel_world = R_old * accel + g;
+    mState.p_wi += mState.v_wi * dt + half_dt * dt * accel_world;
+    mState.v_wi += dt * accel_world;
+    mState.R_wi *= rotation_increment;
 
-    /* Nominal state propagation */
-    p += v * dt + 0.5 * accel_world * dt * dt;
-    v += accel_world * dt;
-    R *= dR;
+    const Eigen::Matrix3d rotated_accel_hat = rotation_mid * Sophus::SO3d::hat(accel);
+    const Eigen::Matrix3d velocity_rotation = -dt * rotated_accel_hat * half_rotation.inverse().matrix();
+    const Eigen::Matrix3d velocity_accel_bias = -dt * rotation_mid;
+    const Eigen::Matrix3d velocity_gyro_bias = half_dt * dt * rotated_accel_hat * rightJacobianSO3(0.5 * phi);
+    const Eigen::Matrix3d position_rotation = half_dt * velocity_rotation;
+    const Eigen::Matrix3d position_accel_bias = half_dt * velocity_accel_bias;
+    const Eigen::Matrix3d position_gyro_bias = half_dt * velocity_gyro_bias;
+    const Eigen::Matrix3d rotation_transition = rotation_increment.inverse().matrix();
+    const Eigen::Matrix3d rotation_gyro_bias = -dt * rightJacobianSO3(phi);
 
-    StateJacobian F = StateJacobian::Identity();
-    F.block<3, 3>(0, 3) = -0.5 * Rm * accel_hat * dt * dt;
-    F.block<3, 3>(0, 6) = Eigen::Matrix3d::Identity() * dt;
-    F.block<3, 3>(0, 9) = -0.5 * Rm * dt * dt;
-    F.block<3, 3>(3, 3) = dR.inverse().matrix();
-    F.block<3, 3>(3, 12) = -rightJacobianSO3(phi) * dt;
-    F.block<3, 3>(6, 3) = -Rm * accel_hat * dt;   // dv
-    F.block<3, 3>(6, 9) = -Rm * dt;    // accel bias affects velocity
+    StateCov left = mP;
+    left.topRows<3>().noalias() += position_rotation * mP.middleRows<3>(3) +
+        dt * mP.middleRows<3>(6) + position_accel_bias * mP.middleRows<3>(9) +
+        position_gyro_bias * mP.bottomRows<3>();
+    left.middleRows<3>(3).noalias() = rotation_transition * mP.middleRows<3>(3) +
+        rotation_gyro_bias * mP.bottomRows<3>();
+    left.middleRows<3>(6).noalias() += velocity_rotation * mP.middleRows<3>(3) +
+        velocity_accel_bias * mP.middleRows<3>(9) + velocity_gyro_bias * mP.bottomRows<3>();
 
-    /*
-     * --------------------------------------------------
-     * IMU measurement noise
-     * n = [na, ng]
-     * --------------------------------------------------
-     */
-    NoiseJacobian G = NoiseJacobian::Zero();
-    G.block<3, 3>(0, 0) = -0.5 * Rm * dt * dt;
-    G.block<3, 3>(3, 3) = -rightJacobianSO3(phi) * dt;
-    G.block<3, 3>(6, 0) = -Rm * dt;
+    StateCov propagated = left;
+    propagated.leftCols<3>().noalias() += left.middleCols<3>(3) * position_rotation.transpose() +
+        dt * left.middleCols<3>(6) + left.middleCols<3>(9) * position_accel_bias.transpose() +
+        left.rightCols<3>() * position_gyro_bias.transpose();
+    propagated.middleCols<3>(3).noalias() = left.middleCols<3>(3) * rotation_transition.transpose() +
+        left.rightCols<3>() * rotation_gyro_bias.transpose();
+    propagated.middleCols<3>(6).noalias() += left.middleCols<3>(3) * velocity_rotation.transpose() +
+        left.middleCols<3>(9) * velocity_accel_bias.transpose() +
+        left.rightCols<3>() * velocity_gyro_bias.transpose();
 
-    mP = F * mP * F.transpose() + G * mQ * G.transpose();   // Covariance propagation
-    // mP.block<3, 3>(9, 9) += mAccelBiasRandomWalk * dt;
-    // mP.block<3, 3>(12, 12) += mGyroBiasRandomWalk * dt;
+    Eigen::Matrix<double, 9, 6> noise = Eigen::Matrix<double, 9, 6>::Zero();
+    noise.block<3, 3>(0, 0) = position_accel_bias;
+    noise.block<3, 3>(0, 3) = position_gyro_bias;
+    noise.block<3, 3>(3, 3) = rotation_gyro_bias;
+    noise.block<3, 3>(6, 0) = velocity_accel_bias;
+    noise.block<3, 3>(6, 3) = velocity_gyro_bias;
+    propagated.topLeftCorner<9, 9>().noalias() += noise * mQ * noise.transpose();
 
-    mP = 0.5 * (mP + mP.transpose());   // 强制把协方差矩阵恢复成对称矩阵
-
+    constexpr double accel_bias_random_walk_std = 1e-4;
+    constexpr double gyro_bias_random_walk_std = 0.001 * DEG2RAD;
+    propagated.block<3, 3>(9, 9).diagonal().array() += dt * accel_bias_random_walk_std * accel_bias_random_walk_std;
+    propagated.block<3, 3>(12, 12).diagonal().array() += dt * gyro_bias_random_walk_std * gyro_bias_random_walk_std;
+    mP = (0.5 * (propagated + propagated.transpose())).eval();
     mState.timestamp = imu_data.timestamp;
 }
 
 void IESKF::observe(const pcl::PointCloud<pcl::PointXYZ>& scan)
 {
-    if (!mInitialized || scan.empty())
+    if (!mInitialized || scan.empty() || mVoxelMap->empty())
     {
         return;
     }
 
-    /*
-     * IMU propagated prior.
-     * All IEKF iterations must use the same prior covariance,
-     * otherwise the same LiDAR measurement would be counted
-     * multiple times.
-     */
+    using PoseCov = Eigen::Matrix<double, 6, 6>;
+    using PoseError = Eigen::Matrix<double, 6, 1>;
+    using ConditionalProjection = Eigen::Matrix<double, 9, 6>;
+
     const NavState prior_state = mState;
     const StateCov prior_cov = mP;
-    const StateCov prior_information = prior_cov.ldlt().solve(StateCov::Identity());
+    const Eigen::LLT<PoseCov> prior_solver(prior_cov.topLeftCorner<6, 6>());
+    if (prior_solver.info() != Eigen::Success)
+    {
+        return;
+    }
+    const PoseCov prior_information = prior_solver.solve(PoseCov::Identity());
+    const ConditionalProjection conditional_projection = prior_cov.bottomLeftCorner<9, 6>() * prior_information;
+    const Eigen::Matrix<double, 9, 9> conditional_covariance = prior_cov.bottomRightCorner<9, 9>() -
+        conditional_projection * prior_cov.topRightCorner<6, 9>();
 
     constexpr int max_iterations = 4;
-
     constexpr int num_neighbors = 5;
     constexpr int min_neighbors = 3;
-
     constexpr float max_correspondence_distance = 1.0f;
     constexpr float plane_threshold = 0.1f;
-
     constexpr double max_point_plane_distance = 0.2;
-
+    constexpr double huber_distance = 0.05;
     constexpr double lidar_point_std = 0.001;
     constexpr double lidar_point_variance = lidar_point_std * lidar_point_std;
-
     constexpr double position_convergence = 1e-4;
     constexpr double rotation_convergence = 1e-4;
+    constexpr double rematch_position = 0.02;
+    constexpr double rematch_rotation = 0.005;
 
-    /*
-     * LiDAR directly observes only:
-     *
-     * [dp, dtheta]
-     *
-     * so each point only needs a 6x6 contribution.
-     */
+    struct ObservationPoint
+    {
+        Eigen::Vector3d point;
+        Eigen::Vector3d normal{Eigen::Vector3d::Zero()};
+        Eigen::Vector3d center{Eigen::Vector3d::Zero()};
+        double variance{lidar_point_variance};
+        bool valid{false};
+    };
+
+    std::vector<ObservationPoint> points;
+    points.reserve(scan.size());
+    for (const auto& point : scan)
+    {
+        if (point.getVector3fMap().allFinite())
+        {
+            points.push_back({point.getVector3fMap().cast<double>()});
+        }
+    }
+    if (points.size() < 10)
+    {
+        return;
+    }
+    std::vector<std::size_t> point_indices(points.size());
+    std::iota(point_indices.begin(), point_indices.end(), std::size_t{0});
+
     struct LidarContribution
     {
-        Eigen::Matrix<double, 6, 6> information{Eigen::Matrix<double, 6, 6>::Zero()};
-        Eigen::Matrix<double, 6, 1> gradient{Eigen::Matrix<double, 6, 1>::Zero()};
-
+        PoseCov information{PoseCov::Zero()};
+        PoseError gradient{PoseError::Zero()};
         int effective_points{0};
     };
 
     const auto reduceContribution = [](LidarContribution lhs, const LidarContribution& rhs)
-        {
-            lhs.information += rhs.information;
-            lhs.gradient += rhs.gradient;
-            lhs.effective_points += rhs.effective_points;
-            return lhs;
-        };
+    {
+        lhs.information += rhs.information;
+        lhs.gradient += rhs.gradient;
+        lhs.effective_points += rhs.effective_points;
+        return lhs;
+    };
+    const auto restorePrior = [&]
+    {
+        mState = prior_state;
+        mP = prior_cov;
+    };
 
-    StateCov final_information = prior_information;
+    PoseCov final_pose_covariance = PoseCov::Zero();
+    ConditionalProjection final_projection = conditional_projection;
     Eigen::Vector3d final_dtheta = Eigen::Vector3d::Zero();
+    Eigen::Vector3d correspondence_position = mState.p_wi;
+    Sophus::SO3d correspondence_rotation = mState.R_wi;
+    bool rematch = true;
+
     for (int iteration = 0; iteration < max_iterations; ++iteration)
     {
-        /*
-         * --------------------------------------------------
-         * Prior term
-         * --------------------------------------------------
-         * Current iterate relative to the IMU prediction.
-         * dx_prior = [dp, dtheta, dv, dba, dbg]
-         */
-        StateT prior_error = StateT::Zero();
-        prior_error.segment<3>(0) = mState.p_wi - prior_state.p_wi;
-        prior_error.segment<3>(3) = (prior_state.R_wi.inverse() * mState.R_wi).log();
-        prior_error.segment<3>(6) = mState.v_wi - prior_state.v_wi;
-        prior_error.segment<3>(9) = mState.accel_bias - prior_state.accel_bias;
-        prior_error.segment<3>(12) = mState.gyro_bias - prior_state.gyro_bias;
-
-        /*
-         * Jacobian of the prior error w.r.t. the current
-         * right perturbation.
-         */
-        StateJacobian J_prior = StateJacobian::Identity();
-        J_prior.block<3, 3>(3, 3) = rightJacobianInverseSO3(prior_error.segment<3>(3));
-        StateCov information = J_prior.transpose() * prior_information * J_prior;
-        StateT gradient = J_prior.transpose() * prior_information * prior_error;
-
-        /*
-         * Current iteration state.
-         * Copy them outside the parallel lambda so every
-         * worker uses exactly the same linearization point.
-         */
+        const StateT prior_error = stateDifference(mState, prior_state);
+        PoseCov prior_jacobian = PoseCov::Identity();
+        prior_jacobian.block<3, 3>(3, 3) = rightJacobianInverseSO3(prior_error.segment<3>(3));
+        PoseCov information = prior_jacobian.transpose() * prior_information * prior_jacobian;
+        PoseError gradient = prior_jacobian.transpose() * prior_information * prior_error.head<6>();
         const Eigen::Matrix3d R = mState.R_wi.matrix();
         const Eigen::Vector3d p = mState.p_wi;
+        if (rematch)
+        {
+            correspondence_position = p;
+            correspondence_rotation = mState.R_wi;
+        }
 
-        /*
-         * --------------------------------------------------
-         * Parallel LiDAR observation construction
-         * --------------------------------------------------
-         */
-        const LidarContribution lidar = std::transform_reduce(std::execution::par, scan.begin(), scan.end(),
-                LidarContribution{}, reduceContribution, [&](const pcl::PointXYZ& point)
+        const LidarContribution lidar = std::transform_reduce(std::execution::par, point_indices.begin(), point_indices.end(),
+            LidarContribution{}, reduceContribution, [&](std::size_t index)
+            {
+                ObservationPoint& point = points[index];
+                LidarContribution contribution;
+                const Eigen::Vector3d point_w = R * point.point + p;
+                if (rematch)
                 {
-                    LidarContribution contribution;
-
-                    /*
-                     * Point in IMU frame.
-                     *
-                     * If cloud is in LiDAR frame, apply
-                     * T_il here first.
-                     */
-                    const Eigen::Vector3d point_i = point.getVector3fMap().cast<double>();
-
-                    /* Transform into world frame: p_w = R_wi p_i + p_wi */
-                    const Eigen::Vector3d point_w = R * point_i + p;
-                    const auto neighbors = mVoxelMap->nearestNeighbors(point_w.cast<float>(), num_neighbors, max_correspondence_distance);
-                    if (static_cast<int>(neighbors.size()) < min_neighbors)
+                    point.valid = false;
+                    std::array<IVox::Neighbor, num_neighbors> neighbors;
+                    const std::size_t count = mVoxelMap->nearestNeighbors(point_w.cast<float>(),
+                        std::span<IVox::Neighbor>(neighbors), max_correspondence_distance);
+                    if (static_cast<int>(count) < min_neighbors)
                     {
                         return contribution;
                     }
-
-                    const LocalPlane plane = estimatePlane(neighbors, plane_threshold);
+                    const LocalPlane plane = estimatePlane(std::span<const IVox::Neighbor>(neighbors.data(), count),
+                        plane_threshold);
                     if (!plane.valid)
                     {
                         return contribution;
                     }
-
-                    const Eigen::Vector3d normal = plane.normal.cast<double>();
-                    const Eigen::Vector3d center = plane.center.cast<double>();
-
-                    const double residual = normal.dot(point_w - center);   // Point-to-plane residual: r = n^T (R p_i + p - center)
-                    if (std::abs(residual) > max_point_plane_distance)
-                    {
-                        return contribution;
-                    }
-
-                    /*
-                     * --------------------------------------------------
-                     * Measurement Jacobian
-                     * --------------------------------------------------
-                     * Right perturbation:
-                     * R_true = R Exp(dtheta)
-                     * R Exp(dtheta) p
-                     * ~= Rp - R[p]x dtheta
-                     * Therefore: H6 = [ n^T, -n^T R [p_i]x ]
-                     */
-                    Eigen::Matrix<double, 1, 6> H;
-                    H.block<1, 3>(0, 0) = normal.transpose();
-                    H.block<1, 3>(0, 3) = -normal.transpose() * R * Sophus::SO3d::hat(point_i);
-
-                    /*
-                     * Plane roughness contributes to the
-                     * measurement uncertainty.
-                     */
-                    const double variance = lidar_point_variance + static_cast<double>(plane.normal_variance);
-                    const double weight = 1.0 / variance;
-
-                    /*
-                     * Information contribution:
-                     * Λ_i = H_i^T R_i^-1 H_i
-                     * g_i = H_i^T R_i^-1 r_i
-                     */
-                    contribution.information.noalias() = weight * H.transpose() * H;
-                    contribution.gradient.noalias() = H.transpose() * (weight * residual);
-                    contribution.effective_points = 1;
-
+                    point.normal = plane.normal.cast<double>();
+                    point.center = plane.center.cast<double>();
+                    point.variance = lidar_point_variance + static_cast<double>(plane.normal_variance);
+                    point.valid = true;
+                }
+                if (!point.valid)
+                {
                     return contribution;
-                });
+                }
+
+                const double residual = point.normal.dot(point_w - point.center);
+                const double absolute_residual = std::abs(residual);
+                if (absolute_residual > max_point_plane_distance)
+                {
+                    return contribution;
+                }
+                PoseError jacobian;
+                jacobian.head<3>() = point.normal;
+                jacobian.tail<3>() = point.point.cross(R.transpose() * point.normal);
+                const double robust_weight = absolute_residual <= huber_distance ? 1.0 : huber_distance / absolute_residual;
+                const double weight = robust_weight / point.variance;
+                contribution.information.selfadjointView<Eigen::Upper>().rankUpdate(jacobian, weight);
+                contribution.gradient = (weight * residual) * jacobian;
+                contribution.effective_points = 1;
+                return contribution;
+            });
 
         if (lidar.effective_points < 10)
         {
-            mState = prior_state;
-            mP = prior_cov;
+            restorePrior();
             return;
         }
 
-        /*
-         * LiDAR directly touches only [p, theta].
-         *
-         * Bias / velocity are updated through the
-         * cross-covariance contained in the prior.
-         */
-        information.block<6, 6>(0, 0) += lidar.information;
-        gradient.segment<6>(0) += lidar.gradient;
-
-        /*
-         * --------------------------------------------------
-         * Iterated update
-         *
-         * information * dx = -gradient
-         * --------------------------------------------------
-         */
-        const Eigen::LDLT<StateCov> ldlt(information);
-        const StateT dx = -ldlt.solve(gradient);
-        update(dx);   // Inject correction into the current iterate.
-
-        final_information = information;
+        information += lidar.information.selfadjointView<Eigen::Upper>();
+        gradient += lidar.gradient;
+        const Eigen::LLT<PoseCov> solver(information);
+        if (solver.info() != Eigen::Success)
+        {
+            restorePrior();
+            return;
+        }
+        StateT dx;
+        dx.head<6>() = -solver.solve(gradient);
+        dx.tail<9>() = conditional_projection * (prior_error.head<6>() + prior_jacobian * dx.head<6>()) -
+            prior_error.tail<9>();
+        if (!dx.allFinite())
+        {
+            restorePrior();
+            return;
+        }
+        update(dx);
+        final_pose_covariance = solver.solve(PoseCov::Identity());
+        final_projection.noalias() = conditional_projection * prior_jacobian;
         final_dtheta = dx.segment<3>(3);
 
-        /*
-         * Only pose convergence matters for the geometric
-         * LiDAR iteration.
-         */
         if (dx.segment<3>(0).norm() < position_convergence &&
             dx.segment<3>(3).norm() < rotation_convergence)
         {
-            break;
+            if (rematch)
+            {
+                break;
+            }
+            rematch = true;
+        }
+        else
+        {
+            rematch = (mState.p_wi - correspondence_position).norm() > rematch_position ||
+                (correspondence_rotation.inverse() * mState.R_wi).log().norm() > rematch_rotation;
         }
     }
 
-    StateCov posterior_cov = final_information.ldlt().solve(StateCov::Identity());   // Posterior covariance
+    StateCov posterior_cov;
+    posterior_cov.topLeftCorner<6, 6>() = final_pose_covariance;
+    posterior_cov.bottomLeftCorner<9, 6>().noalias() = final_projection * final_pose_covariance;
+    posterior_cov.topRightCorner<6, 9>() = posterior_cov.bottomLeftCorner<9, 6>().transpose();
+    posterior_cov.bottomRightCorner<9, 9>() = conditional_covariance;
+    posterior_cov.bottomRightCorner<9, 9>().noalias() +=
+        posterior_cov.bottomLeftCorner<9, 6>() * final_projection.transpose();
 
-    /* Covariance reset after final SO(3) injection */
-    StateJacobian reset = StateJacobian::Identity();
-    reset.block<3, 3>(3, 3) = rightJacobianSO3(final_dtheta);
-    mP = reset * posterior_cov * reset.transpose();
-    mP = 0.5 *(mP + mP.transpose());
+    const Eigen::Matrix3d reset_rotation = rightJacobianSO3(final_dtheta);
+    posterior_cov.middleRows<3>(3) = (reset_rotation * posterior_cov.middleRows<3>(3)).eval();
+    posterior_cov.middleCols<3>(3) = (posterior_cov.middleCols<3>(3) * reset_rotation.transpose()).eval();
+    mP = (0.5 * (posterior_cov + posterior_cov.transpose())).eval();
 
-    /*
-     * --------------------------------------------------
-     * Transform corrected scan to world frame.
-     * This transformation can also be parallelized.
-     * --------------------------------------------------
-     */
     pcl::PointCloud<pcl::PointXYZ> scan_world;
-    scan_world.resize(scan.size());
-
+    scan_world.resize(points.size());
     const Eigen::Matrix3d R_final = mState.R_wi.matrix();
     const Eigen::Vector3d& p_final = mState.p_wi;
-    std::transform(std::execution::par, scan.begin(), scan.end(), scan_world.begin(),
-        [&](const pcl::PointXYZ& point)
+    std::transform(std::execution::par, points.begin(), points.end(), scan_world.begin(),
+        [&](const ObservationPoint& point)
         {
-            const Eigen::Vector3d point_i = point.getVector3fMap().cast<double>();
-            const Eigen::Vector3f point_w = (R_final * point_i + p_final).cast<float>();
+            const Eigen::Vector3f point_w = (R_final * point.point + p_final).cast<float>();
             return pcl::PointXYZ(point_w[0], point_w[1], point_w[2]);
         });
-
     mVoxelMap->insert(scan_world);
 }
 }

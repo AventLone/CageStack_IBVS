@@ -297,6 +297,20 @@ void Localization_LIO_T::workerLoop()
         pose_msg.pose = tf2::toMsg(mIESKF.pose());
         mBasePosePub->publish(pose_msg);
 
+        geometry_msgs::msg::TransformStamped tf;
+        // tf.header.stamp = scan_msg->header.stamp;
+        tf.header.stamp = this->get_clock()->now();
+        tf.header.frame_id = "map";
+        tf.child_frame_id = "LOLA";
+        tf.transform.translation.x = pose_msg.pose.position.x;
+        tf.transform.translation.y = pose_msg.pose.position.y;
+        tf.transform.translation.z = pose_msg.pose.position.z;
+        tf.transform.rotation.x = pose_msg.pose.orientation.x;
+        tf.transform.rotation.y = pose_msg.pose.orientation.y;
+        tf.transform.rotation.z = pose_msg.pose.orientation.z;
+        tf.transform.rotation.w = pose_msg.pose.orientation.w;
+        mTfBroadcaster->sendTransform(tf);
+
         mBasePosePath.header = pose_msg.header;
         mBasePosePath.poses.push_back(pose_msg);
         mBasePosePathPub->publish(mBasePosePath);

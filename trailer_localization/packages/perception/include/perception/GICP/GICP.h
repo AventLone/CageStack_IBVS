@@ -9,20 +9,16 @@ class GICP
 public:
     struct Config
     {
-        // 体素边长，单位 m，必须 > 0；同时用于稀疏化、协方差邻域和对应搜索。
-        // 增大通常减少保留点、损失细节，但固定体素半径下的物理搜索范围变大；减小则相反。
-        float voxel_size{0.05f};
-
         // 最近邻欧氏距离上限，单位 m，要求 > 0；只在 adjacent_voxels 覆盖的体素内查找。
         // 增大放宽匹配但增加误匹配风险；减小更严格、可能无对应点。单独增大不会扩大体素查询范围。
         float max_correspondence_distance{0.5f};
 
-        std::size_t min_correspondences{1000};
+        std::size_t min_correspondences{300};
         double max_fitness_score{0.01};
 
-        int max_iterations{60};
-        double convergence_translation{1.0e-4};   // SE(3) 增量中平移分量的范数阈值，单位 m
-        double convergence_rotation{1.0e-4};   // SE(3) 增量中旋转向量的范数阈值，单位 rad
+        int max_iterations{100};
+        double convergence_translation{1.0e-5};   // SE(3) 增量中平移分量的范数阈值，单位 m
+        double convergence_rotation{1.0e-5};   // SE(3) 增量中旋转向量的范数阈值，单位 rad
     };
 
     struct Result
@@ -34,7 +30,6 @@ public:
         std::size_t num_correspondences{0};
         double fitness_score{std::numeric_limits<double>::infinity()};
         Eigen::Isometry3d transform{Eigen::Isometry3d::Identity()};
-        Eigen::Matrix<double, 6, 6> measure_covariance{Eigen::Matrix<double, 6, 6>::Identity()};
     };
 
     GICP() : GICP(Config{})
@@ -72,12 +67,11 @@ private:
     Config mConfig;
     SparseVoxel mTarget;
 
-    void findCorrespondences(const std::vector<const PointWithCovariance*>& source, const SparseVoxel& target,
-                             const Sophus::SE3d& source_to_target, std::vector<Correspondence>& correspondences) const;
+    // void findCorrespondences(const std::vector<const PointWithCovariance*>& source, const SparseVoxel& target,
+    //                          const Sophus::SE3d& source_to_target, std::vector<Correspondence>& correspondences) const;
 
 
     std::optional<std::pair<std::size_t, double>> findCorrespondencesAndSolve(const std::vector<const PointWithCovariance*>& source,
                                                                               Sophus::SE3d& source_to_target,
-                                                                              Sophus::SE3d::Tangent& left_increment,
-                                                                              Eigen::Matrix<double, 6, 6>& hessian_) const;
+                                                                              Sophus::SE3d::Tangent& left_increment) const;
 };

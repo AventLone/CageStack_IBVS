@@ -1,5 +1,29 @@
 # IMU–LiDAR 紧耦合 ESKF
 
+## IESKF 优化实现
+
+本节对应 `source/LIO/IESKF.cpp`；下文的可配置 `ESKF` 是另一套接口，参数与积分实现不要混用。
+
+- 误差状态顺序为 `[dp, dtheta, dv, dba, dbg]`。两个 bias 块初始化为正定协方差，并在传播中加入随机游走，允许通过交叉协方差估计 bias。
+- `predict` 将当前 IMU 样本视为区间内常量，以 `R * Exp(omega * dt/2)` 积分加速度。离散 Jacobian 包含中点姿态对 gyro bias 的依赖；协方差按非零 3×3 块计算，而非两次完整 15×15 乘法。
+- 加速度计和陀螺仪的 `mQ` 保持原有的单样本方差语义；新增 bias 随机游走按连续时间密度乘 `dt`。默认初始 bias 标准差分别为 0.10 m/s²、0.10 deg/s，随机游走密度分别为 1e-4 m/s²/sqrt(s)、0.001 deg/s/sqrt(s)，应按实际 IMU 标定调整。
+- 非有限、重复和乱序 IMU 不改变状态。超过 0.05 s 的缺测仍沿用原有行为：只推进时间戳，不积分；这不是缺测补偿，上游应处理数据缺口。
+- `observe` 接收已去畸变且已转换到 IMU 系的点云，地图在世界系。先验在整轮迭代中固定；仅求解 6×6 位姿系统，再通过条件高斯分布恢复速度、bias 和完整后验协方差。这与完整 15 维正规方程消元等价，不是冻结未直接观测的状态。
+- 平面对应按点缓存，累计位移超过 0.02 m 或旋转超过 0.005 rad 时重新匹配；缓存上收敛后再重新匹配确认，最多四轮迭代。最终按最后一次 SO(3) 注入重置协方差。
+- 每次近邻查询使用五元素栈缓冲区，按体素距离下界剪枝。查询覆盖实际距离半径，而非固定 27 个体素；平面拟合拒绝共线和明显非平面邻域。
+- 保留原有 0.001 m 点噪声标准差和 0.2 m 残差门限，并增加 0.05 m Huber 门限；真实精度仍依赖噪声标定、外参、时间同步与场景可观性。无效点被过滤，更新失败回退到传播先验并跳过地图插入。
+
+局部数值回归与 Release 计时：
+
+```bash
+cmake -S . -B /tmp/perception-ieskf-release -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build /tmp/perception-ieskf-release --target ieskf_regression -j2
+ctest --test-dir /tmp/perception-ieskf-release -R '^ieskf_regression$' --output-on-failure
+/tmp/perception-ieskf-release/ieskf_regression --benchmark
+```
+
+回归覆盖静止与旋转积分、有限差分 Jacobian、稀疏/稠密协方差传播、6/15 维观测更新等价性、三平面配准、异常数据、退化平面及与暴力搜索对照的 KNN。计时使用合成点云，不代表真实数据上的轨迹精度或吞吐。
+
 ## 1 Scan 去畸变
 
 **估计这一帧 LiDAR 扫描期间传感器的连续运动，然后把每个点“搬回”到同一个时刻的坐标系里。**

@@ -23,10 +23,13 @@ struct Correspondence
 
 class SparseVoxel
 {
-public:
     static constexpr float VOXEL_SIZE = 0.5;
-    static constexpr int MIN_COVARIANCE_NEIGHBORS = 8;
+    static constexpr float INVERSE_VOXEL_SIZE = 1.0f / VOXEL_SIZE;
+    static constexpr int MIN_COVARIANCE_NEIGHBORS = 10;
     static constexpr int MAX_COVARIANCE_NEIGHBORS = 36;
+
+public:
+    static constexpr float MIN_DIST = 0.1f;
 
 	struct Neighbor
 	{
@@ -91,7 +94,6 @@ private:
     struct VoxelCell
     {
         static constexpr int CAPACITY = 36;
-        static constexpr float MIN_DIST = 0.03f;
         static constexpr float MIN_DIST_SQUARE = MIN_DIST * MIN_DIST;
 
         using Points = boost::container::static_vector<PointWithCovariance, CAPACITY>;
@@ -124,9 +126,9 @@ private:
 
     static VoxelKey pointToVoxel(const Eigen::Vector3f& point)
     {
-        return VoxelKey{static_cast<int>(std::floor(point.x() / VOXEL_SIZE)),
-                        static_cast<int>(std::floor(point.y() / VOXEL_SIZE)),
-                        static_cast<int>(std::floor(point.z() / VOXEL_SIZE))};
+        return VoxelKey{static_cast<int>(std::round(point.x() * INVERSE_VOXEL_SIZE)),
+                        static_cast<int>(std::round(point.y() * INVERSE_VOXEL_SIZE)),
+                        static_cast<int>(std::round(point.z() * INVERSE_VOXEL_SIZE))};
     }
 
     OccupiedVoxels mOccupiedVoxels;

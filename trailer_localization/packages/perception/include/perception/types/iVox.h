@@ -5,6 +5,7 @@
 #include <limits>
 #include <list>
 #include <memory>
+#include <span>
 #include <vector>
 #include <Eigen/Core>
 #include <boost/unordered/unordered_flat_map.hpp>
@@ -63,6 +64,7 @@ public:
     }
 
     std::vector<Neighbor> nearestNeighbors(const Eigen::Vector3f& query, int max_neighbors, float max_distance) const;
+    std::size_t nearestNeighbors(const Eigen::Vector3f& query, std::span<Neighbor> neighbors, float max_distance) const;
 
 private:
     struct VoxelKey
@@ -143,3 +145,4 @@ struct LocalPlane
 
 
 LocalPlane estimatePlane(const std::vector<IVox::Neighbor>& neighbors, float distance_threshold);
+LocalPlane estimatePlane(std::span<const IVox::Neighbor> neighbors, float distance_threshold);

@@ -5,144 +5,75 @@
 #include <ranges>
 #include <boost/unordered/unordered_flat_set.hpp>
 
-void SparseVoxel::initialize(const pcl::PointCloud<pcl::PointXYZ>& cloud)
-{
-	const std::vector<SparsePoint> sparse_points = makeSparseCloud(cloud);
-
-	boost::unordered_flat_set<VoxelKey> voxel_keys;
-	voxel_keys.reserve(sparse_points.size());
-	for (const SparsePoint& point : sparse_points)
-	{
-		voxel_keys.insert(point.key);
-	}
-
-	clear();
-
-	mOccupiedVoxels.reserve(voxel_keys.size());
-	const std::size_t cell_capacity = static_cast<std::size_t>(std::max(1, mConfig.max_points_per_voxel));
-	for (const SparsePoint& point : sparse_points)
-	{
-		auto [cell, inserted] = mOccupiedVoxels.try_emplace(point.key);
-		if (inserted)
-		{
-			cell->second.reserve(cell_capacity);
-		}
-		cell->second.push_back(PointWithCovariance{.position = point.position});
-		++mPointCount;
-	}
-	estimateCovariances();
-}
-
 bool SparseVoxel::insert(const pcl::PointCloud<pcl::PointXYZ>& cloud)
 {
-	if (cloud.empty())
-	{
-		return false;
-	}
+    if (cloud.empty())
+    {
+        return false;
+    }
 
-	const int max_points_per_voxel = std::max(1, mConfig.max_points_per_voxel);
-	const float min_spacing_square = std::pow(std::max(0.001f, mConfig.voxel_size * 0.1f), 2.0f);
+    boost::unordered_flat_set<VoxelKey> updated_voxels;
+    for (const auto& point : cloud)
+    {
+        const Eigen::Vector3f eigen_point = point.getVector3fMap();
+        const VoxelKey key = pointToVoxel(eigen_point);
 
-	boost::unordered_flat_set<VoxelKey> touched_voxels;
-	touched_voxels.reserve(cloud.size());
+        auto [it, inserted] = mOccupiedVoxels.try_emplace(key, mCells.size());
+        if (inserted)
+        {
+            mCells.emplace_back();
+        }
 
-	for (const auto& pcl_point : cloud)
-	{
-		SparsePoint point;
-		point.position = Eigen::Vector3f(pcl_point.x, pcl_point.y, pcl_point.z);
-		point.key = pointToVoxel(point.position);
+        if (mCells[it->second].add(eigen_point) != nullptr)
+        {
+            updated_voxels.insert(key);
+            ++mPointCount;
+        }
+    }
 
-		auto found = mOccupiedVoxels.find(point.key);
-		if (found == mOccupiedVoxels.end())
-		{
-			found = mOccupiedVoxels.try_emplace(point.key).first;
-			found->second.reserve(static_cast<std::size_t>(max_points_per_voxel));
-		}
+    boost::unordered_flat_set<std::size_t> affected_cells;
+    for (const auto& [i, j, k] : updated_voxels)
+    {
+        constexpr int voxel_radius = 1;
+        for (int dx = -voxel_radius; dx <= voxel_radius; ++dx)
+        {
+            for (int dy = -voxel_radius; dy <= voxel_radius; ++dy)
+            {
+                for (int dz = -voxel_radius; dz <= voxel_radius; ++dz)
+                {
+                    if (const auto found = mOccupiedVoxels.find(VoxelKey{i + dx, j + dy, k + dz});
+                        found != mOccupiedVoxels.end())
+                    {
+                        affected_cells.insert(found->second);
+                    }
+                }
+            }
+        }
+    }
 
-		auto& cell_points = found->second;
-		if (static_cast<int>(cell_points.size()) >= max_points_per_voxel)
-		{
-			continue;
-		}
-		if (const bool too_close = std::ranges::any_of(cell_points, [&](const PointWithCovariance& existing_point)
-			{
-				return (existing_point.position - point.position).squaredNorm() < min_spacing_square;
-			}); too_close)
-		{
-			continue;
-		}
+    std::vector<PointWithCovariance*> points;
+    for (const std::size_t cell_index : affected_cells)
+    {
+        for (PointWithCovariance& point : mCells[cell_index].points)
+        {
+            points.push_back(&point);
+        }
+    }
 
-		cell_points.push_back(PointWithCovariance{.position = point.position});
-		++mPointCount;
-		touched_voxels.insert(point.key);
-	}
-
-	if (touched_voxels.empty())
-	{
-		return false;
-	}
-
-	boost::unordered_flat_set<VoxelKey> affected_voxels;
-	affected_voxels.reserve(touched_voxels.size() * 27);
-	for (const VoxelKey& key : touched_voxels)
-	{
-		for (int dx = -1; dx <= 1; ++dx)
-		{
-			for (int dy = -1; dy <= 1; ++dy)
-			{
-				for (int dz = -1; dz <= 1; ++dz)
-				{
-                    if (const VoxelKey affected_key{key.i + dx, key.j + dy, key.k + dz};
-                        mOccupiedVoxels.contains(affected_key))
-					{
-						affected_voxels.insert(affected_key);
-					}
-				}
-			}
-		}
-	}
-
-	std::vector<PointWithCovariance*> affected_points;
-	affected_points.reserve(affected_voxels.size() * static_cast<std::size_t>(max_points_per_voxel));
-	for (const VoxelKey& key : affected_voxels)
-	{
-		for (PointWithCovariance& point : mOccupiedVoxels.at(key))
-		{
-			affected_points.push_back(&point);
-		}
-	}
-
-	estimateCovariances(affected_points);
+    estimateCovariances(points);
 	return true;
-}
-
-void SparseVoxel::estimateCovariances()
-{
-	std::vector<PointWithCovariance*> points;
-	points.reserve(mPointCount);
-	for (auto& cell_points : mOccupiedVoxels | std::views::values)
-	{
-		for (PointWithCovariance& point : cell_points)
-		{
-			points.push_back(&point);
-		}
-	}
-	estimateCovariances(points);
 }
 
 void SparseVoxel::estimateCovariances(const std::vector<PointWithCovariance*>& points) const
 {
-	const int required_neighbors = std::max(3, mConfig.min_covariance_neighbors);
-	const int neighbor_limit = std::max(required_neighbors, mConfig.max_covariance_neighbors);
-
 	std::for_each(std::execution::par, points.begin(), points.end(),
-		[this, required_neighbors, neighbor_limit](PointWithCovariance* point)
+		[this](PointWithCovariance* point)
 		{
 			point->covariance = Eigen::Matrix3f::Identity();
 			point->covariance_valid = false;
 
-			const std::vector<Neighbor> neighbors = nearestNeighbors(point->position, neighbor_limit);
-			if (static_cast<int>(neighbors.size()) < required_neighbors)
+			const std::vector<Neighbor> neighbors = nearestNeighbors(point->position, MAX_COVARIANCE_NEIGHBORS);
+			if (static_cast<int>(neighbors.size()) < MIN_COVARIANCE_NEIGHBORS)
 			{
 				return;
 			}
@@ -162,12 +93,6 @@ void SparseVoxel::estimateCovariances(const std::vector<PointWithCovariance*>& p
 			}
 			covariance /= static_cast<float>(neighbors.size() - 1);
 
-			if (const float determinant = covariance.determinant();
-				!std::isfinite(determinant) || std::abs(determinant) <= 1.0e-12f)
-			{
-				return;
-			}
-
 			point->covariance = covariance;
 			point->covariance_valid = true;
 		});
@@ -177,9 +102,9 @@ std::vector<const PointWithCovariance*> SparseVoxel::points() const
 {
 	std::vector<const PointWithCovariance*> points;
 	points.reserve(mPointCount);
-	for (const auto& cell_points : mOccupiedVoxels | std::views::values)
+    for (const VoxelCell& cell : mCells)
 	{
-		for (const PointWithCovariance& point : cell_points)
+		for (const PointWithCovariance& point : cell.points)
 		{
 			points.push_back(&point);
 		}
@@ -206,7 +131,7 @@ SparseVoxel::Neighbor SparseVoxel::nearestNeighbor(const Eigen::Vector3f& query,
 					continue;
 				}
 
-				for (const PointWithCovariance& point : found->second)
+                for (const PointWithCovariance& point : mCells[found->second].points)
 				{
 					if (const float squared_distance = (query - point.position).squaredNorm();
                         squared_distance < nearest.squared_distance)
@@ -219,46 +144,6 @@ SparseVoxel::Neighbor SparseVoxel::nearestNeighbor(const Eigen::Vector3f& query,
 	}
 	return nearest;
 }
-//
-// std::vector<SparseVoxel::Neighbor> SparseVoxel::nearestNeighbors(const Eigen::Vector3f& query, const int max_neighbors) const
-// {
-// 	std::vector<Neighbor> neighbors;
-// 	if (max_neighbors <= 0)
-// 	{
-// 		return neighbors;
-// 	}
-//
-// 	neighbors.reserve(std::min(static_cast<std::size_t>(max_neighbors), mPointCount));
-// 	const auto [i, j, k] = pointToVoxel(query);
-//
-//     constexpr int voxel_radius = 1;
-// 	for (int dx = -voxel_radius; dx <= voxel_radius; ++dx)
-// 	{
-// 		for (int dy = -voxel_radius; dy <= voxel_radius; ++dy)
-// 		{
-// 			for (int dz = -voxel_radius; dz <= voxel_radius; ++dz)
-// 			{
-// 				const auto found = mOccupiedVoxels.find(VoxelKey{i + dx, j + dy, k + dz});
-// 				if (found == mOccupiedVoxels.end())
-// 				{
-// 					continue;
-// 				}
-//
-// 				for (const PointWithCovariance& point : found->second)
-// 				{
-// 					neighbors.push_back(Neighbor{&point, (query - point.position).squaredNorm()});
-// 				}
-// 			}
-// 		}
-// 	}
-//
-// 	if (static_cast<int>(neighbors.size()) > max_neighbors)
-// 	{
-// 		std::ranges::nth_element(neighbors, neighbors.begin() + max_neighbors, {}, &Neighbor::squared_distance);
-// 		neighbors.resize(max_neighbors);
-// 	}
-// 	return neighbors;
-// }
 
 std::vector<SparseVoxel::Neighbor> SparseVoxel::nearestNeighbors(const Eigen::Vector3f& query, const int max_neighbors) const
 {
@@ -295,7 +180,7 @@ std::vector<SparseVoxel::Neighbor> SparseVoxel::nearestNeighbors(const Eigen::Ve
                     continue;
                 }
 
-                for (const PointWithCovariance& point : found->second)
+                for (const PointWithCovariance& point : mCells[found->second].points)
                 {
                     const float squared_distance = (query - point.position).squaredNorm();
 
@@ -322,43 +207,4 @@ std::vector<SparseVoxel::Neighbor> SparseVoxel::nearestNeighbors(const Eigen::Ve
     }
 
     return neighbors;
-}
-
-std::vector<SparseVoxel::SparsePoint> SparseVoxel::makeSparseCloud(const pcl::PointCloud<pcl::PointXYZ>& cloud) const
-{
-    std::vector<SparsePoint> sparse_cloud;
-    sparse_cloud.reserve(cloud.size());
-	SparsePointIndices occupied_voxels;
-    const int max_points_per_voxel = std::max(1, mConfig.max_points_per_voxel);
-    const float min_spacing_square = std::pow(std::max(0.001f, mConfig.voxel_size * 0.1f), 2.0f);
-
-    for (const auto& pcl_point : cloud)
-    {
-        if (!std::isfinite(pcl_point.x) || !std::isfinite(pcl_point.y) || !std::isfinite(pcl_point.z))
-        {
-            continue;
-        }
-
-        SparsePoint point;
-        point.position = Eigen::Vector3f(pcl_point.x, pcl_point.y, pcl_point.z);
-        point.key = pointToVoxel(point.position);
-
-        auto& voxel_points = occupied_voxels[point.key];
-        if (static_cast<int>(voxel_points.size()) >= max_points_per_voxel)
-        {
-            continue;
-        }
-
-        if (const bool too_close = std::ranges::any_of(std::as_const(voxel_points), [&](const std::size_t index)
-            {
-                return (sparse_cloud[index].position - point.position).squaredNorm() < min_spacing_square;
-            }); too_close)
-        {
-            continue;
-        }
-
-        voxel_points.push_back(sparse_cloud.size());
-        sparse_cloud.push_back(point);
-    }
-    return sparse_cloud;
 }

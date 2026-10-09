@@ -29,11 +29,12 @@ constexpr double DEG2RAD = 1.0 / 180.0 * M_PI;
  *   R_true = R * Exp(dtheta)
  * Nominal state:
  *   p, R, v, b_a, b_g
- * bg, ba and gravity are calibrated during initialization and then fixed.
+ * Biases are calibrated during initialization and estimated during updates.
+ * Gravity is fixed in the world frame.
  */
 class IESKF
 {
-    using StateT       = Eigen::Matrix<double, 15, 1>;   // [dp, dtheta, dv]
+    using StateT       = Eigen::Matrix<double, 15, 1>;   // [dp, dtheta, dv, dba, dbg]
     using MeasurementT = Sophus::SE3d::Tangent;         // [p, R]
     using MotionNoiseT = Eigen::Matrix<double, 6, 1>;   // [n_a, n_g]
 
@@ -48,17 +49,21 @@ class IESKF
 public:
     IESKF()
     {
-        /* State covariance, dx = [dp, dtheta, dv] */
+        /* State covariance, dx = [dp, dtheta, dv, dba, dbg] */
         constexpr double initial_position_std = 0.01;             // m
         constexpr double initial_rotation_std = 0.5 * DEG2RAD;    // rad
         constexpr double initial_velocity_std = 0.10;             // m/s
+        constexpr double initial_accel_bias_std = 0.10;
+        constexpr double initial_gyro_bias_std = 0.10 * DEG2RAD;
         mP.block<3, 3>(0, 0).diagonal().setConstant(initial_position_std * initial_position_std);
         mP.block<3, 3>(3, 3).diagonal().setConstant(initial_rotation_std * initial_rotation_std);
         mP.block<3, 3>(6, 6).diagonal().setConstant(initial_velocity_std * initial_velocity_std);
+        mP.block<3, 3>(9, 9).diagonal().setConstant(initial_accel_bias_std * initial_accel_bias_std);
+        mP.block<3, 3>(12, 12).diagonal().setConstant(initial_gyro_bias_std * initial_gyro_bias_std);
 
         /* IMU noise covariance. n = [na, ng] */
-        constexpr double accel_noise_std = 0.02;           // m/s^2
-        constexpr double gyro_noise_std = 0.01 * DEG2RAD;  // rad/s
+        constexpr double accel_noise_std = 0.00002;           // m/s^2
+        constexpr double gyro_noise_std = 0.00001 * DEG2RAD;  // rad/s
         mQ.block<3, 3>(0, 0).diagonal().setConstant(accel_noise_std * accel_noise_std);
         mQ.block<3, 3>(3, 3).diagonal().setConstant(gyro_noise_std * gyro_noise_std);
 
@@ -98,6 +103,11 @@ public:
     [[nodiscard]] const NavState& state() const
     {
         return mState;
+    }
+
+    [[nodiscard]] const StateCov& covariance() const
+    {
+        return mP;
     }
 
     [[nodiscard]] Eigen::Isometry3d pose() const

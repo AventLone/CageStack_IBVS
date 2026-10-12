@@ -105,8 +105,7 @@ private:
 
     void initPublishers();
 
-    void dataHandler(const CloudMsg::ConstSharedPtr& cloud_msg,
-                     const JointStatesMsg::ConstSharedPtr& joint_state_msg)
+    void dataHandler(const CloudMsg::ConstSharedPtr& cloud_msg, const JointStatesMsg::ConstSharedPtr& joint_state_msg)
     {
         std::lock_guard<std::mutex> lock(mBufferMutex);
         while (!mDataBuffer.empty())
@@ -121,9 +120,9 @@ private:
         this->mTriggerEvent.notify_one();
     }
 
-    visualization_msgs::msg::Marker getCubeMarker(const char* frame_id, const char* ns, const int id,
-                                                  const double cube_size_x, const double cube_size_y, const double cube_size_z,
-                                                  const float color_r, const float color_g, const float color_b, const float color_a,
+    visualization_msgs::msg::Marker getCubeMarker(const char* frame_id, const char* ns, const int id, const double cube_size_x,
+                                                  const double cube_size_y, const double cube_size_z, const float color_r,
+                                                  const float color_g, const float color_b, const float color_a,
                                                   const Eigen::Vector3f& pose) const
     {
         visualization_msgs::msg::Marker marker;

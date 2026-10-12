@@ -1,5 +1,5 @@
 #pragma once
-#include "perception/types/common.hpp"
+#include "free_space_detection/types/common.hpp"
 #include <type_traits>
 
 /**

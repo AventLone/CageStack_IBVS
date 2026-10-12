@@ -21,6 +21,32 @@ struct ROI
                point.y > min_y && point.y < max_y &&
                point.z > min_z && point.z < max_z;
     }
+
+    template<class PointT>
+    static ROI getBBox(const pcl::PointCloud<PointT>& cloud)
+    {
+        ROI roi{};
+        if (cloud.empty())
+        {
+            return roi;
+        }
+
+        roi.min_x = roi.max_x = cloud.points[0].x;
+        roi.min_y = roi.max_y = cloud.points[0].y;
+        roi.min_z = roi.max_z = cloud.points[0].z;
+
+        for (const auto& point : cloud.points)
+        {
+            roi.min_x = std::min(roi.min_x, point.x);
+            roi.max_x = std::max(roi.max_x, point.x);
+            roi.min_y = std::min(roi.min_y, point.y);
+            roi.max_y = std::max(roi.max_y, point.y);
+            roi.min_z = std::min(roi.min_z, point.z);
+            roi.max_z = std::max(roi.max_z, point.z);
+        }
+
+        return roi;
+    }
 };
 
 /**

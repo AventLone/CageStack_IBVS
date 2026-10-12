@@ -1,5 +1,5 @@
-#include "perception/nodes/PoseEstimation.h"
-#include "perception/nodes/CloudPublisher.h"
+#include "free_space_detection/nodes/PoseEstimation.h"
+#include "free_space_detection/nodes/CloudPublisher.h"
 #include <cv_bridge/cv_bridge.hpp>
 #include <memory>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
@@ -7,12 +7,12 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <tf2_eigen/tf2_eigen.hpp> // ROS 2 header
 #include <execution>
-#include "perception/tools/filter_2d.h"
-#include "perception/tools/filter_3d.h"
-#include "perception/tools/feature_detect_2d.h"
-#include "perception/tools/feature_detect_3d.hpp"
-#include "perception/kalman_filter/UKF.hpp"
-#include "perception/kalman_filter/system_model.hpp"
+#include "free_space_detection/tools/filter_2d.h"
+#include "free_space_detection/tools/filter_3d.h"
+#include "free_space_detection/tools/feature_detect_2d.h"
+#include "free_space_detection/tools/feature_detect_3d.h"
+#include "free_space_detection/kalman_filter/UKF.hpp"
+#include "free_space_detection/kalman_filter/system_model.hpp"
 
 
 void PoseEstimation::initSubscriptions()
@@ -139,7 +139,7 @@ void PoseEstimation::workerLoop()
 
         /*------ Stage 2. Slot pose estimate ------*/
         auto slot_space_cloud = std::make_shared<RawCloud>();
-        getCloud(*cloud, slot_space_cloud, nullptr, goal_pose, slot_space_roi);
+        filter3d::getCloud(*cloud, slot_space_cloud, nullptr, goal_pose, slot_space_roi);
 
         if (slot_space_cloud->size() < 10)
         {
@@ -148,7 +148,7 @@ void PoseEstimation::workerLoop()
             continue;
         }
         auto slot_space_cloud_without_ground = std::make_shared<RawCloud>();
-        removeGround(*slot_space_cloud, *slot_space_cloud_without_ground, 0.036);
+        filter3d::removeGround(*slot_space_cloud, *slot_space_cloud_without_ground, 0.036);
         Eigen::Vector3f slot_pose;
         if (!estimateSlotPose(slot_space_cloud_without_ground, slot_pose))
         {
@@ -225,7 +225,7 @@ void PoseEstimation::workerLoop()
         slot_pose_eigen.rotate(Eigen::AngleAxisf(slot_pose_filtered[2], Eigen::Vector3f::UnitZ()));
         slot_pose_eigen.pretranslate(Eigen::Vector3f(slot_pose_filtered[0], slot_pose_filtered[1], 0.0f));
         // tf2::convert(slot_pose_msg.pose, slot_pose_eigen);
-        if (!checkSpace(*slot_space_cloud_without_ground, slot_pose_eigen.cast<float>(), load_roi))
+        if (!filter3d::checkSpace(*slot_space_cloud_without_ground, slot_pose_eigen.cast<float>(), load_roi))
         {
             RCLCPP_WARN(get_logger(), "There is not enough space or there might be obstacles in the slot!");
             slot_cube_msg.color.r = 1.0;

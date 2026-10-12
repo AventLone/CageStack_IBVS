@@ -1,12 +1,11 @@
-#include "perception/nodes/CloudPublisher.h"
+#include "free_space_detection/nodes/CloudPublisher.h"
 #include <cv_bridge/cv_bridge.hpp>
 #include <pcl/common/transforms.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <Eigen/Geometry>
 #include <tf2_eigen/tf2_eigen.hpp> // ROS 2 header
-#include <pcl/filters/voxel_grid.h>
-#include "perception/tools/filter_3d.h"
+#include "free_space_detection/tools/filter_3d.h"
 #include <random>
 
 

@@ -2,7 +2,7 @@
 #include <pcl/common/common.h>
 #include <pcl/common/eigen.h>
 #include <pcl/common/centroid.h>
-#include <pcl/common/transforms.h>
+#include <pcl/segmentation/sac_segmentation.h>
 #include <opencv2/opencv.hpp>
 #include <random>
 
@@ -88,30 +88,27 @@ bool planeCoefficients(const pcl::PointCloud<PointT>& cloud, Eigen::Vector3f& co
 }
 
 template<class PointT>
-void outerBoundary(const pcl::PointCloud<PointT>& cloud, const Eigen::Vector3f& cloud_plane,
-                   Eigen::Vector3f& outer_boundary, const float direction, const float resolution = 0.005f)
+void outerBoundary(const pcl::PointCloud<PointT>& cloud, const Eigen::Vector3f& cloud_plane, Eigen::Vector3f& outer_boundary,
+                   const float direction, const float resolution = 0.005f)
 {
     const float step = direction * resolution;
 }
 
 template<class PointT>
-std::pair<float, float> farthestDistanceFromLine(const pcl::PointCloud<PointT>& cloud,
-                                                 const Eigen::Vector3f& line_coefficients)
+std::pair<float, float> farthestDistanceFromLine(const pcl::PointCloud<PointT>& cloud, const Eigen::Vector3f& line_coefficients)
 {
     /* Negtive is positive x direction */
     float distance_front{std::numeric_limits<float>::max()}, distance_rear{std::numeric_limits<float>::min()};
     for (const auto& point : cloud)
     {
-        const float distance = line_coefficients[0] * point.x +
-                               line_coefficients[1] * point.y + line_coefficients[2];
+        const float distance = line_coefficients[0] * point.x + line_coefficients[1] * point.y + line_coefficients[2];
         distance_front = std::min(distance_front, distance);
         distance_rear = std::max(distance_rear, distance);
     }
     return std::pair<float, float>{distance_front, distance_rear};
 }
 
-inline bool intersectionPoint(const Eigen::Vector3f& line1, const Eigen::Vector3f& line2,
-                              Eigen::Vector2f& intersection)
+inline bool intersectionPoint(const Eigen::Vector3f& line1, const Eigen::Vector3f& line2, Eigen::Vector2f& intersection)
 {
     const float D = line1[0] * line2[1] - line2[0] * line1[1];
 
@@ -254,42 +251,6 @@ Eigen::Vector3f computeCenter(const pcl::PointCloud<PointT>& cloud)
     return 0.5f * (min_point.head<3>() + max_point.head<3>());
 }
 
-inline pcl::PointCloud<pcl::PointXYZ> createPalletCloud(const float angle)
-{
-    pcl::PointCloud<pcl::PointXYZ> front_face, left_side_face, right_side_face, cloud, angel_cloud;
-
-    std::random_device rd; // Random device for seeding
-    std::mt19937 gen(rd()); // Mersenne Twister engine
-
-    static std::uniform_real_distribution<float> unifor(0.02, 0.2);
-    static std::cauchy_distribution<float> dist_chaos(0.0f, 0.001f);
-
-    for (float y = -0.5f; y < 0.5f; y += 0.02f)
-    {
-        std::normal_distribution<float> dist_normal(0.0, unifor(gen));
-        for (float z = 0.0f; z < 0.15f; z += 0.02f)
-        {
-            front_face.emplace_back((dist_normal(gen) + dist_chaos(gen)) * 0.5f, y, z);
-        }
-    }
-
-    for (float x = 0.0f; x > -1.2f; x -= 0.02f)
-    {
-        std::normal_distribution<float> dist_normal(0.0, 0.02);
-        for (float z = 0.0f; z < 0.15f; z += 0.02f)
-        {
-            left_side_face.emplace_back(x, -0.5f + (dist_normal(gen) + dist_chaos(gen)) * 0.5f, z);
-        }
-    }
-
-    Eigen::Isometry3f T(Eigen::Isometry3f::Identity());
-    T.translate(Eigen::Vector3f(0.0, 1.0, 0.0));
-    pcl::transformPointCloud(left_side_face, right_side_face, T);
-    cloud = front_face + left_side_face + right_side_face;
-    T = Eigen::Isometry3f::Identity();
-    T.rotate(Eigen::AngleAxisf(angle, Eigen::Vector3f::UnitZ()));
-    pcl::transformPointCloud(cloud, angel_cloud, T);
-
-    return angel_cloud;
-}
+void detectFloor(const pcl::PointCloud<pcl::PointXYZ>& src, pcl::PointCloud<pcl::PointXYZ>::Ptr ground_cloud,
+                  pcl::PointCloud<pcl::PointXYZ>::Ptr non_ground_cloud = nullptr);
 }

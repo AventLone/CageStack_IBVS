@@ -10,11 +10,11 @@ inline void open(const cv::Mat& src, cv::Mat& dst)
     cv::morphologyEx(src, dst, cv::MORPH_OPEN, kernel);
 }
 
-inline void close(const cv::Mat& src, cv::Mat& dst)
+inline void close(const cv::Mat& src, cv::Mat& dst, const int iter = 2)
 {
     CV_Assert(!src.empty());
     static const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(2, 2));
-    cv::morphologyEx(src, dst, cv::MORPH_CLOSE, kernel, cv::Point(-1, -1), 2);
+    cv::morphologyEx(src, dst, cv::MORPH_CLOSE, kernel, cv::Point(-1, -1), iter);
 }
 
 inline void removeIsolatedPoints(const cv::Mat& src, cv::Mat& dst)

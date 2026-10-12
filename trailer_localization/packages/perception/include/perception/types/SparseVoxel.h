@@ -126,9 +126,9 @@ private:
 
     static VoxelKey pointToVoxel(const Eigen::Vector3f& point)
     {
-        return VoxelKey{static_cast<int>(std::round(point.x() * INVERSE_VOXEL_SIZE)),
-                        static_cast<int>(std::round(point.y() * INVERSE_VOXEL_SIZE)),
-                        static_cast<int>(std::round(point.z() * INVERSE_VOXEL_SIZE))};
+        return VoxelKey{static_cast<int>(std::floor(point.x() * INVERSE_VOXEL_SIZE)),
+                        static_cast<int>(std::floor(point.y() * INVERSE_VOXEL_SIZE)),
+                        static_cast<int>(std::floor(point.z() * INVERSE_VOXEL_SIZE))};
     }
 
     OccupiedVoxels mOccupiedVoxels;

@@ -1,5 +1,5 @@
 #pragma once
-#include "perception/types/common.hpp"
+#include "free_space_detection/types/common.hpp"
 
 using StateT = Eigen::Vector3f; // [p_x, p_y, theta]'
 

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(perception LANGUAGES C CXX)
+project(free_space_detection LANGUAGES C CXX)
 
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
@@ -13,15 +13,15 @@ endif ()
 # Find ROS2 dependencies
 # --------------------------------------------------------------------------------
 find_package(ament_cmake_auto REQUIRED)
-ament_auto_find_build_dependencies() # Automaticly find all the packages mentioned in 'package.xml'
+ament_auto_find_build_dependencies() # Automaticly find all the dependent packages mentioned in 'package.xml'
 
 file(GLOB_RECURSE SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/source/*.cpp)
-ament_auto_add_executable(perception ${SOURCE_FILES})
-target_include_directories(perception PUBLIC
+ament_auto_add_executable(free_space_detection ${SOURCE_FILES})
+target_include_directories(free_space_detection PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
 )
-target_compile_features(perception PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+target_compile_features(free_space_detection PUBLIC c_std_99 cxx_std_23)  # Require C99 and C++23
 
 if (BUILD_TESTING)
     find_package(ament_lint_auto REQUIRED)

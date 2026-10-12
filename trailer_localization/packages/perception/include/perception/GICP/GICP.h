@@ -17,8 +17,8 @@ public:
         double max_fitness_score{0.01};
 
         int max_iterations{100};
-        double convergence_translation{1.0e-5};   // SE(3) 增量中平移分量的范数阈值，单位 m
-        double convergence_rotation{1.0e-5};   // SE(3) 增量中旋转向量的范数阈值，单位 rad
+        double convergence_translation{1.0e-4};   // SE(3) 增量中平移分量的范数阈值，单位 m
+        double convergence_rotation{1.0e-4};   // SE(3) 增量中旋转向量的范数阈值，单位 rad
     };
 
     struct Result

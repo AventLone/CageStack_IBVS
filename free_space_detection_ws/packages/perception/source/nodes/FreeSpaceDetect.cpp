@@ -7,6 +7,7 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <tf2_eigen/tf2_eigen.hpp> // ROS 2 header
 #include <execution>
+#include <random>
 #include "free_space_detection/tools/filter_2d.h"
 #include "free_space_detection/tools/filter_3d.h"
 #include "free_space_detection/tools/feature_detect_2d.h"
@@ -24,16 +25,17 @@ void FreeSpaceDetect::initSubscriptions()
                 RCLCPP_INFO(get_logger(), "Received a goal...");
                 this->mGoalMsg = *goal_msg;
                 {
-                    std::lock_guard<std::mutex> lock(mBufferMutex);
+                    std::lock_guard lock(mBufferMutex);
                     this->mHasGoal = true;
                 }
+                reset();
                 this->mTriggerEvent.notify_one();
             });
 
     mCloudSub = create_subscription<sensor_msgs::msg::PointCloud2>("/cloud_map", rclcpp::SensorDataQoS(),
         [this](sensor_msgs::msg::PointCloud2::ConstSharedPtr msg)
             {
-                std::lock_guard<std::mutex> lock(mBufferMutex);
+                std::lock_guard lock(mBufferMutex);
                 while (!mCloudBuffer.empty())
                 {
                     mCloudBuffer.pop();
@@ -68,14 +70,14 @@ void FreeSpaceDetect::workerLoop()
     constexpr float load_size_y = 1.0f;
     constexpr float load_size_z = 1.5f;
 
-    rclcpp::Rate publish_rate(5.0, this->get_clock());
-
+    // rclcpp::Rate publish_rate(5.0, this->get_clock());
+    constexpr auto worker_period = std::chrono::milliseconds(500);
     while (rclcpp::ok())
     {
         sensor_msgs::msg::PointCloud2::ConstSharedPtr cloud_msg;
         //
         {
-            std::unique_lock<std::mutex> lock(mBufferMutex);
+            std::unique_lock lock(mBufferMutex);
             mTriggerEvent.wait(lock, [this]() -> bool
                                    {
                                        return (mHasGoal && !mCloudBuffer.empty()) || mIsShutdown;
@@ -90,7 +92,6 @@ void FreeSpaceDetect::workerLoop()
 
         visualization_msgs::msg::MarkerArray visualization_msg;
 
-        const auto start = std::chrono::high_resolution_clock::now();
         auto cloud = std::make_shared<RawCloud>();
         pcl::fromROSMsg(*cloud_msg, *cloud);
 
@@ -108,28 +109,27 @@ void FreeSpaceDetect::workerLoop()
         T_1.pretranslate(Eigen::Vector2f(mGoalMsg.pose.position.x, mGoalMsg.pose.position.y));
         T_2.translate(Eigen::Vector2f(-0.5f * 17.0f, 0.0f));
         Eigen::Isometry2f T_3 = T_1 * T_2;
-        visualization_msgs::msg::Marker slot_roi_msg;
-        slot_roi_msg.header.frame_id = FRAME_ID;
-        slot_roi_msg.header.stamp = this->now();
-        slot_roi_msg.ns = ns;
-        slot_roi_msg.id = 1;
-        slot_roi_msg.type = visualization_msgs::msg::Marker::CUBE;
-        slot_roi_msg.action = visualization_msgs::msg::Marker::ADD;
-        slot_roi_msg.scale.x = static_cast<double>(trailer_roi.max_x - trailer_roi.min_x);
-        slot_roi_msg.scale.y = static_cast<double>(trailer_roi.max_y - trailer_roi.min_y);
-        slot_roi_msg.scale.z = static_cast<double>(trailer_roi.max_z - trailer_roi.min_z);
-        slot_roi_msg.color.r = 0.8;
-        slot_roi_msg.color.g = 1.0;
-        slot_roi_msg.color.b = 0.8;
-        slot_roi_msg.color.a = 0.2;
-        slot_roi_msg.pose.orientation = mGoalMsg.pose.orientation;
-        slot_roi_msg.pose.position.x = T_3.translation()[0];
-        slot_roi_msg.pose.position.y = T_3.translation()[1];
-        slot_roi_msg.pose.position.z = T_3.translation()[2];
-        visualization_msg.markers.push_back(slot_roi_msg);
+        visualization_msgs::msg::Marker trailer_roi_marker;
+        trailer_roi_marker.header.frame_id = FRAME_ID;
+        trailer_roi_marker.header.stamp = this->now();
+        trailer_roi_marker.ns = ns;
+        trailer_roi_marker.id = 1;
+        trailer_roi_marker.type = visualization_msgs::msg::Marker::CUBE;
+        trailer_roi_marker.action = visualization_msgs::msg::Marker::ADD;
+        trailer_roi_marker.scale.x = static_cast<double>(trailer_roi.max_x - trailer_roi.min_x);
+        trailer_roi_marker.scale.y = static_cast<double>(trailer_roi.max_y - trailer_roi.min_y);
+        trailer_roi_marker.scale.z = static_cast<double>(trailer_roi.max_z - trailer_roi.min_z);
+        trailer_roi_marker.color.r = 0.8;
+        trailer_roi_marker.color.g = 1.0;
+        trailer_roi_marker.color.b = 0.8;
+        trailer_roi_marker.color.a = 0.2;
+        trailer_roi_marker.pose.orientation = mGoalMsg.pose.orientation;
+        trailer_roi_marker.pose.position.x = T_3.translation()[0];
+        trailer_roi_marker.pose.position.y = T_3.translation()[1];
+        trailer_roi_marker.pose.position.z = 0.5f * (trailer_roi.min_z + trailer_roi.max_z);
+        visualization_msg.markers.push_back(trailer_roi_marker);
 
-        Eigen::Isometry3f goal_pose{};
-        //
+        Eigen::Isometry3f goal_pose;
         {
             Eigen::Isometry3d temp{};
             tf2::fromMsg(mGoalMsg.pose, temp);
@@ -152,7 +152,7 @@ void FreeSpaceDetect::workerLoop()
         if (!locateTrailer(rough_trailer_cloud, refined_trailer_cloud, trailer_pose))
         {
             RCLCPP_ERROR(get_logger(), "Failed to locate the trailer or the ramp!");
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;
         }
 
@@ -201,7 +201,7 @@ void FreeSpaceDetect::workerLoop()
         if (!estimateRampPose(rough_ramp_cloud, ramp_position, ramp_tilt, ramp_size))
         {
             RCLCPP_ERROR(get_logger(), "Failed to estimate pose of the ramp!");
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;
         }
 
@@ -229,17 +229,18 @@ void FreeSpaceDetect::workerLoop()
 
         if (mPlacementZones.empty())
         {
-            if (!detectPlacementZone(refined_trailer_cloud, {load_size_x, load_size_y}))
+            if (!planPlacementZone(trailer_pose, trailer_dimensions.head<2>() - Eigen::Vector2f(0.01f, 0.01f),
+                                   {load_size_x + 0.01f, load_size_y + 0.01f}))
             {
-                RCLCPP_ERROR(get_logger(), "Failed to detect placement zone!");
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                RCLCPP_ERROR(get_logger(), "Failed to plan placement zones!");
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 continue;
             }
         }
 
-        const float placement_marker_height = 0.04f;
         for (std::size_t index = 0; index < mPlacementZones.size(); ++index)
         {
+            constexpr float placement_marker_height = 0.03f;
             visualization_msgs::msg::Marker placement_marker;
             placement_marker.header.frame_id = FRAME_ID;
             placement_marker.header.stamp = this->now();
@@ -250,22 +251,49 @@ void FreeSpaceDetect::workerLoop()
             placement_marker.scale.x = load_size_x;
             placement_marker.scale.y = load_size_y;
             placement_marker.scale.z = placement_marker_height;
-            placement_marker.color.r = 0.15f;
-            placement_marker.color.g = 0.95f;
-            placement_marker.color.b = 0.35f;
+            std::mt19937 color_generator(index);
+            std::uniform_real_distribution color_distribution(0.2f, 1.0f);
+            placement_marker.color.r = color_distribution(color_generator);
+            placement_marker.color.g = color_distribution(color_generator);
+            placement_marker.color.b = color_distribution(color_generator);
             placement_marker.color.a = 0.55f;
 
             const Eigen::Vector2f position_in_map = Eigen::Rotation2Df(trailer_pose.z()) * mPlacementZones[index];
             placement_marker.pose.position.x = position_in_map.x();
             placement_marker.pose.position.y = position_in_map.y();
-            placement_marker.pose.position.z = trailer_bbox.min_z + 0.5f * placement_marker_height;
+            placement_marker.pose.position.z = trailer_bbox.min_z + 0.2f;
             placement_marker.pose.orientation = toQuaternionMsg(trailer_pose.z());
             visualization_msg.markers.push_back(placement_marker);
+
+            visualization_msgs::msg::Marker center_marker = placement_marker;
+            center_marker.ns = "placement_centers";
+            center_marker.type = visualization_msgs::msg::Marker::SPHERE;
+            center_marker.scale.x = 0.08;
+            center_marker.scale.y = 0.08;
+            center_marker.scale.z = 0.08;
+            center_marker.color.r = 1.0f;
+            center_marker.color.g = 1.0f;
+            center_marker.color.b = 1.0f;
+            center_marker.color.a = 1.0f;
+            visualization_msg.markers.push_back(center_marker);
+
+            visualization_msgs::msg::Marker label_marker = center_marker;
+            label_marker.ns = "placement_labels";
+            label_marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+            label_marker.text = std::to_string(index + 1);
+            label_marker.scale.x = 0.0;
+            label_marker.scale.y = 0.0;
+            label_marker.scale.z = 0.3;
+            label_marker.pose.position.z += 0.15;
+            label_marker.pose.orientation = toQuaternionMsg(0.0);
+            visualization_msg.markers.push_back(label_marker);
         }
+
 
         mVisualizationPub->publish(visualization_msg);
 
-        publish_rate.sleep();
+        // publish_rate.sleep();
+        std::this_thread::sleep_for(worker_period);
     }
 }
 
@@ -580,264 +608,224 @@ bool FreeSpaceDetect::estimateRampPose(const RawCloud::Ptr& cloud, Eigen::Vector
     return true;
 }
 
-bool FreeSpaceDetect::detectPlacementZone(const RawCloud::Ptr& cloud, const Eigen::Vector2f& load_size)
+bool FreeSpaceDetect::planPlacementZone(const Eigen::Vector3f& trailer_pose, const Eigen::Vector2f& trailer_size,
+                                        const Eigen::Vector2f& load_size)
 {
     mPlacementZones.clear();
-    if (!cloud || cloud->size() < 100 || !load_size.allFinite() || (load_size.array() <= 0.0f).any())
+    if (!trailer_pose.allFinite() || !trailer_size.allFinite() || !load_size.allFinite() ||
+        (trailer_size.array() <= 0.0f).any() || (load_size.array() <= 0.0f).any())
     {
-        RCLCPP_WARN(get_logger(), "Input cloud of detectPlacementZone is empty!");
+        RCLCPP_WARN(get_logger(), "Invalid trailer pose or dimensions for placement planning!");
         return false;
     }
 
-    const auto floor_cloud = std::make_shared<RawCloud>();
-    feature3d::detectFloor(*cloud, floor_cloud);
-    if (floor_cloud->size() < 100)
+    if ((load_size.array() > trailer_size.array()).any())
     {
-        RCLCPP_WARN(get_logger(), "Failed to detect the floor of trailer!");
+        RCLCPP_WARN(get_logger(), "Load footprint does not fit within the trailer!");
         return false;
     }
 
-    /* Get the top-down view image */
-    constexpr float resolution = 0.05f;
-    OrthographicProjector<pcl::PointXYZ> projector(View::TOP, resolution);
-    projector.setCloud(floor_cloud);
-
-    const cv::Mat top_down_img = projector.projection();
-    cv::Mat floor_img;
-    filter2d::close(top_down_img, floor_img);
-
-    const int footprint_width = static_cast<int>(std::ceil(load_size.x() / resolution));
-    const int footprint_height = static_cast<int>(std::ceil(load_size.y() / resolution));
-    if (footprint_width <= 0 || footprint_height <= 0 ||
-        footprint_width > floor_img.cols || footprint_height > floor_img.rows)
+    constexpr float count_tolerance = 1.0e-6f;
+    const int longitudinal_count = std::floor(trailer_size.x() / load_size.x() + count_tolerance);
+    const int lateral_count = std::floor(trailer_size.y() / load_size.y() + count_tolerance);
+    if (longitudinal_count > std::numeric_limits<int>::max() || lateral_count > std::numeric_limits<int>::max())
     {
-        RCLCPP_WARN(get_logger(), "Load footprint does not fit within the detected trailer floor!");
+        RCLCPP_WARN(get_logger(), "Requested placement grid is too large!");
         return false;
     }
 
-    cv::Mat floor_binary;
-    cv::threshold(floor_img, floor_binary, 0, 1, cv::THRESH_BINARY);
-    cv::Mat floor_integral;
-    cv::integral(floor_binary, floor_integral, CV_32S);
-
-    const ROI floor_bounds = ROI::getBBox(*floor_cloud);
-    const float projected_max_y = floor_bounds.max_y +
-                                  0.1f * (floor_bounds.max_y - floor_bounds.min_y);
-
-    std::vector<Eigen::Vector2f> best_zones;
-    for (const int row_phase : {0, footprint_height / 2})
+    const int rows = longitudinal_count;
+    const int columns = lateral_count;
+    const std::size_t zone_count = static_cast<std::size_t>(rows) * static_cast<std::size_t>(columns);
+    if (zone_count > mPlacementZones.max_size())
     {
-        for (const int col_phase : {0, footprint_width / 2})
+        RCLCPP_WARN(get_logger(), "Requested placement grid is too large!");
+        return false;
+    }
+    mPlacementZones.reserve(zone_count);
+
+    const float first_x = trailer_pose.x() - trailer_size.x() + 0.5f * load_size.x();
+    const float first_y = trailer_pose.y() - 0.5f * static_cast<float>(columns) * load_size.y() + 0.5f * load_size.y();
+    for (int row = 0; row < rows; ++row)
+    {
+        const float center_x = first_x + static_cast<float>(row) * load_size.x();
+        for (int column = 0; column < columns; ++column)
         {
-            std::vector<Eigen::Vector2f> candidate_zones;
-            for (int top = row_phase; top + footprint_height <= floor_img.rows; top += footprint_height)
-            {
-                for (int left = col_phase; left + footprint_width <= floor_img.cols; left += footprint_width)
-                {
-                    const int bottom = top + footprint_height;
-                    const int right = left + footprint_width;
-                    const int floor_pixels = floor_integral.at<int>(bottom, right) -
-                                             floor_integral.at<int>(top, right) -
-                                             floor_integral.at<int>(bottom, left) +
-                                             floor_integral.at<int>(top, left);
-                    const float coverage = static_cast<float>(floor_pixels) /
-                                          static_cast<float>(footprint_width * footprint_height);
-                    if (constexpr float min_floor_coverage = 0.65f; coverage < min_floor_coverage)
-                    {
-                        continue;
-                    }
-
-                    const float center_x = projector.getCoordinate0(static_cast<uint32_t>(left)) +
-                                           0.5f * static_cast<float>(footprint_width) * resolution;
-                    const float center_y = projected_max_y -
-                                           (static_cast<float>(top) + 0.5f * static_cast<float>(footprint_height)) * resolution;
-                    candidate_zones.emplace_back(center_x, center_y);
-                }
-            }
-
-            if (candidate_zones.size() > best_zones.size())
-            {
-                best_zones = std::move(candidate_zones);
-            }
+            const float center_y = first_y + static_cast<float>(column) * load_size.y();
+            mPlacementZones.emplace_back(center_x, center_y);
         }
     }
 
-    if (best_zones.empty())
-    {
-        RCLCPP_WARN(get_logger(), "No placement zone fits the requested load size!");
-        return false;
-    }
-
-    mPlacementZones = std::move(best_zones);
-    RCLCPP_INFO(get_logger(), "Detected %zu placement zones on the trailer floor!", mPlacementZones.size());
+    RCLCPP_INFO(get_logger(), "Planned %zu placement zones (%d rows, %d columns)!", mPlacementZones.size(), rows, columns);
 
     return true;
 }
 
-bool FreeSpaceDetect::estimateSlotPose(const RawCloud::Ptr& cloud, Eigen::Vector3f& slot_pose) const
-{
-    if (cloud->size() < 10)
-    {
-        return false;
-    }
 
-    static OrthographicProjector<pcl::PointXYZ> projector(View::TOP, 0.02f);
-    projector.setCloud(cloud);
-    const cv::Mat projection = projector.projection();
-
-    cv::Mat closed_img;
-    //
-    {
-        cv::Mat temp_img;
-        filter2d::close(projection, temp_img);
-        filter2d::removeIsolatedPoints(temp_img, closed_img);
-    }
-
-
-    bool has_left_side{true}, has_right_side{true}; // Flags to check if there is left side or right side boundary
-    /* The coefficients of 3 planes, assume they are all perpendicular to the ground,
-     * so Vector3 instead of Vector4 */
-    Eigen::Vector3f rear_plane_coefficients{}, left_plane_coefficients{}, right_plane_coefficients{};
-    /* Step 1. Locate the boundary on x direction */
-    cv::Mat right_edge_img;
-    feature2d::detectEdge(closed_img(cv::Range::all(), cv::Range(0, closed_img.cols / 2)), right_edge_img,
-                          feature2d::EdgeType::RIGHT);
-    std::vector<cv::Point> edge_inliers;
-    if (!feature2d::findInliers(right_edge_img, edge_inliers, 5.0f))
-    {
-        RCLCPP_ERROR(get_logger(), "Can't find right edge inliers!");
-        return false;
-    }
-    auto edge_end_points = std::minmax_element(edge_inliers.begin(), edge_inliers.end(),
-                                               [](const cv::Point& a, const cv::Point& b) -> bool
-                                                   {
-                                                       return a.y < b.y;
-                                                   });
-    cv::Mat right_edge_mask = cv::Mat::zeros(closed_img.size(), CV_8UC1);
-    cv::line(right_edge_mask, *edge_end_points.first, *edge_end_points.second, cv::Scalar(255), 16);
-    const auto raw_rear_edge_cloud = projector.extractCloud(right_edge_mask);
-    RawCloud refined_rear_edge_cloud;
-    feature3d::findInliers(raw_rear_edge_cloud, refined_rear_edge_cloud, 0.06f);
-    if (!feature3d::planeCoefficients(refined_rear_edge_cloud, rear_plane_coefficients))
-    {
-        RCLCPP_ERROR(get_logger(), "Failed to compute the coefficients of rear plane!");
-        return false;
-    }
-    if (rear_plane_coefficients[0] < 0.0f)
-    {
-        rear_plane_coefficients *= -1.0f;
-    }
-    /* Locate the outer surface of the point cloud */
-    const auto [dist_front, _] = feature3d::farthestDistanceFromLine(refined_rear_edge_cloud, rear_plane_coefficients);
-    rear_plane_coefficients[2] += dist_front - mLoadDimensions[0] - 0.1f; // Move the plane from rear to the front
-
-    cv::line(right_edge_mask, *edge_end_points.first, *edge_end_points.second, cv::Scalar(255), 26);
-    closed_img.setTo(0, right_edge_mask);
-    /* Step 2. Locate the boundary on y direction, right side */
-    cv::Mat upper_edge_img;
-    feature2d::detectEdge(closed_img(cv::Range(0, closed_img.rows / 2),
-                                     cv::Range(0, static_cast<int>(closed_img.cols * 0.8))),
-                          upper_edge_img, feature2d::EdgeType::LOWER);
-    if (!feature2d::findInliers(upper_edge_img, edge_inliers, 3.0f))
-    {
-        RCLCPP_WARN(get_logger(), "Can't locate rigth side boundary!");
-        has_right_side = false;
-    }
-    else
-    {
-        edge_end_points = std::minmax_element(edge_inliers.begin(), edge_inliers.end(),
-                                              [](const cv::Point& a, const cv::Point& b) -> bool
-                                                  {
-                                                      return a.x < b.x;
-                                                  });
-        cv::Mat upper_edge_mask = cv::Mat::zeros(closed_img.size(), CV_8UC1);
-        cv::line(upper_edge_mask, *edge_end_points.first, *edge_end_points.second, cv::Scalar(255), 10);
-
-        const auto raw_right_edge_cloud = projector.extractCloud(upper_edge_mask);
-        RawCloud refined_right_edge_cloud;
-        feature3d::findInliers(raw_right_edge_cloud, refined_right_edge_cloud, 0.05f);
-        if (!feature3d::planeCoefficients(refined_right_edge_cloud, right_plane_coefficients))
-        {
-            RCLCPP_WARN(get_logger(), "Failed to compute the coefficients of right plane!");
-            has_right_side = false;
-        }
-        if (right_plane_coefficients[1] < 0.0f)
-        {
-            right_plane_coefficients *= -1.0f;
-        }
-    }
-
-    /* Step 3. Locate the boundary on y direction, left side */
-    cv::Mat lower_edge_img;
-    feature2d::detectEdge(closed_img(cv::Range(closed_img.rows / 2, closed_img.rows),
-                                     cv::Range(0, static_cast<int>(closed_img.cols * 0.8))),
-                          lower_edge_img, feature2d::EdgeType::LOWER);
-    if (!feature2d::findInliers(lower_edge_img, edge_inliers, 3.0f))
-    {
-        RCLCPP_WARN(get_logger(), "Can't locate left side boundary!");
-        has_left_side = false;
-    }
-    else
-    {
-        edge_end_points = std::minmax_element(edge_inliers.begin(), edge_inliers.end(),
-                                              [](const cv::Point& a, const cv::Point& b) -> bool
-                                                  {
-                                                      return a.x < b.x;
-                                                  });
-        cv::Mat lower_edge_mask = cv::Mat::zeros(closed_img.size(), CV_8UC1);
-        cv::Point lower_edge_endpoint_1(edge_end_points.first->x, edge_end_points.first->y + closed_img.rows / 2);
-        cv::Point lower_edge_endpoint_2(edge_end_points.second->x, edge_end_points.second->y + closed_img.rows / 2);
-        cv::line(lower_edge_mask, lower_edge_endpoint_1, lower_edge_endpoint_2, cv::Scalar(255), 10);
-
-        const auto raw_left_edge_cloud = projector.extractCloud(lower_edge_mask);
-        RawCloud refined_left_edge_cloud;
-        feature3d::findInliers(raw_left_edge_cloud, refined_left_edge_cloud, 0.05f);
-        if (!feature3d::planeCoefficients(refined_left_edge_cloud, left_plane_coefficients))
-        {
-            RCLCPP_WARN(get_logger(), "Failed to compute the coefficients of left plane!");
-            has_left_side = false;
-        }
-        if (left_plane_coefficients[1] < 0.0f)
-        {
-            left_plane_coefficients *= -1.0f;
-        }
-    }
-
-    /* Deal with it on different situations */
-    Eigen::Vector2f slot_position{};
-
-    /* Situation 1. There's only left side boundary */
-    if (has_left_side)
-    {
-        left_plane_coefficients[2] -= 0.5f * mLoadDimensions[1] + 0.08f; //Move the side plane to center
-        if (!feature3d::intersectionPoint(rear_plane_coefficients, left_plane_coefficients, slot_position))
-        {
-            RCLCPP_ERROR(get_logger(), "Can't locate intersection of left and rear planes!");
-            return false;
-        }
-        slot_pose[2] = std::atan2(-left_plane_coefficients[0], left_plane_coefficients[1]);
-    }
-    else if (has_right_side)
-    {
-        right_plane_coefficients[2] += 0.5f * mLoadDimensions[1] + 0.08f; //Move the side plane to center
-        if (!feature3d::intersectionPoint(rear_plane_coefficients, right_plane_coefficients, slot_position))
-        {
-            RCLCPP_ERROR(get_logger(), "Can't locate intersection of right and rear planes!");
-            return false;
-        }
-        slot_pose[2] = std::atan2(-right_plane_coefficients[0], right_plane_coefficients[1]);
-    }
-    else
-    {
-        RCLCPP_ERROR(get_logger(), "Can't locate side boundary!");
-        return false;
-    }
-
-    slot_pose.x() = slot_position[0];
-    slot_pose.y() = slot_position[1];
-
-    return true;
-}
+// bool FreeSpaceDetect::estimateSlotPose(const RawCloud::Ptr& cloud, Eigen::Vector3f& slot_pose) const
+// {
+//     if (cloud->size() < 10)
+//     {
+//         return false;
+//     }
+//
+//     static OrthographicProjector<pcl::PointXYZ> projector(View::TOP, 0.02f);
+//     projector.setCloud(cloud);
+//     const cv::Mat projection = projector.projection();
+//
+//     cv::Mat closed_img;
+//
+//     {
+//         cv::Mat temp_img;
+//         filter2d::close(projection, temp_img);
+//         filter2d::removeIsolatedPoints(temp_img, closed_img);
+//     }
+//
+//
+//     bool has_left_side{true}, has_right_side{true}; // Flags to check if there is left side or right side boundary
+//     /* The coefficients of 3 planes, assume they are all perpendicular to the ground,
+//      * so Vector3 instead of Vector4 */
+//     Eigen::Vector3f rear_plane_coefficients{}, left_plane_coefficients{}, right_plane_coefficients{};
+//     /* Step 1. Locate the boundary on x direction */
+//     cv::Mat right_edge_img;
+//     feature2d::detectEdge(closed_img(cv::Range::all(), cv::Range(0, closed_img.cols / 2)), right_edge_img,
+//                           feature2d::EdgeType::RIGHT);
+//     std::vector<cv::Point> edge_inliers;
+//     if (!feature2d::findInliers(right_edge_img, edge_inliers, 5.0f))
+//     {
+//         RCLCPP_ERROR(get_logger(), "Can't find right edge inliers!");
+//         return false;
+//     }
+//     auto edge_end_points = std::minmax_element(edge_inliers.begin(), edge_inliers.end(),
+//                                                [](const cv::Point& a, const cv::Point& b) -> bool
+//                                                    {
+//                                                        return a.y < b.y;
+//                                                    });
+//     cv::Mat right_edge_mask = cv::Mat::zeros(closed_img.size(), CV_8UC1);
+//     cv::line(right_edge_mask, *edge_end_points.first, *edge_end_points.second, cv::Scalar(255), 16);
+//     const auto raw_rear_edge_cloud = projector.extractCloud(right_edge_mask);
+//     RawCloud refined_rear_edge_cloud;
+//     feature3d::findInliers(raw_rear_edge_cloud, refined_rear_edge_cloud, 0.06f);
+//     if (!feature3d::planeCoefficients(refined_rear_edge_cloud, rear_plane_coefficients))
+//     {
+//         RCLCPP_ERROR(get_logger(), "Failed to compute the coefficients of rear plane!");
+//         return false;
+//     }
+//     if (rear_plane_coefficients[0] < 0.0f)
+//     {
+//         rear_plane_coefficients *= -1.0f;
+//     }
+//     /* Locate the outer surface of the point cloud */
+//     const auto [dist_front, _] = feature3d::farthestDistanceFromLine(refined_rear_edge_cloud, rear_plane_coefficients);
+//     rear_plane_coefficients[2] += dist_front - mLoadDimensions[0] - 0.1f; // Move the plane from rear to the front
+//
+//     cv::line(right_edge_mask, *edge_end_points.first, *edge_end_points.second, cv::Scalar(255), 26);
+//     closed_img.setTo(0, right_edge_mask);
+//     /* Step 2. Locate the boundary on y direction, right side */
+//     cv::Mat upper_edge_img;
+//     feature2d::detectEdge(closed_img(cv::Range(0, closed_img.rows / 2),
+//                                      cv::Range(0, static_cast<int>(closed_img.cols * 0.8))),
+//                           upper_edge_img, feature2d::EdgeType::LOWER);
+//     if (!feature2d::findInliers(upper_edge_img, edge_inliers, 3.0f))
+//     {
+//         RCLCPP_WARN(get_logger(), "Can't locate rigth side boundary!");
+//         has_right_side = false;
+//     }
+//     else
+//     {
+//         edge_end_points = std::minmax_element(edge_inliers.begin(), edge_inliers.end(),
+//                                               [](const cv::Point& a, const cv::Point& b) -> bool
+//                                                   {
+//                                                       return a.x < b.x;
+//                                                   });
+//         cv::Mat upper_edge_mask = cv::Mat::zeros(closed_img.size(), CV_8UC1);
+//         cv::line(upper_edge_mask, *edge_end_points.first, *edge_end_points.second, cv::Scalar(255), 10);
+//
+//         const auto raw_right_edge_cloud = projector.extractCloud(upper_edge_mask);
+//         RawCloud refined_right_edge_cloud;
+//         feature3d::findInliers(raw_right_edge_cloud, refined_right_edge_cloud, 0.05f);
+//         if (!feature3d::planeCoefficients(refined_right_edge_cloud, right_plane_coefficients))
+//         {
+//             RCLCPP_WARN(get_logger(), "Failed to compute the coefficients of right plane!");
+//             has_right_side = false;
+//         }
+//         if (right_plane_coefficients[1] < 0.0f)
+//         {
+//             right_plane_coefficients *= -1.0f;
+//         }
+//     }
+//
+//     /* Step 3. Locate the boundary on y direction, left side */
+//     cv::Mat lower_edge_img;
+//     feature2d::detectEdge(closed_img(cv::Range(closed_img.rows / 2, closed_img.rows),
+//                                      cv::Range(0, static_cast<int>(closed_img.cols * 0.8))),
+//                           lower_edge_img, feature2d::EdgeType::LOWER);
+//     if (!feature2d::findInliers(lower_edge_img, edge_inliers, 3.0f))
+//     {
+//         RCLCPP_WARN(get_logger(), "Can't locate left side boundary!");
+//         has_left_side = false;
+//     }
+//     else
+//     {
+//         edge_end_points = std::minmax_element(edge_inliers.begin(), edge_inliers.end(),
+//                                               [](const cv::Point& a, const cv::Point& b) -> bool
+//                                                   {
+//                                                       return a.x < b.x;
+//                                                   });
+//         cv::Mat lower_edge_mask = cv::Mat::zeros(closed_img.size(), CV_8UC1);
+//         cv::Point lower_edge_endpoint_1(edge_end_points.first->x, edge_end_points.first->y + closed_img.rows / 2);
+//         cv::Point lower_edge_endpoint_2(edge_end_points.second->x, edge_end_points.second->y + closed_img.rows / 2);
+//         cv::line(lower_edge_mask, lower_edge_endpoint_1, lower_edge_endpoint_2, cv::Scalar(255), 10);
+//
+//         const auto raw_left_edge_cloud = projector.extractCloud(lower_edge_mask);
+//         RawCloud refined_left_edge_cloud;
+//         feature3d::findInliers(raw_left_edge_cloud, refined_left_edge_cloud, 0.05f);
+//         if (!feature3d::planeCoefficients(refined_left_edge_cloud, left_plane_coefficients))
+//         {
+//             RCLCPP_WARN(get_logger(), "Failed to compute the coefficients of left plane!");
+//             has_left_side = false;
+//         }
+//         if (left_plane_coefficients[1] < 0.0f)
+//         {
+//             left_plane_coefficients *= -1.0f;
+//         }
+//     }
+//
+//     /* Deal with it on different situations */
+//     Eigen::Vector2f slot_position{};
+//
+//     /* Situation 1. There's only left side boundary */
+//     if (has_left_side)
+//     {
+//         left_plane_coefficients[2] -= 0.5f * mLoadDimensions[1] + 0.08f; //Move the side plane to center
+//         if (!feature3d::intersectionPoint(rear_plane_coefficients, left_plane_coefficients, slot_position))
+//         {
+//             RCLCPP_ERROR(get_logger(), "Can't locate intersection of left and rear planes!");
+//             return false;
+//         }
+//         slot_pose[2] = std::atan2(-left_plane_coefficients[0], left_plane_coefficients[1]);
+//     }
+//     else if (has_right_side)
+//     {
+//         right_plane_coefficients[2] += 0.5f * mLoadDimensions[1] + 0.08f; //Move the side plane to center
+//         if (!feature3d::intersectionPoint(rear_plane_coefficients, right_plane_coefficients, slot_position))
+//         {
+//             RCLCPP_ERROR(get_logger(), "Can't locate intersection of right and rear planes!");
+//             return false;
+//         }
+//         slot_pose[2] = std::atan2(-right_plane_coefficients[0], right_plane_coefficients[1]);
+//     }
+//     else
+//     {
+//         RCLCPP_ERROR(get_logger(), "Can't locate side boundary!");
+//         return false;
+//     }
+//
+//     slot_pose.x() = slot_position[0];
+//     slot_pose.y() = slot_position[1];
+//
+//     return true;
+// }
 
 bool FreeSpaceDetect::validateSlot(const RawCloud::Ptr& cloud, const Eigen::Vector3d& slot_pose, const ROI& load_dimensions) const
 {}

@@ -7,7 +7,7 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
-#include "../types/common.hpp"
+#include "free_space_detection/types/common.hpp"
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 class FreeSpaceDetect final : public rclcpp::Node
@@ -24,13 +24,12 @@ class FreeSpaceDetect final : public rclcpp::Node
     }
 
 public:
-    explicit FreeSpaceDetect(const std::string& name, const rclcpp::NodeOptions& options) : rclcpp::Node(name, options)
+    explicit FreeSpaceDetect(const std::string& name, const rclcpp::NodeOptions& options) : rclcpp::Node(name, options),
+        mTfBuffer(this->get_clock()), mTfListener(mTfBuffer)
     {
         initSubscriptions();
         initPublishers();
-        this->set_parameter(rclcpp::Parameter("use_sim_time", true));
-        mTfBuffer = std::make_unique<tf2_ros::Buffer>(this->get_clock());
-        mTfListener = std::make_shared<tf2_ros::TransformListener>(*mTfBuffer);
+        // this->set_parameter(rclcpp::Parameter("use_sim_time", true));
         mWorker = std::thread(&FreeSpaceDetect::workerLoop, this);
         RCLCPP_INFO(get_logger(), "The node has been activated.");
     }
@@ -65,9 +64,7 @@ private:
     double mTotalElapseTime{};
     size_t mLoopCount{};
 
-    // Eigen::Vector3f mGoal; // The position of the goal
     geometry_msgs::msg::PoseStamped mGoalMsg;
-    const Eigen::Vector3f mLoadDimensions{1.2f, 1.0f, 1.5f};
 
     /** Subscribers **/
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr mCloudSub;
@@ -83,9 +80,10 @@ private:
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr mVisualizationPub;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr mRoiCloudPub;
 
-    /**/
-    std::shared_ptr<tf2_ros::TransformListener> mTfListener;
-    std::unique_ptr<tf2_ros::Buffer> mTfBuffer;
+    /* TF */
+    tf2_ros::Buffer mTfBuffer;
+    tf2_ros::TransformListener mTfListener;
+
 
     /* Algorithm Logic */
     std::vector<Eigen::Vector2f> mPlacementZones;
@@ -138,9 +136,11 @@ private:
     bool estimateRampPose(const RawCloud::Ptr& cloud, Eigen::Vector3f& ramp_position,
                           float& ramp_tilt, Eigen::Vector2f& ramp_size) const;
 
-    bool detectPlacementZone(const RawCloud::Ptr& cloud, const Eigen::Vector2f& load_size);
+    bool planPlacementZone(const Eigen::Vector3f& trailer_pose, const Eigen::Vector2f& trailer_size, const Eigen::Vector2f& load_size);
 
-    bool estimateSlotPose(const RawCloud::Ptr& cloud, Eigen::Vector3f& slot_pose) const;
+    bool locateAvailableArea()
+
+    // bool estimateSlotPose(const RawCloud::Ptr& cloud, Eigen::Vector3f& slot_pose) const;
 
     bool validateSlot(const RawCloud::Ptr& cloud, const Eigen::Vector3d& slot_pose, const ROI& load_dimensions) const;
 

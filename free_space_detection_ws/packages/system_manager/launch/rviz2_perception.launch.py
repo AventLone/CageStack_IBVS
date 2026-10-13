@@ -33,22 +33,17 @@ def generate_launch_description():
     )
 
     # "screen", "log"
-    rviz2_node = Node(
-        package="rviz2", executable="rviz2", output="screen", emulate_tty=True,
-        parameters=[{'use_sim_time': True}],
-        arguments=["-d", rviz_config_path, '--ros-args', '--log-level', 'warn']
-    )
+    rviz2_node = Node(package="rviz2", executable="rviz2", output="screen", emulate_tty=True,
+                      parameters=[{'use_sim_time': True}],
+                      arguments=["-d", rviz_config_path, '--ros-args', '--log-level', 'warn'])
 
-    perception_node = Node(
-        package="perception", executable="perception", 
-        namespace="perception", emulate_tty=True,
-        # arguments=['--ros-args', '--log-level', 'warn']
-    )
+    localization_node = Node(package="localization", executable="localization", namespace="localization", emulate_tty=True)
+    perception_node = Node(package="free_space_detection", executable="free_space_detection",  namespace="free_space_detection", emulate_tty=True)
 
     ld = LaunchDescription()
     ld.add_action(robot_state_publisher_node)
     ld.add_action(joint_state_publisher_node)
     ld.add_action(rviz2_node)
-    ld.add_action(TimerAction(period=1.6, actions=[perception_node]))
+    ld.add_action(TimerAction(period=1.6, actions=[localization_node, perception_node]))
 
     return ld

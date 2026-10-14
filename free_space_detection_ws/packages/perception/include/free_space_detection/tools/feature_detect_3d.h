@@ -251,6 +251,6 @@ Eigen::Vector3f computeCenter(const pcl::PointCloud<PointT>& cloud)
     return 0.5f * (min_point.head<3>() + max_point.head<3>());
 }
 
-void detectFloor(const pcl::PointCloud<pcl::PointXYZ>& src, pcl::PointCloud<pcl::PointXYZ>::Ptr ground_cloud,
+float detectFloor(const pcl::PointCloud<pcl::PointXYZ>& src, pcl::PointCloud<pcl::PointXYZ>::Ptr ground_cloud,
                   pcl::PointCloud<pcl::PointXYZ>::Ptr non_ground_cloud = nullptr);
 }

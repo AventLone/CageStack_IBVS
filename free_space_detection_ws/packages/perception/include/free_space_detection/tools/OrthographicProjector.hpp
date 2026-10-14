@@ -55,9 +55,9 @@ public:
     /**
      * @brief Get world coordinate from a pixel
      */
-    cv::Point2f getCoordinate(const cv::Point& pixel) const
+    Eigen::Vector2f getCoordinate(const cv::Point& pixel) const
     {
-        return static_cast<cv::Point2f>(pixel) * mResolution + mMinBound;
+        return {static_cast<float>(pixel.x) * mResolution + mMinBound.x, mMaxCoordinate1 - static_cast<float>(pixel.y) * mResolution};
     }
 
     float getCoordinate0(const uint32_t pixel_x) const
@@ -67,7 +67,7 @@ public:
 
     float getCoordinate1(const uint32_t pixel_y) const
     {
-        return static_cast<float>(pixel_y) * mResolution + mMinBound.y;
+        return mMaxCoordinate1 - static_cast<float>(pixel_y) * mResolution;
     }
 
     pcl::PointCloud<PointT> extractCloud(const cv::Mat& mask);
@@ -80,6 +80,7 @@ private:
     float mThickness{0.01f}, mThicknessInverse{100.0f};
 
     cv::Point2f mMinBound;
+    float mMaxCoordinate1{};
 
     PointIndicesInPixels mIndicesInPixels;
     CloudPtr mCloud;
@@ -154,6 +155,7 @@ cv::Mat OrthographicProjector<PointT>::project(const pcl::PointCloud<PointT>& cl
     space_bound_min[mAxes[1]] -= height_offset;
     mMinBound.x = space_bound_min[mAxes[0]];
     mMinBound.y = space_bound_min[mAxes[1]];
+    mMaxCoordinate1 = space_bound_max[mAxes[1]];
 
     /* The range of the cloud's projection on a certain plane (such as x-y plane) */
     const cv::Size2f cloud_size(space_bound_max[mAxes[0]] - space_bound_min[mAxes[0]],
@@ -191,6 +193,7 @@ cv::Mat OrthographicProjector<PointT>::projection()
     space_bound_min[mAxes[1]] -= height_offset;
     mMinBound.x = space_bound_min[mAxes[0]];
     mMinBound.y = space_bound_min[mAxes[1]];
+    mMaxCoordinate1 = space_bound_max[mAxes[1]];
 
     /* The range of the cloud's projection on a certain plane (such as x-y plane) */
     const cv::Size2f cloud_size(space_bound_max[mAxes[0]] - space_bound_min[mAxes[0]],

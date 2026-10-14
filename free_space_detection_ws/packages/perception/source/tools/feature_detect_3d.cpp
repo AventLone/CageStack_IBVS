@@ -1,9 +1,10 @@
 #include "free_space_detection/tools/feature_detect_3d.h"
 #include <boost/unordered/unordered_flat_set.hpp>
+#include <memory>
 
 namespace feature3d
 {
-void detectFloor(const pcl::PointCloud<pcl::PointXYZ>& src, pcl::PointCloud<pcl::PointXYZ>::Ptr ground_cloud,
+float detectFloor(const pcl::PointCloud<pcl::PointXYZ>& src, pcl::PointCloud<pcl::PointXYZ>::Ptr ground_cloud,
                   pcl::PointCloud<pcl::PointXYZ>::Ptr non_ground_cloud)
 {
     using CellSet = boost::unordered_flat_set<std::uint64_t>;
@@ -24,7 +25,7 @@ void detectFloor(const pcl::PointCloud<pcl::PointXYZ>& src, pcl::PointCloud<pcl:
 
     if (src.size() < 10)
     {
-        return;
+        return 0.0f;
     }
 
     // 1. Determine the valid Z range.
@@ -42,14 +43,14 @@ void detectFloor(const pcl::PointCloud<pcl::PointXYZ>& src, pcl::PointCloud<pcl:
 
     if (finite_count == 0)
     {
-        return;
+        return 0.0f;
     }
 
     // 2. Coarse histogram: count unique XY cells per Z bin.
     const std::size_t coarse_bin_count = static_cast<std::size_t>(std::floor((max_z - min_z) / coarse_bin_size)) + 1;
     if (coarse_bin_count == 0 || coarse_bin_count > 1'000'000) // Protect against unreasonable allocations.
     {
-        return;
+        return 0.0f;
     }
 
     std::vector<CellSet> coarse_cells(coarse_bin_count);
@@ -96,7 +97,7 @@ void detectFloor(const pcl::PointCloud<pcl::PointXYZ>& src, pcl::PointCloud<pcl:
 
     if (best_coarse_score == 0)
     {
-        return;
+        return 0.0f;
     }
 
     const float coarse_height = min_z + (static_cast<float>(best_coarse_bin) + 0.5f) * coarse_bin_size;
@@ -146,13 +147,13 @@ void detectFloor(const pcl::PointCloud<pcl::PointXYZ>& src, pcl::PointCloud<pcl:
 
     if (best_fine_score == 0)
     {
-        return;
+        return 0.0f;
     }
 
     const float fine_height = fine_z_min + (static_cast<float>(best_fine_bin) + 0.5f) * fine_bin_size;
 
     // 4. Collect ground candidate points.
-    pcl::PointCloud<pcl::PointXYZ>::Ptr candidates(new pcl::PointCloud<pcl::PointXYZ>());
+    auto candidates = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
     candidates->points.reserve(src.size());
 
     for (const auto& p : src)
@@ -174,7 +175,7 @@ void detectFloor(const pcl::PointCloud<pcl::PointXYZ>& src, pcl::PointCloud<pcl:
 
     if (candidates->size() < 100)
     {
-        return;
+        return 0.0f;
     }
 
     // 5. Fit a plane using constrained RANSAC.
@@ -188,24 +189,24 @@ void detectFloor(const pcl::PointCloud<pcl::PointXYZ>& src, pcl::PointCloud<pcl:
     seg.setEpsAngle(10.0 * M_PI / 180.0);
     seg.setInputCloud(candidates);
 
-    pcl::PointIndices::Ptr inliers(new pcl::PointIndices());
-    pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients());
+    pcl::PointIndices inliers;
+    pcl::ModelCoefficients coefficients;
 
-    seg.segment(*inliers, *coefficients);
 
-    if (inliers->indices.size() < 100 || coefficients->values.size() < 4)
+
+    seg.segment(inliers, coefficients);
+
+    if (inliers.indices.size() < 100 || coefficients.values.size() < 4)
     {
-        return;
+        return 0.0f;
     }
 
     // Normalize plane: ax + by + cz + d = 0.
-    Eigen::Vector4f plane(coefficients->values[0], coefficients->values[1], coefficients->values[2], coefficients->values[3]);
-
+    Eigen::Vector4f plane(coefficients.values[0], coefficients.values[1], coefficients.values[2], coefficients.values[3]);
     const float norm = plane.head<3>().norm();
-
     if (!std::isfinite(norm) || norm < 1e-6f)
     {
-        return;
+        return 0.0f;
     }
 
     plane /= norm;
@@ -217,8 +218,8 @@ void detectFloor(const pcl::PointCloud<pcl::PointXYZ>& src, pcl::PointCloud<pcl:
 
     // 6. Verify spatial coverage of the fitted ground.
     CellSet ground_cells;
-    ground_cells.reserve(inliers->indices.size());
-    for (const int idx : inliers->indices)
+    ground_cells.reserve(inliers.indices.size());
+    for (const int idx : inliers.indices)
     {
         if (idx < 0 || static_cast<std::size_t>(idx) >= candidates->size())
         {
@@ -232,7 +233,7 @@ void detectFloor(const pcl::PointCloud<pcl::PointXYZ>& src, pcl::PointCloud<pcl:
 
     if (ground_cells.size() < 10)
     {
-        return;
+        return 0.0f;
     }
 
     // 7. Classify the original map against the fitted plane.
@@ -254,5 +255,7 @@ void detectFloor(const pcl::PointCloud<pcl::PointXYZ>& src, pcl::PointCloud<pcl:
             non_ground_cloud->points.push_back(p);
         }
     }
+
+    return -plane[3] / plane.z();
 }
 }

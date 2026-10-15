@@ -151,14 +151,17 @@ void FreeSpaceDetect::workerLoop()
 
         const auto refined_trailer_cloud = std::make_shared<RawCloud>();
         Eigen::Vector3f trailer_pose;
-        if (!locateTrailer(rough_trailer_cloud, refined_trailer_cloud, trailer_pose))
+        ROI trailer_bbox{};
+        if (!locateTrailer(rough_trailer_cloud, refined_trailer_cloud, trailer_pose, trailer_bbox))
         {
             RCLCPP_ERROR(get_logger(), "Failed to locate the trailer or the ramp!");
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;
         }
 
-        const ROI trailer_bbox = ROI::getBBox(*refined_trailer_cloud);
+        // RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 1000, "trailer_bbox: min_x %f, max_x %f; min_y %f, max_y %f; min_z %f, max_z %f.",
+        //     trailer_bbox.min_x, trailer_bbox.max_x, trailer_bbox.min_y, trailer_bbox.max_y, trailer_bbox.min_z, trailer_bbox.max_z);
+
         const auto trailer_dimensions = Eigen::Vector3f(trailer_bbox.max_x - trailer_bbox.min_x,
                                                         trailer_bbox.max_y - trailer_bbox.min_y,
                                                         trailer_bbox.max_z - trailer_bbox.min_z);
@@ -496,13 +499,42 @@ bool FreeSpaceDetect::locateTrailer(const RawCloud::Ptr& cloud, const RawCloud::
     }
     const float angle = std::atan2(-mid_plane[0], mid_plane[1]);
 
-    pcl::PointCloud<pcl::PointXYZ> side_walls = refined_side_wall_1 + refined_side_wall_2;
+    // pcl::PointCloud<pcl::PointXYZ> side_walls = refined_side_wall_1 + refined_side_wall_2;
 
     // 1. Rotation transformation from truck frame to rotated frame
     Eigen::Isometry3f T_rot = Eigen::Isometry3f::Identity();
     T_rot.rotate(Eigen::AngleAxisf(-angle, Eigen::Vector3f::UnitZ()));
 
-    pcl::transformPointCloud(side_walls, side_walls, T_rot);
+    // pcl::transformPointCloud(side_walls, side_walls, T_rot);
+    pcl::transformPointCloud(refined_side_wall_1, refined_side_wall_1, T_rot);
+    pcl::transformPointCloud(refined_side_wall_2, refined_side_wall_2, T_rot);
+
+    const Eigen::Vector3f normal_1 = T_rot.rotation() * side_wall_1_plane.head<3>();
+    const Eigen::Vector3f normal_2 = T_rot.rotation() * side_wall_2_plane.head<3>();
+    const float wall_1_y = -side_wall_1_plane[3] / normal_1.y();
+    const float wall_2_y = -side_wall_2_plane[3] / normal_2.y();
+
+    const bool wall_1_is_left = wall_1_y < wall_2_y;
+    // RawCloud* left_wall_cloud{nullptr};
+    // RawCloud* right_wall_cloud{nullptr};
+    // if (wall_1_is_left)
+    // {
+    //     left_wall_cloud = &refined_side_wall_1;
+    //     right_wall_cloud = &refined_side_wall_2;
+    // }
+    // else
+    // {
+    //     left_wall_cloud = &refined_side_wall_2;
+    //     right_wall_cloud = &refined_side_wall_1;
+    // }
+    pcl::PointXYZ wall_1_min, wall_1_max, wall_2_min, wall_2_max;
+    pcl::getMinMax3D(refined_side_wall_1, wall_1_min, wall_1_max);
+    pcl::getMinMax3D(refined_side_wall_2, wall_2_min, wall_2_max);
+
+    trailer_bbox.min_y = wall_1_is_left ? wall_1_max.y : wall_2_max.y;
+    trailer_bbox.max_y = wall_1_is_left ? wall_2_min.y : wall_1_min.y;
+
+    pcl::PointCloud<pcl::PointXYZ> side_walls = refined_side_wall_1 + refined_side_wall_2;
 
     Eigen::Vector4f rotated_mid_plane;
     rotated_mid_plane.head<3>() = T_rot.rotation() * mid_plane.head<3>();
@@ -528,6 +560,23 @@ bool FreeSpaceDetect::locateTrailer(const RawCloud::Ptr& cloud, const RawCloud::
     RawCloud non_angular_cloud;
     pcl::transformPointCloud(*cloud, non_angular_cloud, T_rot);
     filter3d::getCloud(non_angular_cloud, trailer_cloud, nullptr, trailer_roi);
+
+    pcl::PointXYZ trailer_min, trailer_max;
+    pcl::getMinMax3D(*trailer_cloud, trailer_min, trailer_max);
+    trailer_bbox.min_z = trailer_min.z;
+    trailer_bbox.max_z = trailer_max.z;
+
+    const auto back_wall = std::make_shared<RawCloud>();
+    filter3d::getCloud(*trailer_cloud, back_wall, nullptr, {.min_x = trailer_min.x,
+                                                            .max_x = trailer_min.x + 0.2f,
+                                                            .min_y = trailer_bbox.min_y + 0.1f,
+                                                            .max_y = trailer_bbox.max_y -0.1f,
+                                                            .min_z = 0.5f * (trailer_bbox.min_z + trailer_bbox.max_z),
+                                                            .max_z = trailer_bbox.max_z - 0.1f});
+    pcl::PointXYZ back_wall_min, back_wall_max;
+    pcl::getMinMax3D(*back_wall, back_wall_min, back_wall_max);
+    trailer_bbox.min_x = back_wall_max.x;
+    trailer_bbox.max_x = max_x;
 
     if (trailer_cloud->size() < 100)
     {

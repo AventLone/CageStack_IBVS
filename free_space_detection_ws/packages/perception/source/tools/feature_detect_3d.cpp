@@ -191,11 +191,7 @@ float detectFloor(const pcl::PointCloud<pcl::PointXYZ>& src, pcl::PointCloud<pcl
 
     pcl::PointIndices inliers;
     pcl::ModelCoefficients coefficients;
-
-
-
     seg.segment(inliers, coefficients);
-
     if (inliers.indices.size() < 100 || coefficients.values.size() < 4)
     {
         return 0.0f;

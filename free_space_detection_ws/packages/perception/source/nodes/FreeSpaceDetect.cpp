@@ -73,7 +73,7 @@ void FreeSpaceDetect::workerLoop()
     const auto LOAD_SIZE(Eigen::Vector3f(1.2f, 1.0f, 1.5f));
 
     // rclcpp::Rate publish_rate(5.0, this->get_clock());
-    constexpr auto worker_period = std::chrono::milliseconds(500);
+    rclcpp::WallRate publish_rate(5.0);
     while (rclcpp::ok())
     {
         sensor_msgs::msg::PointCloud2::ConstSharedPtr cloud_msg;
@@ -321,8 +321,8 @@ void FreeSpaceDetect::workerLoop()
 
         mVisualizationPub->publish(visualization_msg);
 
-        // publish_rate.sleep();
-        std::this_thread::sleep_for(worker_period);
+        // std::this_thread::sleep_for(worker_period);
+        publish_rate.sleep();
     }
 }
 
@@ -365,6 +365,44 @@ bool FreeSpaceDetect::locateTrailer(const RawCloud::Ptr& cloud, const RawCloud::
 
     std::vector<cv::Vec4i> lines;
     cv::HoughLinesP(top_down_img, lines, 1.0, CV_PI / 180.0, 60, 40.0, 30.0);
+
+    constexpr int boundary_bin_width = 10;
+    constexpr float boundary_tolerance = 0.15f / resolution;
+    std::vector<cv::Vec3f> boundary_samples;
+    for (int bin_start = 0; bin_start < top_down_img.cols; bin_start += boundary_bin_width)
+    {
+        std::vector<float> occupied_columns, upper_rows, lower_rows;
+        for (int col = bin_start; col < std::min(bin_start + boundary_bin_width, top_down_img.cols); ++col)
+        {
+            int upper_row = -1;
+            int lower_row = -1;
+            for (int row = 0; row < top_down_img.rows; ++row)
+            {
+                if (top_down_img.at<uchar>(row, col) != 0)
+                {
+                    if (upper_row < 0)
+                    {
+                        upper_row = row;
+                    }
+                    lower_row = row;
+                }
+            }
+            if (upper_row >= 0)
+            {
+                occupied_columns.push_back(static_cast<float>(col));
+                upper_rows.push_back(static_cast<float>(upper_row));
+                lower_rows.push_back(static_cast<float>(lower_row));
+            }
+        }
+        if (occupied_columns.size() < 3)
+        {
+            continue;
+        }
+        std::ranges::sort(upper_rows);
+        std::ranges::sort(lower_rows);
+        const std::size_t middle = occupied_columns.size() / 2;
+        boundary_samples.emplace_back(occupied_columns[middle], upper_rows[middle], lower_rows[middle]);
+    }
 
     std::vector<int> candidate_indices;
     for (int index = 0; index < static_cast<int>(lines.size()); ++index)
@@ -415,18 +453,46 @@ bool FreeSpaceDetect::locateTrailer(const RawCloud::Ptr& cloud, const RawCloud::
                 continue;
             }
 
-            const double first_min = first_start.dot(first_unit);
-            const double first_max = first_end.dot(first_unit);
-            const double second_min = second_start.dot(first_unit);
-            const double second_max = second_end.dot(first_unit);
-            const double overlap = std::min(first_max, second_max) - std::max(first_min, second_min);
+            const double first_min = std::min(first_start.dot(first_unit), first_end.dot(first_unit));
+            const double first_max = std::max(first_start.dot(first_unit), first_end.dot(first_unit));
+            const double second_min = std::min(second_start.dot(first_unit), second_end.dot(first_unit));
+            const double second_max = std::max(second_start.dot(first_unit), second_end.dot(first_unit));
+            const double overlap = std::max(0.0, std::min(first_max, second_max) - std::max(first_min, second_min));
 
-            if (overlap < 0.5 * std::min(first_length, second_length))
+            int sampled_bins = 0;
+            int first_support = 0;
+            int second_support = 0;
+            int outside_bins = 0;
+            const float min_col = std::min({first_start.x, first_end.x, second_start.x, second_end.x});
+            const float max_col = std::max({first_start.x, first_end.x, second_start.x, second_end.x});
+            for (const auto& boundary : boundary_samples)
+            {
+                if (boundary[0] < min_col || boundary[0] > max_col)
+                {
+                    continue;
+                }
+                const float first_row = first_start.y +
+                                        (boundary[0] - first_start.x) * first_direction.y / first_direction.x;
+                const float second_row = second_start.y +
+                                         (boundary[0] - second_start.x) * second_direction.y / second_direction.x;
+                const bool first_is_upper = first_row < second_row;
+                const float upper_row = std::min(first_row, second_row);
+                const float lower_row = std::max(first_row, second_row);
+                ++sampled_bins;
+                first_support += std::abs(first_row - boundary[first_is_upper ? 1 : 2]) <= boundary_tolerance;
+                second_support += std::abs(second_row - boundary[first_is_upper ? 2 : 1]) <= boundary_tolerance;
+                outside_bins += boundary[1] < upper_row - boundary_tolerance ||
+                                boundary[2] > lower_row + boundary_tolerance;
+            }
+            if (sampled_bins < 3 || first_support < 2 || second_support < 2 ||
+                outside_bins > std::max(1, sampled_bins / 5))
             {
                 continue;
             }
 
-            if (const double score = std::min(first_length, second_length) + 0.5 * overlap; score > best_score)
+            const double boundary_support = static_cast<double>(first_support + second_support) / (2 * sampled_bins);
+            const double score = (std::min(first_length, second_length) + 0.5 * overlap) * boundary_support;
+            if (score > best_score)
             {
                 best_score = score;
                 best_first = candidate_indices[i];
@@ -454,7 +520,14 @@ bool FreeSpaceDetect::locateTrailer(const RawCloud::Ptr& cloud, const RawCloud::
         side_masks[i] = cv::Mat::zeros(top_down_img.size(), CV_8UC1);
         const cv::Vec4i& line = lines[line_indices[i]];
         cv::line(debug_img, cv::Point(line[0], line[1]), cv::Point(line[2], line[3]), cv::Scalar(0, 255, 0), 2, cv::LINE_AA);
-        cv::line(side_masks[i], cv::Point(line[0], line[1]), cv::Point(line[2], line[3]), cv::Scalar(255), 5, cv::LINE_AA);
+        const float slope = static_cast<float>(line[3] - line[1]) / static_cast<float>(line[2] - line[0]);
+        cv::Point mask_start(0, cvRound(static_cast<float>(line[1]) - slope * static_cast<float>(line[0])));
+        cv::Point mask_end(top_down_img.cols - 1,
+                           cvRound(static_cast<float>(line[1]) + slope * static_cast<float>(top_down_img.cols - 1 - line[0])));
+        if (cv::clipLine(top_down_img.size(), mask_start, mask_end))
+        {
+            cv::line(side_masks[i], mask_start, mask_end, cv::Scalar(255), 5, cv::LINE_AA);
+        }
     }
 
     const cv::Vec4i& first_line = lines[best_first];
@@ -481,13 +554,53 @@ bool FreeSpaceDetect::locateTrailer(const RawCloud::Ptr& cloud, const RawCloud::
     const auto side_wall_1 = projector.extractCloud(side_masks[0]);
     const auto side_wall_2 = projector.extractCloud(side_masks[1]);
 
+    const auto refine_wall = [](const RawCloud& wall_cloud, const cv::Vec4i& image_line, RawCloud& refined_cloud)
+    {
+        if (wall_cloud.size() < 10)
+        {
+            return false;
+        }
+        const Eigen::Vector3f expected_normal(static_cast<float>(image_line[3] - image_line[1]),
+                                               static_cast<float>(image_line[2] - image_line[0]), 0.0f);
+        pcl::SACSegmentation<pcl::PointXYZ> seg;
+        seg.setOptimizeCoefficients(true);
+        seg.setModelType(pcl::SACMODEL_PERPENDICULAR_PLANE);
+        seg.setMethodType(pcl::SAC_RANSAC);
+        seg.setMaxIterations(1000);
+        seg.setDistanceThreshold(0.04);
+        seg.setAxis(expected_normal.normalized());
+        seg.setEpsAngle(10.0 * CV_PI / 180.0);
+        seg.setInputCloud(wall_cloud.makeShared());
+        pcl::PointIndices inliers;
+        pcl::ModelCoefficients coefficients;
+        seg.segment(inliers, coefficients);
+        if (inliers.indices.size() < 10 || coefficients.values.size() != 4)
+        {
+            return false;
+        }
+        feature3d::getCloud(wall_cloud, refined_cloud, inliers.indices);
+        return true;
+    };
+
     /* Get 2 refined side wall point cloud */
     pcl::PointCloud<pcl::PointXYZ> refined_side_wall_1, refined_side_wall_2;
-    feature3d::findInliers(side_wall_1, refined_side_wall_1, 0.04f);
-    feature3d::findInliers(side_wall_2, refined_side_wall_2, 0.04f);
+    if (!refine_wall(side_wall_1, first_line, refined_side_wall_1) ||
+        !refine_wall(side_wall_2, second_line, refined_side_wall_2))
+    {
+        RCLCPP_WARN(get_logger(), "Insufficient side wall points after refinement!");
+        return false;
+    }
 
-    const auto side_wall_1_plane = feature3d::fitPlaneByPCA(refined_side_wall_1, 2);
+    auto side_wall_1_plane = feature3d::fitPlaneByPCA(refined_side_wall_1, 2);
     auto side_wall_2_plane = feature3d::fitPlaneByPCA(refined_side_wall_2, 2);
+    if (!side_wall_1_plane.allFinite() || !side_wall_2_plane.allFinite() ||
+        side_wall_1_plane.head<3>().norm() < 1.0e-6f || side_wall_2_plane.head<3>().norm() < 1.0e-6f)
+    {
+        RCLCPP_WARN(get_logger(), "Invalid side wall plane coefficients!");
+        return false;
+    }
+    side_wall_1_plane /= side_wall_1_plane.head<3>().norm();
+    side_wall_2_plane /= side_wall_2_plane.head<3>().norm();
     if (side_wall_1_plane.head<3>().dot(side_wall_2_plane.head<3>()) < 0.0f)
     {
         side_wall_2_plane = -side_wall_2_plane;
@@ -802,10 +915,131 @@ bool FreeSpaceDetect::locateAvailableArea(const RawCloud::Ptr& trailer_cloud, co
     cv::circle(debug_img, *slot_position_img, 2, cv::Scalar(0, 0, 255), cv::FILLED, cv::LINE_AA);
     publishDebugImg(debug_img);
 
-    // if (!validateSlot(cloud_without_floor, slot_position, load_size))
-    // {
-    //
-    // }
+    if (validateSlot(cloud_without_floor, slot_position, load_size))
+    {
+        return true;
+    }
+
+    const auto slot_cloud = std::make_shared<RawCloud>();
+    ROI slot_roi = {.min_x = -0.5f * load_size.x() - 0.1f, .max_x = 0.5f * load_size.x() + 0.1f,
+                    .min_y = -0.5f * load_size.y() - 0.1f, .max_y = 0.5f * load_size.y() + 0.1f,
+                    .min_z = 0.0, .max_z = load_size.z()};
+    filter3d::getCloud(*cloud_without_floor, slot_cloud, nullptr, slot_roi, slot_position);
+
+    constexpr std::size_t min_plane_points = 10;
+    constexpr float plane_distance_threshold = 0.03f;
+    constexpr float slot_clearance = 0.02f;
+    constexpr double angle_tolerance = 5.0 * CV_PI / 180.0;
+    if (slot_cloud->size() < 2 * min_plane_points)
+    {
+        RCLCPP_WARN(get_logger(), "Too few points to fit two slot boundary planes!");
+        return false;
+    }
+
+    pcl::SACSegmentation<pcl::PointXYZ> seg;
+    seg.setOptimizeCoefficients(true);
+    seg.setModelType(pcl::SACMODEL_PERPENDICULAR_PLANE);
+    seg.setMethodType(pcl::SAC_RANSAC);
+    seg.setMaxIterations(300);
+    seg.setDistanceThreshold(plane_distance_threshold);
+    seg.setEpsAngle(angle_tolerance);
+    seg.setInputCloud(slot_cloud);
+
+    std::vector<RawCloud::Ptr> plane_clouds(2);
+    std::vector<Eigen::Vector3f> plane_lines(2);
+    const float center_z = slot_position.z() + 0.5f * load_size.z();
+    for (int plane_index = 0; plane_index < 2; ++plane_index)
+    {
+        const int normal_axis = 1 - plane_index;
+        seg.setAxis(Eigen::Vector3f::Unit(normal_axis));
+        pcl::PointIndices inliers;
+        pcl::ModelCoefficients coefficients;
+        seg.segment(inliers, coefficients);
+        if (inliers.indices.size() < min_plane_points || coefficients.values.size() != 4)
+        {
+            RCLCPP_WARN(get_logger(), "Failed to fit a slot plane perpendicular to axis %d!", normal_axis);
+            return false;
+        }
+
+        const Eigen::Vector4f plane(coefficients.values[0], coefficients.values[1],
+                                     coefficients.values[2], coefficients.values[3]);
+        if (const float normal_length = plane.head<3>().norm();
+            !plane.allFinite() || normal_length < 1.0e-6f || std::abs(plane[normal_axis]) / normal_length < std::cos(angle_tolerance))
+        {
+            return false;
+        }
+        plane_lines[plane_index] = Eigen::Vector3f(plane.x(), plane.y(), plane.z() * center_z + plane.w());
+        plane_clouds[plane_index] = std::make_shared<RawCloud>();
+        plane_clouds[plane_index]->reserve(inliers.indices.size());
+        for (const int index : inliers.indices)
+        {
+            plane_clouds[plane_index]->push_back((*slot_cloud)[index]);
+        }
+    }
+
+    Eigen::Vector2f corner;
+    if (!feature3d::intersectionPoint(plane_lines[0], plane_lines[1], corner) || !corner.allFinite())
+    {
+        return false;
+    }
+
+    Eigen::Vector2f fitted_center = slot_position.head<2>();
+    for (int plane_index = 0; plane_index < 2; ++plane_index)
+    {
+        const int tangent_axis = plane_index;
+        pcl::PointXYZ min_point, max_point;
+        pcl::getMinMax3D(*plane_clouds[plane_index], min_point, max_point);
+        const float min_coordinate = min_point.getVector3fMap()[tangent_axis];
+        const float max_coordinate = max_point.getVector3fMap()[tangent_axis];
+        const float span = max_coordinate - min_coordinate;
+        if (span <= 2.0f * plane_distance_threshold)
+        {
+            return false;
+        }
+        const bool trim_low = std::abs(corner[tangent_axis] - min_coordinate) <=
+                              std::abs(corner[tangent_axis] - max_coordinate);
+        const float cutoff = trim_low ? min_coordinate + span / 3.0f : max_coordinate - span / 3.0f;
+        const auto trimmed_cloud = std::make_shared<RawCloud>();
+        trimmed_cloud->reserve(plane_clouds[plane_index]->size());
+        for (const auto& point : *plane_clouds[plane_index])
+        {
+            if (const float coordinate = point.getVector3fMap()[tangent_axis];
+                trim_low ? coordinate >= cutoff : coordinate <= cutoff)
+            {
+                trimmed_cloud->push_back(point);
+            }
+        }
+        plane_clouds[plane_index] = trimmed_cloud;
+        if (trimmed_cloud->size() < min_plane_points)
+        {
+            RCLCPP_WARN(get_logger(), "Insufficient valid plane points after trimming the slot corner!");
+            return false;
+        }
+
+        pcl::getMinMax3D(*trimmed_cloud, min_point, max_point);
+        const int normal_axis = 1 - plane_index;
+        const float min_boundary = min_point.getVector3fMap()[normal_axis];
+        const float max_boundary = max_point.getVector3fMap()[normal_axis];
+        const float direction = slot_position[normal_axis] - 0.5f * (min_boundary + max_boundary);
+        if (std::abs(direction) < 1.0e-6f)
+        {
+            return false;
+        }
+        const float offset = 0.5f * load_size[normal_axis] + slot_clearance;
+        fitted_center[normal_axis] = direction > 0.0f ? max_boundary + offset : min_boundary - offset;
+    }
+
+    if (!fitted_center.allFinite())
+    {
+        return false;
+    }
+    const Eigen::Vector3f fitted_position(fitted_center.x(), fitted_center.y(), slot_position.z());
+    if (!validateSlot(cloud_without_floor, fitted_position, load_size))
+    {
+        RCLCPP_WARN(get_logger(), "The adjusted slot still intersects an obstacle!");
+        // return false;
+    }
+    slot_position = fitted_position;
 
     return true;
 }
@@ -820,11 +1054,23 @@ bool FreeSpaceDetect::validateSlot(const RawCloud::Ptr& cloud, const Eigen::Vect
         return false;
     }
 
+    constexpr int max_allowed_points = 10;
     const Eigen::Vector2f half_dimensions = 0.5f * load_dimensions.head<2>();
-    return std::ranges::none_of(*cloud, [&](const pcl::PointXYZ& point)
-                                        {
-                                            const Eigen::Vector3f offset = point.getVector3fMap() - slot_position;
-                                            return (offset.head<2>().cwiseAbs().array() <= half_dimensions.array()).all() &&
-                                                   offset.z() >= 0.0f && offset.z() <= load_dimensions.z();
-                                        });
+
+    const auto point_count = std::ranges::count_if(*cloud, [&](const pcl::PointXYZ& point)
+    {
+        const Eigen::Vector3f offset = point.getVector3fMap() - slot_position;
+        return (offset.head<2>().cwiseAbs().array() <= half_dimensions.array()).all() &&
+               offset.z() >= 0.0f && offset.z() <= load_dimensions.z();
+    });
+
+    return point_count <= max_allowed_points;
+
+    // const Eigen::Vector2f half_dimensions = 0.5f * load_dimensions.head<2>();
+    // return std::ranges::none_of(*cloud, [&](const pcl::PointXYZ& point)
+    //                                     {
+    //                                         const Eigen::Vector3f offset = point.getVector3fMap() - slot_position;
+    //                                         return (offset.head<2>().cwiseAbs().array() <= half_dimensions.array()).all() &&
+    //                                                offset.z() >= 0.0f && offset.z() <= load_dimensions.z();
+    //                                     });
 }

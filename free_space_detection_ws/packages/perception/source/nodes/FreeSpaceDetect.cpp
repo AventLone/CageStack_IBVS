@@ -321,7 +321,6 @@ void FreeSpaceDetect::workerLoop()
 
         mVisualizationPub->publish(visualization_msg);
 
-        // std::this_thread::sleep_for(worker_period);
         publish_rate.sleep();
     }
 }
@@ -855,15 +854,6 @@ bool FreeSpaceDetect::locateAvailableArea(const RawCloud::Ptr& trailer_cloud, co
         return false;
     }
 
-    const ROI floor_bounds = ROI::getBBox(*floor_cloud);
-    const Eigen::Vector2f floor_size(floor_bounds.max_x - floor_bounds.min_x,
-                                     floor_bounds.max_y - floor_bounds.min_y);
-    // if ((load_size.array() > floor_size.array()).any())
-    // {
-    //     RCLCPP_WARN(get_logger(), "Load footprint does not fit within the observed floor!");
-    //     return false;
-    // }
-
     constexpr float resolution = 0.1f;
     OrthographicProjector<pcl::PointXYZ> projector(View::TOP, resolution);
     projector.setCloud(floor_cloud);
@@ -1065,12 +1055,4 @@ bool FreeSpaceDetect::validateSlot(const RawCloud::Ptr& cloud, const Eigen::Vect
     });
 
     return point_count <= max_allowed_points;
-
-    // const Eigen::Vector2f half_dimensions = 0.5f * load_dimensions.head<2>();
-    // return std::ranges::none_of(*cloud, [&](const pcl::PointXYZ& point)
-    //                                     {
-    //                                         const Eigen::Vector3f offset = point.getVector3fMap() - slot_position;
-    //                                         return (offset.head<2>().cwiseAbs().array() <= half_dimensions.array()).all() &&
-    //                                                offset.z() >= 0.0f && offset.z() <= load_dimensions.z();
-    //                                     });
 }
